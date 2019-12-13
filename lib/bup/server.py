@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 import os, struct, subprocess
 from binascii import hexlify, unhexlify
+from contextlib import contextmanager
 
 from bup import git, vfs, vint
 from bup.compat import int_types
@@ -77,8 +78,22 @@ class BaseServer:
                 self.conn.write(b'%s%s\n' % (f, suffix))
         self.conn.ok()
 
-    def send_index(self, args):
-        pass
+    def _send_index(self, name):
+        """
+        This should return a conext manager object that's also a memory
+        object whose len() can be determined and that can be written to
+        the connection. Use @contextmanager to implement most easily.
+        """
+        raise NotImplementedError("Subclasses must implement _send_index")
+
+    def send_index(self, name):
+        self._init_session()
+        assert(name.find(b'/') < 0)
+        assert(name.endswith(b'.idx'))
+        with self._send_index(name) as data:
+            self.conn.write(struct.pack('!I', len(data)))
+            self.conn.write(data)
+        self.conn.ok()
 
     def receive_objects_v2(self, args):
         pass
@@ -171,14 +186,9 @@ class BupServer(BaseServer):
         for f in os.listdir(git.repo(b'objects/pack')):
             yield f
 
-    def send_index(self, name):
-        self._init_session()
-        assert(name.find(b'/') < 0)
-        assert(name.endswith(b'.idx'))
-        with git.open_idx(git.repo(b'objects/pack/%s' % name)) as idx:
-            self.conn.write(struct.pack('!I', len(idx.map)))
-            self.conn.write(idx.map)
-        self.conn.ok()
+    @contextmanager
+    def _send_index(self, name):
+        yield git.open_idx(git.repo(b'objects/pack/%s' % name)).map
 
     def receive_objects_v2(self, junk):
         self._init_session()
