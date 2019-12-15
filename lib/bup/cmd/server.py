@@ -20,5 +20,5 @@ def main(argv):
 
     with BupProtocolServer(Conn(byte_stream(sys.stdin),
                                 byte_stream(sys.stdout)),
-                           GitServerBackend()) as server:
+                           GitServerBackend) as server:
         server.handle()
