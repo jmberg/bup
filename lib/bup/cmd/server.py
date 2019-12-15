@@ -20,4 +20,4 @@ def main(argv):
     debug2('bup server: reading from stdin.\n')
 
     BupProtocolServer(Conn(byte_stream(sys.stdin), byte_stream(sys.stdout)),
-                      GitServerBackend()).handle()
+                      GitServerBackend).handle()
