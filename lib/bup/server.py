@@ -395,6 +395,7 @@ class GitServerBackend(AbstractServerBackend):
         self.config = self.repo.config
         self.close = self.repo.close
         self.list_indexes = self.repo.list_indexes
+        self.read_ref = self.repo.read_ref
 
     def send_index(self, name):
         return git.open_idx(git.repo(b'objects/pack/%s' % name)).map
@@ -403,9 +404,6 @@ class GitServerBackend(AbstractServerBackend):
         if self.dumb_server_mode:
             return git.PackWriter(objcache_maker=None)
         return git.PackWriter()
-
-    def read_ref(self, refname):
-        return git.read_ref(refname)
 
     def rev_list_raw(self, refs, fmt):
         args = git.rev_list_invocation(refs, format=fmt)
