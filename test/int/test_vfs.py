@@ -15,7 +15,7 @@ from time import localtime, strftime, tzset
 from wvpytest import *
 
 from bup._helpers import write_random
-from bup import git, metadata, vfs
+from bup import git, metadata, vfs, protocol
 from bup.compat import environ, fsencode, items, range
 from bup.git import BUP_CHUNKED
 from bup.helpers import exc, shstr
@@ -370,11 +370,3 @@ def test_duplicate_save_dates(tmpdir):
               b'1970-01-02-034640-10',
               b'latest'),
              tuple(sorted(x[0] for x in vfs.contents(repo, revlist))))
-
-def test_item_read_write():
-    x = vfs.Root(meta=13)
-    stream = BytesIO()
-    vfs.write_item(stream, x)
-    print('stream:', repr(stream.getvalue()), stream.tell(), file=sys.stderr)
-    stream.seek(0)
-    wvpasseq(x, vfs.read_item(stream))
