@@ -697,8 +697,8 @@ def create_commit_blob(tree, parent,
     return b'\n'.join(l)
 
 
-def _make_objcache():
-    return PackIdxList(repo(b'objects/pack'))
+def _make_objcache(repo_dir):
+    return PackIdxList(repo(b'objects/pack', repo_dir=repo_dir))
 
 # bup-gc assumes that it can disable all PackWriter activities
 # (bloom/midx/cache) via the constructor and close() arguments.
@@ -808,7 +808,7 @@ class PackWriter:
 
     def _require_objcache(self):
         if self.objcache is None:
-            self.objcache = self.objcache_maker()
+            self.objcache = self.objcache_maker(self.repo_dir)
         if self.objcache is None:
             raise GitError(
                     "PackWriter not opened or can't check exists w/o objcache")
