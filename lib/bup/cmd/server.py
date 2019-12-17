@@ -1,9 +1,10 @@
 
 from __future__ import absolute_import
 import sys
-from bup import options
+from bup import options, git
 from bup.io import byte_stream
-from bup.server import BupProtocolServer, GitServerBackend
+from bup.server import BupProtocolServer
+from bup.repo import LocalRepo
 from bup.helpers import (Conn, debug2)
 
 optspec = """
@@ -18,7 +19,12 @@ def main(argv):
 
     debug2('bup server: reading from stdin.\n')
 
+    class ServerRepo(LocalRepo):
+        def __init__(self, repo_dir):
+            git.check_repo_or_die(repo_dir)
+            LocalRepo.__init__(self, repo_dir)
+
     with BupProtocolServer(Conn(byte_stream(sys.stdin),
                                 byte_stream(sys.stdout)),
-                           GitServerBackend) as server:
+                           ServerRepo) as server:
         server.handle()
