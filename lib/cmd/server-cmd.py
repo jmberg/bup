@@ -21,7 +21,7 @@ sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import compat, options, git
 from bup.io import byte_stream
-from bup.server import BupProtocolServer
+from bup.protocol import BupProtocolServer
 from bup.repo import LocalRepo
 from bup.helpers import (Conn, debug2)
 
