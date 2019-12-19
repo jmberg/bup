@@ -106,9 +106,9 @@ def main(argv):
 
     try:
         if opt.remote:
-            repo = repo.RemoteRepo(opt.remote)
+            repo = repo.make_repo(opt.remote)
         elif is_reverse:
-            repo = repo.RemoteRepo(b'reverse://%s' % is_reverse)
+            repo = repo.make_repo(b'reverse://%s' % is_reverse)
         else:
             repo = repo.LocalRepo()
         use_treesplit = repo.config(b'bup.treesplit', opttype='bool')
