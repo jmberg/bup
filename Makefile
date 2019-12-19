@@ -162,7 +162,8 @@ python_tests := \
   lib/bup/t/tvfs.py \
   lib/bup/t/tvint.py \
   lib/bup/t/txstat.py \
-  lib/bup/t/tstorage.py
+  lib/bup/t/tstorage.py \
+  lib/bup/t/tencrypted.py
 
 # The "pwd -P" here may not be appropriate in the long run, but we
 # need it until we settle the relevant drecurse/exclusion questions:
@@ -213,7 +214,8 @@ cmdline_tests := \
   t/test-split-join.sh \
   t/test-tz.sh \
   t/test-xdev.sh \
-  t/test-treesplit.sh
+  t/test-treesplit.sh \
+  t/test-encrypted-repo
 
 tmp-target-run-test-get-%: all t/tmp
 	$(pf); cd $$(pwd -P); TMPDIR="$(test_tmp)" \
