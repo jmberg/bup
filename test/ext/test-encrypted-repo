@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+
+. ./wvtest-bup.sh || exit $?
+. dev/lib.sh || exit $?
+
+set -o pipefail
+
+# TODO: is there WVSKIP? WVMSG doesn't seem to work.
+if ! bup-python -c "import libnacl" ; then
+	WVSTART skipping - libnacl not available
+	exit 0
+fi
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+
+trap "rm -rf $tmpdir" EXIT
+
+bup() { "$top/bup" "$@"; }
+sha1sum() { "$top/dev/checksum" -t sha1 "$@"; }
+
+mkdir $tmpdir/repo
+mkdir $tmpdir/cache
+mkdir $tmpdir/src
+
+export BUP_DIR=$tmpdir/cache
+export GIT_DIR=$tmpdir/cache
+
+# NOTE: set a very low packSizeLimit to test that
+# pack switching while writing works.
+
+cat > $tmpdir/repo.conf << EOF
+[bup]
+  type = Encrypted
+  storage = File
+  path = $tmpdir/repo
+  cachedir = $tmpdir/cache/enc-cache
+EOF
+bup genkey | grep key >> $tmpdir/repo.conf
+
+grep -v readkey < $tmpdir/repo.conf > $tmpdir/repow.conf
+grep -v writekey < $tmpdir/repo.conf > $tmpdir/repor.conf
+
+WREMOTE="config://$tmpdir/repow.conf"
+RREMOTE="config://$tmpdir/repor.conf"
+
+WVPASS bup init -r $WREMOTE
+WVPASS bup ls -r $WREMOTE
+
+WVPASS bup config -r $WREMOTE pack.packSizeLimit 4096
+WVPASS bup config -r $WREMOTE bup.separatemeta true
+
+WVSTART write repo
+for f in $(seq 100) ; do echo $f > $tmpdir/src/$f ; done
+ln -s 100 $tmpdir/src/l100
+WVPASS bup index $tmpdir/src
+WVPASS bup save --strip -r $WREMOTE -n test $tmpdir/src
+
+# even the first save should result in multiple packs
+WVPASS test $(ls $tmpdir/cache/enc-cache/*.idx | wc -l) -gt 1
+
+for f in $(seq 100 200) ; do echo $f > $tmpdir/src/$f ; done
+for f in $(seq 50) ; do touch $tmpdir/src/$f ; done
+WVPASS bup index $tmpdir/src
+WVPASS bup save --strip -r $WREMOTE -n test $tmpdir/src
+
+WVSTART read repo
+# now try to look at the repo a bit ...
+WVPASS bup ls -r $RREMOTE
+WVPASS bup ls -sAlr $RREMOTE test/latest/
+
+for f in 1 50 100 150 200 ; do
+	WVPASS bup cat-file -r $RREMOTE test/latest/$f > $tmpdir/check
+	WVPASS test $(cat $tmpdir/check) == "$f"
+done
+
+WVSTART split/join
+for f in $(seq 10000) ; do echo $f$f$f$f$f >> $tmpdir/splitfile ; done
+WVPASS bup split -r $WREMOTE -n split $tmpdir/splitfile
+WVPASS bup join -r $RREMOTE split > $tmpdir/splitfile.out
+WVPASS cmp $tmpdir/splitfile $tmpdir/splitfile.out
+
+WVSTART idx caching
+# remove index files from cache
+for f in $(ls $tmpdir/cache/enc-cache/*.idx | sort) ; do
+	sha1_before="$sha1_before $(sha1sum "$f")"
+done
+WVPASS rm -f $tmpdir/cache/enc-cache/*.idx
+WVPASS bup join -r $RREMOTE split > $tmpdir/splitfile.out
+WVPASS cmp $tmpdir/splitfile $tmpdir/splitfile.out
+# cached *.idx files must be reconstructed (all, since we cannot
+# know which ones hold the objects we desired)
+for f in $(ls $tmpdir/cache/enc-cache/*.idx | sort) ; do
+	sha1_after="$sha1_after $(sha1sum "$f")"
+done
+WVPASSEQ "$sha1_before" "$sha1_after"
+
+WVSTART dedup worked
+for f in $(seq 200 300) ; do echo 100 > $tmpdir/src/$f ; done
+WVPASS bup index $tmpdir/src
+WVPASS bup save --strip -r $WREMOTE -n test $tmpdir/src
+WVPASS bup midx -f -d $tmpdir/cache/enc-cache/
+(
+  for idx in $tmpdir/cache/enc-cache/*.idx ; do
+    git show-index --object-format=sha1 < $idx | cut -d' ' -f2
+  done
+) | WVPASS bup-python -c 'import sys ; l = sys.stdin.readlines() ; assert sorted(list(set(l))) == sorted(l)'
