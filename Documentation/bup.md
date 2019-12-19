@@ -19,7 +19,7 @@ Unlike `git`(1) itself, bup is
 optimized for handling huge data sets including individual
 very large files (such a virtual machine images).  However,
 once a backup set is created, it can still be accessed
-using git tools.
+using git tools, unless encrypted repositories are used.
 
 The individual bup subcommands appear in their own man
 pages.
@@ -110,6 +110,12 @@ pages.
 
 `bup-version`(1)
 :   Report the version number of your copy of bup.
+
+`bup-genkey`(1)
+:   Create keys (and a config template) for an encrypted repository.
+
+`bup-encrypted`(7)
+:   This page describes operation of encrypted bup repositories.
 
 
 # ENVIRONMENT

@@ -21,12 +21,12 @@ pkgs="$pkgs rsnapshot"
 
 case "$pyver" in
     python2)
-        pkgs="$pkgs python2 py27-tornado py27-pip"
+        pkgs="$pkgs python2 py27-tornado py27-pip py27-libnacl"
         pkg install $pkgs
         pip-2.7 install --user pytest pytest-xdist
         ;;
     python3)
-        pkgs="$pkgs python38 py38-tornado py38-pytest py38-pytest-xdist"
+        pkgs="$pkgs python38 py38-tornado py38-pytest py38-pytest-xdist py38-libnacl"
         pkg install $pkgs
         ;;
     *)
