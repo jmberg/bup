@@ -230,9 +230,9 @@ def main(argv):
 
     try:
         if opt.remote:
-            repo = bup.repo.RemoteRepo(opt.remote)
+            repo = bup.repo.make_repo(opt.remote)
         elif opt.is_reverse:
-            repo = bup.repo.RemoteRepo(b'reverse://%s' % opt.is_reverse)
+            repo = bup.repo.make_repo(b'reverse://%s' % opt.is_reverse)
         else:
             repo = bup.repo.LocalRepo()
     except client.ClientError as e:
