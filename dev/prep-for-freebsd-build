@@ -23,12 +23,12 @@ pkgs="$pkgs busybox"
 
 case "$pyver" in
     python2)
-        pkgs="$pkgs python2 py27-tornado py27-pip"
+        pkgs="$pkgs python2 py27-tornado py27-pip py27-libnacl"
         pkg install $pkgs
         pip-2.7 install --user pytest pytest-xdist
         ;;
     python3)
-        pkgs="$pkgs python37 py37-tornado py37-pytest py37-pytest-xdist"
+        pkgs="$pkgs python37 py37-tornado py37-pytest py37-pytest-xdist py37-libnacl"
         pkg install $pkgs
         ;;
     *)
