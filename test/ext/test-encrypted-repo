@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+
+. ./wvtest-bup.sh || exit $?
+. dev/lib.sh || exit $?
+
+set -eo pipefail
+
+# TODO: is there WVSKIP? WVMSG doesn't seem to work.
+if ! bup-python -c "import libnacl" ; then
+	WVSTART skipping - libnacl not available
+	exit 0
+fi
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+
+trap "rm -rf $tmpdir" EXIT
+
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    MIDX_HASH=--sha256
+else
+    MIDX_HASH=
+fi
+
+bup() { "$top/bup" "$@"; }
+sha1sum() { "$top/dev/checksum" -t sha1 "$@"; }
+
+mkdir $tmpdir/repo
+mkdir $tmpdir/src
+
+export BUP_DIR=$tmpdir/bup
+export GIT_DIR=$tmpdir/bup
+export XDG_CACHE_HOME=$tmpdir/xdg
+
+WVPASS bup init
+
+cat > $tmpdir/repo.conf << EOF
+[bup]
+  storage = File
+  path = $tmpdir/repo
+EOF
+
+bup genkey >> $tmpdir/repo.conf
+
+grep -v readkey < $tmpdir/repo.conf > $tmpdir/repow.conf
+grep -v writekey < $tmpdir/repo.conf > $tmpdir/repor.conf
+
+WREMOTE="config://$tmpdir/repow.conf"
+RREMOTE="config://$tmpdir/repor.conf"
+
+WVPASS bup init -r $WREMOTE
+WVPASS bup ls -r $WREMOTE
+
+cachedir="$(ls -d $tmpdir/xdg/bup/remote/encrypted--* 2> /dev/null)"
+WVPASS test -d "$cachedir"
+
+WVSTART write repo
+for f in $(seq 100) ; do echo $f > $tmpdir/src/$f ; done
+ln -s 100 $tmpdir/src/l100
+WVPASS bup index $tmpdir/src
+WVPASS bup save --strip -r $WREMOTE -n test $tmpdir/src
+
+WVPASS test -n "$(ls $tmpdir/repo/*.encidx 2> /dev/null)"
+WVFAIL test -n "$(ls $tmpdir/repo/*.idx 2> /dev/null)"
+
+for f in $(seq 100 200) ; do echo $f > $tmpdir/src/$f ; done
+for f in $(seq 50) ; do touch $tmpdir/src/$f ; done
+WVPASS bup index $tmpdir/src
+WVPASS bup save --strip -r $WREMOTE -n test $tmpdir/src
+
+WVSTART read repo
+# now try to look at the repo a bit ...
+WVPASS bup ls -r $RREMOTE
+WVPASS bup ls -sAlr $RREMOTE test/latest/
+
+for f in 1 50 100 150 200 ; do
+	WVPASS bup cat-file -r $RREMOTE test/latest/$f > $tmpdir/check
+	WVPASS test $(cat $tmpdir/check) == "$f"
+done
+
+WVSTART repo config
+WVPASS bup config -r $WREMOTE core.compression 5
+WVPASS test "$(bup config -r $RREMOTE core.compression)" == "core.compression=5"
+WVPASS bup config -r $RREMOTE --list-keys | WVPASS grep -q core.compression
+WVFAIL bup config -r $WREMOTE bup.compressalgo bogus
+# the stored config must survive dropping the local copy
+rm -f $cachedir/repo.conf
+WVPASS test "$(bup config -r $RREMOTE core.compression)" == "core.compression=5"
+WVPASS bup config -r $WREMOTE --unset core.compression
+WVFAIL bup config -r $RREMOTE core.compression
+
+# a fresh machine has no local cache dir; it must be created on demand
+(export XDG_CACHE_HOME=$tmpdir/xdg-fresh; WVPASS bup ls -r $RREMOTE)
+WVPASS test -d "$(ls -d $tmpdir/xdg-fresh/bup/remote/encrypted--* 2> /dev/null)"
+
+WVSTART split/join
+for f in $(seq 10000) ; do echo $f$f$f$f$f >> $tmpdir/splitfile ; done
+WVPASS bup split -r $WREMOTE -n split $tmpdir/splitfile
+WVPASS bup join -r $RREMOTE split > $tmpdir/splitfile.out
+WVPASS cmp $tmpdir/splitfile $tmpdir/splitfile.out
+
+# bup.split.files is parsed by the encrypted container on every open
+WVPASS bup config -r $WREMOTE bup.split.files legacy:16
+WVPASS test "$(bup config -r $RREMOTE bup.split.files)" == "bup.split.files=legacy:16"
+WVPASS bup split -r $WREMOTE -n split16 $tmpdir/splitfile
+WVPASS bup join -r $RREMOTE split16 > $tmpdir/splitfile.out16
+WVPASS cmp $tmpdir/splitfile $tmpdir/splitfile.out16
+WVPASS bup config -r $WREMOTE --unset bup.split.files
+
+WVSTART idx caching
+# remove index files from cache
+for f in $(ls $cachedir/*.idx | sort) ; do
+	sha1_before="$sha1_before $(sha1sum "$f")"
+done
+WVPASS rm -f $cachedir/*.idx
+WVPASS bup join -r $RREMOTE split > $tmpdir/splitfile.out
+WVPASS cmp $tmpdir/splitfile $tmpdir/splitfile.out
+# cached *.idx files must be reconstructed (all, since we cannot
+# know which ones hold the objects we desired)
+for f in $(ls $cachedir/*.idx | sort) ; do
+	sha1_after="$sha1_after $(sha1sum "$f")"
+done
+WVPASSEQ "$sha1_before" "$sha1_after"
+
+WVSTART dedup worked
+for f in $(seq 200 300) ; do echo 100 > $tmpdir/src/$f ; done
+WVPASS bup index $tmpdir/src
+WVPASS bup save --strip -r $WREMOTE -n test $tmpdir/src
+WVPASS bup midx $MIDX_HASH -f -d $cachedir/
+
+(
+  for idx in $cachedir/*.idx ; do
+    git show-index < $idx | cut -d' ' -f2
+  done
+) | WVPASS bup-python -c 'import sys ; l = sys.stdin.readlines() ; assert sorted(list(set(l))) == sorted(l)'
