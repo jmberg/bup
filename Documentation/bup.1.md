@@ -40,6 +40,9 @@ Subcommands are described in separate man pages.  For example
 `bup-config`(5)
 :   Explains the configuration settings used by bup.
 
+`bup-encrypted`(5)
+:   Explains how encrypted repositories are configured and used.
+
 # PRIMARY COMMANDS
 
 `bup-init`(1)
@@ -121,6 +124,9 @@ Subcommands are described in separate man pages.  For example
 
 `bup-features`(1)
 :   Report the current status and capabilities of bup itself
+
+`bup-genkey`(1)
+:   Generate keys and configuration for an encrypted repository
 
 `bup-join`(1)
 :   Retrieve a file backed up using `bup-split`(1)
