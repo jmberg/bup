@@ -21,7 +21,7 @@ pkgs="$pkgs rsnapshot"
 
 case "$pyver" in
     python3)
-        pkgs="$pkgs python39 py39-tornado py39-pytest py39-pytest-xdist"
+        pkgs="$pkgs python39 py39-tornado py39-pytest py39-pytest-xdist py39-libnacl"
         pkg install $pkgs
         ;;
     *)
