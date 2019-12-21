@@ -13,7 +13,7 @@ from bup.git import shalist_item_sort_key, mangle_name
 from bup import _helpers
 
 
-def _write_tree(w, dir_meta, items, omit_meta=False):
+def _write_tree(repo, dir_meta, items, omit_meta=False):
     if not omit_meta:
         if dir_meta is None:
             dir_meta = Metadata()
@@ -23,7 +23,7 @@ def _write_tree(w, dir_meta, items, omit_meta=False):
                      for entry in items if entry.mode != GIT_MODE_TREE]
         metalist.sort(key = lambda x: x[0])
         metadata = BytesIO(b''.join(m[1].encode() for m in metalist))
-        mode, oid = split_to_blob_or_tree(w.new_blob, w.new_tree,
+        mode, oid = split_to_blob_or_tree(repo.write_bupm, repo.write_tree,
                                          [metadata],
                                          keep_boundaries=False)
         shalist = [(mode, b'.bupm', oid)]
@@ -31,7 +31,7 @@ def _write_tree(w, dir_meta, items, omit_meta=False):
         shalist = []
     shalist += [(entry.gitmode, entry.mangled_name, entry.oid)
                 for entry in items]
-    return w.new_tree(shalist)
+    return repo.write_tree(shalist)
 
 
 def _tree_names_abbreviate(names):
@@ -78,10 +78,10 @@ def _tree_entries_abbreviate(items):
     return names
 
 
-def _write_split_tree(w, dir_meta, items, level=0):
+def _write_split_tree(repo, dir_meta, items, level=0):
     items = list(items)
     if not items:
-        return _write_tree(w, dir_meta, items)
+        return _write_tree(repo, dir_meta, items)
     newtree = [] # new tree for this layer, replacing items
     subtree = [] # collect items here for the sublayer trees
     h = RecordHashSplitter(BUP_TREE_BLOBBITS)
@@ -131,14 +131,14 @@ def _write_split_tree(w, dir_meta, items, level=0):
             all_in_one_tree = not newtree and idx == len(items) - 1
             if all_in_one_tree and level > 0:
                 # insert the sentinel file (empty blob)
-                sentinel_sha = w.new_blob(b'')
+                sentinel_sha = repo.write_data(b'')
                 subtree.append(RawTreeItem(b'%d.bupd' % level, GIT_MODE_FILE,
                                            GIT_MODE_FILE, sentinel_sha, None))
             meta = None
             if all_in_one_tree:
                 meta = dir_meta
             omit_meta = level > 0 and not all_in_one_tree
-            treeid = _write_tree(w, meta, subtree, omit_meta=omit_meta)
+            treeid = _write_tree(repo, meta, subtree, omit_meta=omit_meta)
             # if we've reached the end with an empty newtree,
             # just return this new tree (which is complete)
             if all_in_one_tree:
@@ -155,7 +155,7 @@ def _write_split_tree(w, dir_meta, items, level=0):
     # reading the data back.
     # However, we only abbreviate it later to have more input to
     # the hashsplitting algorithm.
-    return _write_split_tree(w, dir_meta, newtree, level + 1)
+    return _write_split_tree(repo, dir_meta, newtree, level + 1)
 
 
 class StackDir:
@@ -204,22 +204,22 @@ class StackDir:
                 items.append(item)
         self.items = items
 
-    def _write(self, w, use_treesplit):
+    def _write(self, repo, use_treesplit):
         self._clean()
 
         self.items.sort(key=lambda x: x.name)
 
         if not use_treesplit:
-            return _write_tree(w, self.meta, self.items)
-        return _write_split_tree(w, self.meta, self.items)
+            return _write_tree(repo, self.meta, self.items)
+        return _write_split_tree(repo, self.meta, self.items)
 
-    def pop(self, w, override_tree=None, override_meta=None,
+    def pop(self, repo, override_tree=None, override_meta=None,
             use_treesplit=False):
         assert self.parent is not None
         if override_meta is not None:
             self.meta = override_meta
         if not override_tree: # caution - False happens, not just None
-            tree = self._write(w, use_treesplit)
+            tree = self._write(repo, use_treesplit)
         else:
             tree = override_tree
         self.parent.append(self.name, GIT_MODE_TREE, GIT_MODE_TREE, tree, None)
