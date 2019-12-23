@@ -108,7 +108,7 @@ def opts_from_cmdline(argv):
 
     return opt
 
-def save_tree(opt, reader, hlink_db, msr, w):
+def save_tree(opt, reader, hlink_db, msr, w, use_treesplit):
     # Metadata is stored in a file named .bupm in each directory.  The
     # first metadata entry will be the metadata for the current directory.
     # The remaining entries will be for each of the other directory
@@ -125,7 +125,7 @@ def save_tree(opt, reader, hlink_db, msr, w):
 
     # Maintain a stack of information representing the current location in
 
-    stack = Stack()
+    stack = Stack(use_treesplit=use_treesplit)
 
     # Hack around lack of nonlocal vars in python 2
     _nonlocal = {}
@@ -429,9 +429,11 @@ def main(argv):
     if not remote_dest:
         repo = git
         cli = nullcontext()
+        use_treesplit = git.git_config_get(b'bup.treesplit', opttype='bool')
     else:
         try:
             cli = repo = client.Client(opt.remote)
+            use_treesplit = repo.config(b'bup.treesplit', opttype='bool')
         except client.ClientError as e:
             log('error: %s' % e)
             sys.exit(1)
@@ -465,7 +467,7 @@ def main(argv):
             with msr, \
                  hlinkdb.HLinkDB(indexfile + b'.hlink') as hlink_db, \
                  index.Reader(indexfile) as reader:
-                tree = save_tree(opt, reader, hlink_db, msr, w)
+                tree = save_tree(opt, reader, hlink_db, msr, w, use_treesplit)
             if opt.tree:
                 out.write(hexlify(tree))
                 out.write(b'\n')
