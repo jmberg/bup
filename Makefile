@@ -206,7 +206,8 @@ cmdline_tests := \
   t/test-sparse-files.sh \
   t/test-split-join.sh \
   t/test-tz.sh \
-  t/test-xdev.sh
+  t/test-xdev.sh \
+  t/test-treesplit.sh
 
 tmp-target-run-test-get-%: all t/tmp
 	$(pf); cd $$(pwd -P); TMPDIR="$(test_tmp)" \
