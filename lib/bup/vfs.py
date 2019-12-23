@@ -57,7 +57,7 @@ from time import localtime, strftime
 import re, sys
 
 from bup import git, vint
-from bup.compat import hexstr, pending_raise, range, str_type
+from bup.compat import hexstr, pending_raise, range, str_type, int_types
 from bup.git import BUP_CHUNKED, parse_commit, tree_decode
 from bup.helpers import debug2, last
 from bup.io import path_msg
@@ -698,20 +698,29 @@ def _tree_items(oid, tree_data, names=frozenset(), bupm=None):
             break
         remaining -= 1
 
+def _get_tree_object(repo, oid):
+    res = repo.cat(hexlify(oid))
+    _, kind, _ = next(res)
+    assert kind == b'tree', 'expected oid %r to be tree, not %r' % (hexlify(oid), kind)
+    return b''.join(res)
+
 def tree_items(repo, oid, tree_data, names, metadata, level=None):
     # For now, the .bupm order doesn't quite match git's, and we don't
     # load the tree data incrementally anyway, so we just work in RAM
     # via tree_data.
     assert len(oid) == 20
     bupm = None
-    if metadata:
+    orig_level = level
+    if metadata or level is None:
         for _, mangled_name, sub_oid in tree_decode(tree_data):
-            if mangled_name == b'.bupm':
+            if mangled_name.endswith(b'.bupd'):
+                level = int(mangled_name[:-5], 10)
+                break
+            if metadata and mangled_name == b'.bupm':
                 bupm = _FileReader(repo, sub_oid)
+            if level is not None and mangled_name >= b'.bupm':
                 break
-            if mangled_name > b'.bupm':
-                break
-    if not names or b'.' in names:
+    if orig_level is None and (not names or b'.' in names):
         dot_meta = _read_dir_meta(bupm) if bupm else default_dir_mode
         yield b'.', Item(oid=oid, meta=dot_meta)
         if names:
@@ -719,8 +728,28 @@ def tree_items(repo, oid, tree_data, names, metadata, level=None):
             names.remove(b'.')
             if not names:
                 return
-    for item in _tree_items(oid, tree_data, names, bupm):
-        yield item
+    if level:
+        for _, mangled_name, sub_oid in tree_decode(tree_data):
+            if mangled_name.endswith(b'.bupd'):
+                assert level and orig_level is None
+                continue
+            if mangled_name == b'.bupm':
+                continue
+            tree_data = _get_tree_object(repo, sub_oid)
+            for item in tree_items(repo, sub_oid, tree_data, names, metadata,
+                                   level - 1):
+                yield item
+    else:
+        if level == 0:
+            # We added a dummy entry here for the folder so that older bup that
+            # doesn't understand treesplit yet will actually restore something
+            # useful, ie. all the files and metadata, just in the wrong place.
+            # Here, of course, we just have to skip that entry.
+            if bupm is not None:
+                m = _read_dir_meta(bupm)
+                assert isinstance(m, int_types), m
+        for item in _tree_items(oid, tree_data, names, bupm):
+            yield item
 
 _save_name_rx = re.compile(br'^\d\d\d\d-\d\d-\d\d-\d{6}(-\d+)?$')
 
