@@ -8,6 +8,7 @@ from bup.compat import buffer, py_maj
 
 
 BUP_BLOBBITS = 13
+BUP_TREE_BLOBBITS = 13
 MAX_PER_TREE = 256
 progress_callback = None
 fanout = 16

@@ -110,10 +110,12 @@ if opt.remote or is_reverse:
         sys.exit(1)
     oldref = refname and cli.read_ref(refname) or None
     w = cli.new_packwriter(compression_level=opt.compress)
+    use_treesplit = cli.config(b'bup.treesplit', opttype='bool')
 else:
     cli = None
     oldref = refname and git.read_ref(refname) or None
     w = git.PackWriter(compression_level=opt.compress)
+    use_treesplit = git.git_config_get(b'bup.treesplit', opttype='bool')
 
 handle_ctrl_c()
 
@@ -303,7 +305,7 @@ for (transname,ent) in r.filter(extra, wantrecurse=wantrecurse_during):
 
     # If switching to a new sub-tree, finish the current sub-tree.
     while list(stack.namestack) > [x[0] for x in dirp]:
-        stack, _ = stack.pop(w)
+        stack, _ = stack.pop(w, use_treesplit=use_treesplit)
 
     # If switching to a new sub-tree, start a new sub-tree.
     for path_component in dirp[len(stack):]:
@@ -323,7 +325,8 @@ for (transname,ent) in r.filter(extra, wantrecurse=wantrecurse_during):
             continue # We're at the top level -- keep the current root dir
         # Since there's no filename, this is a subdir -- finish it.
         oldtree = already_saved(ent) # may be None
-        stack, newtree = stack.pop(w, override_tree=oldtree)
+        stack, newtree = stack.pop(w, override_tree=oldtree,
+                                   use_treesplit=use_treesplit)
         if not oldtree:
             if lastskip_name and lastskip_name.startswith(ent.name):
                 ent.invalidate()
@@ -393,12 +396,13 @@ if opt.progress:
 
 # pop all parts above the root folder
 while not stack.parent.nothing:
-    stack, _ = stack.pop(w)
+    stack, _ = stack.pop(w, use_treesplit=use_treesplit)
 
 # Finish the root directory.
 # When there's a collision, use empty metadata for the root.
 root_meta = metadata.Metadata() if root_collision else None
-stack, tree = stack.pop(w, override_meta=root_meta)
+stack, tree = stack.pop(w, override_meta=root_meta,
+                        use_treesplit=use_treesplit)
 
 sys.stdout.flush()
 out = byte_stream(sys.stdout)
