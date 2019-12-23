@@ -262,6 +262,8 @@ def demangle_name(name, mode):
         return (name[:-5], BUP_NORMAL)
     elif name.endswith(b'.bup'):
         return (name[:-4], BUP_CHUNKED)
+    elif name.endswith(b'.bupd'):
+        assert False, "we should never get here with .bupd suffix"
     elif name.endswith(b'.bupm'):
         return (name[:-5],
                 BUP_CHUNKED if stat.S_ISDIR(mode) else BUP_NORMAL)

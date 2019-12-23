@@ -122,10 +122,12 @@ if opt.remote or is_reverse:
         sys.exit(1)
     oldref = refname and cli.read_ref(refname) or None
     w = cli.new_packwriter(compression_level=opt.compress)
+    use_treesplit = cli.config(b'bup.treesplit', opttype='bool')
 else:
     cli = None
     oldref = refname and git.read_ref(refname) or None
     w = git.PackWriter(compression_level=opt.compress)
+    use_treesplit = git.git_config_get(b'bup.treesplit', opttype='bool')
 
 handle_ctrl_c()
 
@@ -147,7 +149,7 @@ handle_ctrl_c()
 # Maintain a stack of information representing the current location in
 # the archive being constructed.
 
-stack = Stack()
+stack = Stack(use_treesplit=use_treesplit)
 
 
 lastremain = None
