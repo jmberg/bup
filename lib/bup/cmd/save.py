@@ -111,10 +111,12 @@ def main(argv):
             sys.exit(1)
         oldref = refname and cli.read_ref(refname) or None
         w = cli.new_packwriter(compression_level=opt.compress)
+        use_treesplit = cli.config(b'bup.treesplit', opttype='bool')
     else:
         cli = None
         oldref = refname and git.read_ref(refname) or None
         w = git.PackWriter(compression_level=opt.compress)
+        use_treesplit = git.git_config_get(b'bup.treesplit', opttype='bool')
 
     handle_ctrl_c()
 
@@ -136,7 +138,7 @@ def main(argv):
     # Maintain a stack of information representing the current location in
     # the archive being constructed.
 
-    stack = Stack()
+    stack = Stack(use_treesplit=use_treesplit)
 
 
     _nonlocal['count'] = 0
