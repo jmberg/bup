@@ -402,28 +402,26 @@ static int HashSplitter_read(HashSplitter *self)
     return len;
 }
 
-static int HashSplitter_find_offs(unsigned int nbits, const unsigned char *buf, int len,
-                                  int *extrabits)
+static inline int HashSplitter_roll(Rollsum *r, unsigned int nbits,
+                                    const unsigned char *buf, int len,
+                                    int *extrabits)
 {
-    Rollsum r;
-    int count;
     unsigned short s2_mask = (1 << nbits) - 1;
     unsigned short s2_ones = ~0 & s2_mask;
     unsigned short s1_mask = 0;
     unsigned short s1_ones = 0;
+    int count;
 
     if (nbits > 16) {
         s1_mask = (1 << (nbits - 16)) - 1;
         s1_ones = ~0 & s1_mask;
     }
 
-    rollsum_init(&r);
-
     for (count = 0; count < len; count++) {
-        rollsum_roll(&r, buf[count]);
+        rollsum_roll(r, buf[count]);
 
-        if ((r.s2 & s2_mask) == s2_ones && (r.s1 & s1_mask) == s1_ones) {
-            unsigned rsum = rollsum_digest(&r);
+        if ((r->s2 & s2_mask) == s2_ones && (r->s1 & s1_mask) == s1_ones) {
+            unsigned rsum = rollsum_digest(r);
 
             rsum >>= nbits;
             /*
@@ -444,6 +442,16 @@ static int HashSplitter_find_offs(unsigned int nbits, const unsigned char *buf, 
     }
 
     return 0;
+}
+
+static int HashSplitter_find_offs(unsigned int nbits, const unsigned char *buf, int len,
+                                  int *extrabits)
+{
+    Rollsum r;
+
+    rollsum_init(&r);
+
+    return HashSplitter_roll(&r, nbits, buf, len, extrabits);
 }
 
 static PyObject *HashSplitter_iternext(HashSplitter *self)
@@ -546,6 +554,94 @@ PyTypeObject HashSplitterType = {
     .tp_dealloc = (destructor)HashSplitter_dealloc,
 };
 
+/*
+ * A RecordHashSplitter is fed records one-by-one, and will determine
+ * if the accumulated record stream should now be split. Once it does
+ * return a split point, it resets to restart at the next record.
+ */
+typedef struct {
+    PyObject_HEAD
+    Rollsum r;
+    unsigned int bits;
+} RecordHashSplitter;
+
+static int RecordHashSplitter_init(RecordHashSplitter *self, PyObject *args, PyObject *kwds)
+{
+    static char *argnames[] = {
+        "bits",
+        NULL
+    };
+    rollsum_init(&self->r);
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "i", argnames, &self->bits))
+        return -1;
+
+    if (self->bits < 13 || self->bits > max_bits) {
+        PyErr_Format(PyExc_ValueError,
+                     "invalid bits value %d (must be in [%d, %d])",
+                     self->bits, 13, max_bits);
+        return -1;
+    }
+
+    return 0;
+}
+
+static PyObject *RecordHashSplitter_feed(RecordHashSplitter *self, PyObject *args)
+{
+    int out, extrabits = -1;
+    Py_buffer buf = { .buf = NULL, .len = 0 };
+
+    if (PY_MAJOR_VERSION > 2)
+    {
+
+        if (!PyArg_ParseTuple(args, "y*", &buf))
+            return NULL;
+    } else {
+        if (!PyArg_ParseTuple(args, "t#", &buf.buf, &buf.len))
+            return NULL;
+    }
+
+    assert(buf.len <= INT_MAX);
+
+    out = HashSplitter_roll(&self->r, self->bits, buf.buf, buf.len, &extrabits);
+
+    if (PY_MAJOR_VERSION > 2)
+    {
+        PyBuffer_Release(&buf);
+    }
+
+    assert(!out || extrabits >= 0);
+
+    if (out)
+    {
+        /* reinit to start fresh at next record boundary if we split */
+        rollsum_init(&self->r);
+    }
+
+    return Py_BuildValue("Oi", out ? Py_True : Py_False, extrabits + self->bits);
+}
+
+static PyMethodDef RecordHashSplitter_methods[] = {
+    {"feed", (PyCFunction)RecordHashSplitter_feed, METH_VARARGS,
+     "Feed a record into the RecordHashSplitter instance and return a tuple (split, bits).\n"
+     "(False, -1) is returned if no split point was found, and if a splitpoint was found then\n"
+     "(True, bits) is returned."
+    },
+    {NULL}  /* Sentinel */
+};
+
+PyTypeObject RecordHashSplitterType = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_helpers.RecordHashSplitter",
+    .tp_doc = "Stateful hashsplitter",
+    .tp_basicsize = sizeof(RecordHashSplitter),
+    .tp_itemsize = 0,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_new = PyType_GenericNew,
+    .tp_init = (initproc)RecordHashSplitter_init,
+    .tp_methods = RecordHashSplitter_methods,
+};
+
 int hashsplit_init(void)
 {
     size_t pref_chunk_size = 64 * 1024 * 1024;
@@ -573,6 +669,9 @@ int hashsplit_init(void)
         advise_chunk = page_size;
 
     if (PyType_Ready(&HashSplitterType) < 0)
+        return -1;
+
+    if (PyType_Ready(&RecordHashSplitterType) < 0)
         return -1;
 
     return 0;

@@ -1941,6 +1941,9 @@ PyMODINIT_FUNC init_helpers(void)
 
     Py_INCREF(&HashSplitterType);
     PyModule_AddObject(m, "HashSplitter", (PyObject *) &HashSplitterType);
+
+    Py_INCREF(&RecordHashSplitterType);
+    PyModule_AddObject(m, "RecordHashSplitter", (PyObject *) &RecordHashSplitterType);
 }
 
 # else // PY_MAJOR_VERSION >= 3
@@ -1977,6 +1980,16 @@ PyMODINIT_FUNC PyInit__helpers(void)
     if (PyModule_AddObject(module, "HashSplitter",
                            (PyObject *) &HashSplitterType) < 0)
     {
+        Py_DECREF(&HashSplitterType);
+        Py_DECREF(module);
+        return NULL;
+    }
+
+    Py_INCREF(&RecordHashSplitterType);
+    if (PyModule_AddObject(module, "RecordHashSplitter",
+                           (PyObject *) &RecordHashSplitterType) < 0)
+    {
+        Py_DECREF(&RecordHashSplitterType);
         Py_DECREF(&HashSplitterType);
         Py_DECREF(module);
         return NULL;
