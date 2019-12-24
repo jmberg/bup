@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import io, math, os
 
 from bup import _helpers, compat, helpers
-from bup._helpers import HashSplitter
+from bup._helpers import HashSplitter, RecordHashSplitter
 from bup.compat import buffer, py_maj
 
 
