@@ -28,4 +28,4 @@ def main(argv):
 
     if opt.remote:
         git.check_repo_or_die()
-        repo.RemoteRepo.create(argv_bytes(opt.remote))
+        repo.make_repo(argv_bytes(opt.remote), create=True)
