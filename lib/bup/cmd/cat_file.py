@@ -2,15 +2,16 @@
 
 import re, stat, sys
 
-from bup import options, git, vfs
+from bup import options, vfs
 from bup.compat import argv_bytes
 from bup.helpers import EXIT_FAILURE, chunkyreader, log
 from bup.io import byte_stream, path_msg as pm
-from bup.repo import LocalRepo
+from bup.repo import main_repo_location, repo_for_location
 
 optspec = """
-bup cat-file [--meta|--bupm] /branch/revision/[path]
+bup cat-file [-r host:path] [--meta|--bupm] /branch/revision/[path]
 --
+r,remote=   remote repository path
 meta        print the target's metadata entry (decoded then reencoded) to stdout
 bupm        print the target directory's .bupm file directly to stdout
 """
@@ -19,7 +20,8 @@ def main(argv):
     o = options.Options(optspec)
     opt, flags_, extra = o.parse_bytes(argv[1:])
 
-    git.check_repo_or_die()
+    loc = main_repo_location(argv_bytes(opt.remote) if opt.remote else None,
+                             o.fatal)
 
     if not extra:
         o.fatal('must specify a target')
@@ -33,7 +35,7 @@ def main(argv):
     if not re.match(br'/*[^/]+/[^/]+', target):
         o.fatal(f"path {pm(target)} doesn't include a branch and revision")
 
-    with LocalRepo() as repo:
+    with repo_for_location(loc) as repo:
         resolved = vfs.resolve(repo, target, follow=False)
         leaf_item = resolved[-1][1]
         if not leaf_item:
