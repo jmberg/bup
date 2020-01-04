@@ -8,7 +8,7 @@ bup-cat-file - extract archive content (low-level)
 
 # SYNOPSIS
 
-bup cat-file [\--meta|\--bupm] <*path*>
+bup cat-file [-r *host*:[*path*]] [\--meta|\--bupm] <*path*>
 
 # DESCRIPTION
 
@@ -18,6 +18,10 @@ requested, the actual data contained by *path* (which must be a
 regular file) will be dumped.
 
 # OPTIONS
+
+-r, \--remote=[*user*@]*host*:[*path*], \--remote=URL
+:   read from the specified remote repository, by default via SSH.
+    See `bup`(1) REMOTE OPTIONS for further information.
 
 \--meta
 :   retrieve the metadata entry associated with *path*.  Note that
