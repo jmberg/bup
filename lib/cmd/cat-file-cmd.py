@@ -23,11 +23,12 @@ from bup import compat, options, git, vfs
 from bup.compat import argv_bytes
 from bup.helpers import chunkyreader, handle_ctrl_c, log, saved_errors
 from bup.io import byte_stream
-from bup.repo import LocalRepo
+from bup.repo import LocalRepo, make_repo
 
 optspec = """
 bup cat-file [--meta|--bupm] /branch/revision/[path]
 --
+r,remote=   remote repository path
 meta        print the target's metadata entry (decoded then reencoded) to stdout
 bupm        print the target directory's .bupm file directly to stdout
 """
@@ -51,7 +52,10 @@ target = argv_bytes(extra[0])
 if not re.match(br'/*[^/]+/[^/]+', target):
     o.fatal("path %r doesn't include a branch and revision" % target)
 
-repo = LocalRepo()
+if opt.remote:
+    repo = make_repo(argv_bytes(opt.remote))
+else:
+    repo = LocalRepo()
 resolved = vfs.resolve(repo, target, follow=False)
 leaf_name, leaf_item = resolved[-1]
 if not leaf_item:
