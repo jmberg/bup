@@ -383,12 +383,20 @@ class PackIdx(object):
             return self._ofs_from_idx(idx)
         return None
 
-    def exists(self, hash, want_source=False):
+    def exists(self, hash, want_source=False, want_offs=False):
         """Return ExistsResult instance if the object exists in this index,
            otherwise None."""
-        if hash and (self._idx_from_hash(hash) != None):
-            if want_source:
-                return ExistsResult(os.path.basename(self.name))
+        if not hash:
+            return None
+        idx = self._idx_from_hash(hash)
+        if idx is not None:
+            if want_source or want_offs:
+                ret = ExistsResult(None, None)
+                if want_source:
+                    ret.pack = os.path.basename(self.name)
+                if want_offs:
+                    ret.offset = self._ofs_from_idx(idx)
+                return ret
             return ObjectExists
         return None
 
@@ -583,7 +591,7 @@ class PackIdxList:
     def __len__(self):
         return sum(len(pack) for pack in self.packs)
 
-    def exists(self, hash, want_source=False):
+    def exists(self, hash, want_source=False, want_offs=False):
         """Return ExistsResult instance if the object exists in this index,
            otherwise None."""
         global _total_searches
@@ -598,12 +606,22 @@ class PackIdxList:
                 return None
         for i in range(len(self.packs)):
             p = self.packs[i]
+            if want_offs and isinstance(p, midx.PackMidx):
+                get_src = True
+                get_offs = False
+            else:
+                get_src = want_source
+                get_offs = want_offs
             _total_searches -= 1  # will be incremented by sub-pack
-            ix = p.exists(hash, want_source=want_source)
-            if ix:
+            ret = p.exists(hash, want_source=get_src, want_offs=get_offs)
+            if ret:
                 # reorder so most recently used packs are searched first
                 self.packs = [p] + self.packs[:i] + self.packs[i+1:]
-                return ix
+                if want_offs and ret.offset is None:
+                    with open_idx(os.path.join(self.dir, ret.pack)) as np:
+                        ret = np.exists(hash, want_source=want_source, want_offs=True)
+                    assert ret
+                return ret
         self.do_bloom = True
         return None
 
