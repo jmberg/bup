@@ -33,6 +33,8 @@ def url_for_remote_opt(remote):
         if url.user: return f'bup-rev remote {pm(remote)} has a user'
         if url.path: return f'bup-rev remote {pm(remote)} has a path'
         if url.port is not None: return f'bup-rev remote {pm(remote)} has a port'
+    elif url.scheme == b'config':
+        pass
     else:
         return f'unexpected remote scheme {pm(url.scheme)} in {pm(remote)}'
     return url
