@@ -250,6 +250,13 @@ path `x`.
     `file:some/where` are fine, but `file://some/where` is not because
     `some` will be read as the authority.
 
+`config:`
+:   A path-oriented scheme (see above) that specifies a repository by
+    the path to an access configuration file, e.g.
+    `config:///path/to/file.conf`.  The authority must be empty.  The
+    file must set `bup.type` to name the repository type, which
+    determines how the repository is accessed.
+
 # ENVIRONMENT
 
 `BUP_ASSUME_GIT_VERSION_IS_FINE`
