@@ -5,7 +5,7 @@ from contextlib import contextmanager
 from wvpytest import *
 
 from bup.storage import Kind, FileAlreadyExists, FileNotFound, get_storage
-from bup import git
+from bup.repo import ConfigRepo
 
 
 try:
@@ -15,6 +15,15 @@ try:
     repo_conf = os.environ['STORAGE_TEST_CONF']
 except KeyError:
     repo_conf = None
+
+
+class NoOpRepo(ConfigRepo):
+    def finish_writing(self):
+        pass
+    def config_get(self, key, opttype=None):
+        if key == b'bup.repo-id':
+            return 'noop'
+        return None
 
 @contextmanager
 def create_test_config(tmpdir):
@@ -31,16 +40,9 @@ def create_test_config(tmpdir):
         wvstart("storage config from %s" % repo_conf)
         cfgfile = repo_conf
         create = False
-    class FakeRepo:
-        def config_get(self, k, opttype=None, default=None):
-            assert isinstance(k, bytes)
-            val = git.git_config_get(k, cfg_file=cfgfile,
-                                     opttype=opttype)
-            if val is None:
-                return default
-            return val
-    store = get_storage(FakeRepo(), create=create)
-    yield store
+    with NoOpRepo(cfg_file=cfgfile) as repo:
+        store = get_storage(repo, create=create)
+        yield store
     del store
 
 def test_storage_config(tmpdir):
