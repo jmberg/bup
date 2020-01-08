@@ -156,6 +156,7 @@ def test_remote_parsing():
         (b'bup://[ff:fe::1]/bup', (b'bup', b'ff:fe::1', None, b'/bup')),
         (b'bup-rev://', (b'bup-rev', None, None, b'')),
         (b'bup-rev://host/dir', (b'bup-rev', b'host', None, b'/dir')),
+        (b'config:///path/to/file.conf', (b'config', None, None, b'/path/to/file.conf')),
     )
     for remote, values in tests:
         assert client.parse_remote(remote) == values
