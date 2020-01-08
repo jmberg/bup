@@ -67,7 +67,7 @@ def parse_remote(remote):
         if url_match.group(1) == b'reverse':
             if url_match.group(5) is None:
                 return url_match.group(1, 3, 4) + (b'', )
-        elif not url_match.group(1) in (b'ssh', b'bup', b'file'):
+        elif not url_match.group(1) in (b'ssh', b'bup', b'file', b'config'):
             raise ClientError('unexpected protocol: %s'
                               % url_match.group(1).decode('ascii'))
         return url_match.group(1,3,4,5)
