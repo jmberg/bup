@@ -20,6 +20,10 @@ bup.storage = File
   the repository folder must be given with the `bup.path` configuration
   option.
 
+bup.storage = AWS
+: This stores all data in AWS, this storage backend needs significantly
+  more configuration, see `bup-aws`(7).
+
 # SEE ALSO
 
 See `bup-encrypted`(7) for details on using an encrypted repository.
