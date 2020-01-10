@@ -150,6 +150,7 @@ refsname = ... [optional, default "refs"]
   update in case of races. If set, then must also be set to restore from
   the same backup. Note that if set then there can be multiple branches in
   the same repository with the same name, in different refs files.
+  NOTE: With the AWS storage backend, this must be UTF-8.
 
 
 # BUGS
