@@ -14,7 +14,7 @@ fi
 top="$(WVPASS pwd)" || exit $?
 tmpdir="$(WVPASS wvmktempdir)" || exit $?
 
-trap "rm -rf $tmpdir" EXIT
+trap 'test -z "$moto_pid" || kill -- -$moto_pid 2> /dev/null; rm -rf $tmpdir' EXIT
 
 bup() { "$top/bup" "$@"; }
 sha1sum() { "$top/dev/checksum" -t sha1 "$@"; }
@@ -28,13 +28,49 @@ export XDG_CACHE_HOME=$tmpdir/xdg
 
 WVPASS bup init
 
+mode=${TEST_ENCRYPTED_MODE:-local}
+if [ "$mode" = "local" ] ; then
+    repo_storage=File
+elif [ "$mode" = "s3" ] ; then
+    repo_storage=S3
+else
+    WVPASS false "unsupported mode"
+fi
+
+if [ "$mode" = "s3" ] ; then
+    if ! bup-python -c "import boto3, moto.server" 2> /dev/null ; then
+        WVSTART skipping - boto3 and moto not available
+        exit 0
+    fi
+    s3port="$(bup-python -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+    set -m
+    bup-python -m moto.server -H 127.0.0.1 -p "$s3port" > $tmpdir/moto.log 2>&1 &
+    moto_pid=$!
+    set +m
+    for _ in $(seq 100) ; do
+        bup-python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:$s3port/', timeout=1)" 2> /dev/null && break
+        sleep 0.1
+    done
+fi
+
 cat > $tmpdir/repo.conf << EOF
 [bup]
-  storage = File
+  storage = $repo_storage
   path = $tmpdir/repo
 EOF
 
 bup genkey >> $tmpdir/repo.conf
+
+if [ "$mode" = "s3" ] ; then
+    cat >> $tmpdir/repo.conf << EOF
+[bup.s3]
+bucket = test-bucket-$$
+endpoint-url = http://127.0.0.1:$s3port
+accessKeyId = ${MINIO_ROOT_USER:-testing}
+secretAccessKey = ${MINIO_ROOT_PASSWORD:-testing}
+region = huh
+EOF
+fi
 
 grep -v readkey < $tmpdir/repo.conf > $tmpdir/repow.conf
 grep -v writekey < $tmpdir/repo.conf > $tmpdir/repor.conf
@@ -54,8 +90,10 @@ ln -s 100 $tmpdir/src/l100
 WVPASS bup index $tmpdir/src
 WVPASS bup save --strip -r $WREMOTE -n test $tmpdir/src
 
-WVPASS test -n "$(ls $tmpdir/repo/*.encidx 2> /dev/null)"
-WVFAIL test -n "$(ls $tmpdir/repo/*.idx 2> /dev/null)"
+if [ "$mode" = "local" ] ; then
+    WVPASS test -n "$(ls $tmpdir/repo/*.encidx 2> /dev/null)"
+    WVFAIL test -n "$(ls $tmpdir/repo/*.idx 2> /dev/null)"
+fi
 
 for f in $(seq 100 200) ; do echo $f > $tmpdir/src/$f ; done
 for f in $(seq 50) ; do touch $tmpdir/src/$f ; done
