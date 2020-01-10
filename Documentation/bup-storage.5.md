@@ -20,6 +20,10 @@ bup.storage = File
   the repository folder must be given with the `path` configuration
   option, in the same `[bup]` section as `storage`.
 
+bup.storage = S3
+: This stores the data in an S3 compatible bucket. It requires the
+  `boto3` Python module. See `bup-s3`(7) for details.
+
 # SEE ALSO
 
 See `bup-encrypted`(5) for details on using an encrypted repository.
