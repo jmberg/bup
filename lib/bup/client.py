@@ -505,6 +505,26 @@ class Client:
             raise result
         return result
 
+    def config(self, name, opttype=None):
+        # if the server doesn't support this, it can't be set
+        if not b'config' in self._available_commands:
+            return None
+        self.check_busy()
+        if opttype is None:
+            opttype = 'string'
+        # name is last so it can contain spaces
+        self.conn.write(b'config %s %s\n' % (opttype.encode('ascii'), name))
+        # strip \n (only, not all whitespace)
+        val = self.conn.readline()[:-1]
+        self.check_ok()
+        if val == b'\x00':
+            return None
+        if opttype == 'int':
+            return int(val)
+        if opttype == 'bool':
+            return val == b'1'
+        return val
+
 
 # FIXME: disentangle this (stop inheriting) from PackWriter
 class PackWriter_Remote(git.PackWriter):
