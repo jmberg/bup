@@ -4,7 +4,7 @@ from binascii import hexlify, unhexlify
 import os, struct, subprocess, sys
 
 from bup import options, git, vfs, vint
-from bup.compat import environ, hexstr
+from bup.compat import environ, hexstr, int_types
 from bup.git import MissingObject
 from bup.helpers import (Conn, debug1, debug2, linereader, lines_until_sentinel,
                          log)
@@ -256,6 +256,21 @@ def resolve(conn, args):
         vfs.write_resolution(conn, res)
     conn.ok()
 
+def config(conn, args):
+    _init_session()
+    opttype, key = args.split(None, 1)
+    opttype = opttype.decode('ascii')
+    if opttype == 'string':
+        opttype = None
+    val = repo.config(key, opttype=opttype)
+    if val is None:
+        conn.write(b'\x00\n')
+    elif isinstance(val, int_types) or isinstance(val, bool):
+        conn.write(b'%d\n' % val)
+    else:
+        conn.write(b'%s\n' % val)
+    conn.ok()
+
 optspec = """
 bup server
 """
@@ -275,7 +290,8 @@ commands = {
     b'cat-batch' : cat_batch,
     b'refs': refs,
     b'rev-list': rev_list,
-    b'resolve': resolve
+    b'resolve': resolve,
+    b'config': config,
 }
 
 def main(argv):
