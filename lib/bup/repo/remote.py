@@ -3,7 +3,6 @@ from __future__ import absolute_import
 
 from bup.repo.base import BaseRepo
 from bup import client
-from bup.compat import pending_raise
 
 
 class RemoteRepo(BaseRepo):
@@ -13,7 +12,6 @@ class RemoteRepo(BaseRepo):
                                          compression_level=compression_level,
                                          max_pack_size=max_pack_size,
                                          max_pack_objects=max_pack_objects)
-        self.closed = False
         self.client = client.Client(address)
         self.rev_list = self.client.rev_list
         self.config = self.client.config
@@ -26,22 +24,10 @@ class RemoteRepo(BaseRepo):
         self._packwriter = None
 
     def close(self):
-        self.finish_writing()
-        if not self.closed:
-            self.closed = True
-            self.finish_writing()
+        super(RemoteRepo, self).close()
+        if self.client:
             self.client.close()
             self.client = None
-
-    def __del__(self):
-        self.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        with pending_raise(value, rethrow=False):
-            self.close()
 
     def update_ref(self, refname, newval, oldval):
         self.finish_writing()
@@ -58,11 +44,6 @@ class RemoteRepo(BaseRepo):
         return True
 
     def cat(self, ref):
-        """If ref does not exist, yield (None, None, None).  Otherwise yield
-        (oidx, type, size), and then all of the data associated with
-        ref.
-
-        """
         # Yield all the data here so that we don't finish the
         # cat_batch iterator (triggering its cleanup) until all of the
         # data has been read.  Otherwise we'd be out of sync with the
@@ -90,14 +71,6 @@ class RemoteRepo(BaseRepo):
         return self._packwriter.new_tree(shalist)
 
     def write_data(self, data):
-        self._ensure_packwriter()
-        return self._packwriter.new_blob(data)
-
-    def write_symlink(self, target):
-        self._ensure_packwriter()
-        return self._packwriter.new_blob(target)
-
-    def write_bupm(self, data):
         self._ensure_packwriter()
         return self._packwriter.new_blob(data)
 
