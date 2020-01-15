@@ -99,13 +99,16 @@ PANDOC ?= $(shell type -p pandoc)
 
 ifeq (,$(PANDOC))
   $(shell echo "Warning: pandoc not found; skipping manpage generation" 1>&2)
+  man_md7 :=
   man_md :=
 else
-  man_md := $(wildcard Documentation/*.md)
+  man_md7 := $(wildcard Documentation/*.7.md)
+  man_md := $(filter-out %.7.md,$(wildcard Documentation/*.md))
 endif
 
-man_roff := $(patsubst %.md,%.1,$(man_md))
-man_html := $(patsubst %.md,%.html,$(man_md))
+man_roff1 := $(patsubst %.md,%.1,$(man_md))
+man_roff7 := $(patsubst %.md,%,$(man_md7))
+man_html := $(patsubst %.md,%.html,$(man_md) $(man_md7))
 
 INSTALL=install
 PREFIX=/usr/local
@@ -122,8 +125,10 @@ dest_libdir := $(DESTDIR)$(LIBDIR)
 install: all
 	$(INSTALL) -d $(dest_bindir) $(dest_libdir)/bup/cmd $(dest_libdir)/cmd \
 	  $(dest_libdir)/web/static
-	test -z "$(man_roff)" || install -d $(dest_mandir)/man1
-	test -z "$(man_roff)" || $(INSTALL) -m 0644 $(man_roff) $(dest_mandir)/man1
+	test -z "$(man_roff1)" || install -d $(dest_mandir)/man1
+	test -z "$(man_roff1)" || $(INSTALL) -m 0644 $(man_roff1) $(dest_mandir)/man1
+	test -z "$(man_roff7)" || install -d $(dest_mandir)/man7
+	test -z "$(man_roff7)" || $(INSTALL) -m 0644 $(man_roff7) $(dest_mandir)/man7
 	test -z "$(man_html)" || install -d $(dest_docdir)
 	test -z "$(man_html)" || $(INSTALL) -m 0644 $(man_html) $(dest_docdir)
 	$(INSTALL) -pm 0755 lib/cmd/bup "$(dest_libdir)/cmd/bup"
@@ -233,7 +238,7 @@ check-both:
 	$(MAKE) clean && BUP_PYTHON_CONFIG=python2.7-config $(MAKE) check
 
 .PHONY: Documentation/all
-Documentation/all: $(man_roff) $(man_html)
+Documentation/all: $(man_roff1) $(man_roff7) $(man_html)
 
 Documentation/substvars: $(bup_deps)
         # FIXME: real temp file
@@ -243,6 +248,12 @@ Documentation/substvars: $(bup_deps)
 	mv $@.tmp $@
 
 Documentation/%.1: Documentation/%.md Documentation/substvars
+	$(pf); sed -f Documentation/substvars $< \
+	  | $(PANDOC) -s -r markdown -w man -o $@
+
+# This is for the *.7, the more specific rule above will
+# apply for *.1 man pages.
+Documentation/%: Documentation/%.md Documentation/substvars
 	$(pf); sed -f Documentation/substvars $< \
 	  | $(PANDOC) -s -r markdown -w man -o $@
 
