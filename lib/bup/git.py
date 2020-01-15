@@ -76,6 +76,12 @@ def git_config_get(option, repo_dir=None, opttype=None, cfg_file=None):
         cmd = [b'git', b'--git-dir', repo_dir or repo(), b'config', b'--null']
     if opttype == 'int':
         cmd.extend([b'--int'])
+    elif opttype == 'path':
+        # git didn't learn --type=path until a later
+        # release than we require, but anyway it only
+        # does the equivalent of os.path.expanduser()
+        # so just do that below
+        pass
     else:
         assert opttype in ('bool', None)
     cmd.extend([b'--get', option])
@@ -95,6 +101,20 @@ def git_config_get(option, repo_dir=None, opttype=None, cfg_file=None):
             if r in (b'1', b'true'):
                 return True
             raise GitError(f'{cmd!r} returned invalid boolean value {r}')
+        elif opttype == 'path':
+            # special case, if empty return as such, so that
+            # our code elsewhere can tell
+            if not r:
+                return r
+            # expand user, to simulate git
+            r = os.path.expanduser(r)
+            # and make it an absolute path, so that paths in
+            # the config file can be given as relative and then
+            # are relative to the dir the config file lives in
+            d = repo_dir
+            if not d:
+                d = os.path.dirname(cfg_file)
+            return os.path.join(os.path.abspath(d), r)
         return r
     if rc == 1:
         return None
