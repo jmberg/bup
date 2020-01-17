@@ -880,8 +880,9 @@ class EncryptedRepo(ConfigRepo):
     def write_bupm(self, data):
         return self._meta_write(3, data)
 
-    def just_write(self, oid, type, content):
-        # TODO: teach bup-get to differentiate the type of data/metadata
+    def just_write(self, oid, type, content, metadata=False):
+        if metadata:
+            return self._meta_write(git._typemap[type], content)
         return self._data_write(git._typemap[type], content)
 
     def exists(self, oid, want_source=False):

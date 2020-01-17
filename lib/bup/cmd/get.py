@@ -1,7 +1,7 @@
 
 from binascii import hexlify, unhexlify
 from collections import namedtuple
-from stat import S_ISDIR
+from stat import S_ISDIR, S_ISLNK
 import os, sys, textwrap, time
 
 from bup import compat, git, client, vfs, repo
@@ -200,7 +200,14 @@ def get_random_item(name, hash, src_repo, dest_repo, opt):
             continue
         # already_seen ensures that dest_repo.exists(id) is false.
         # Otherwise, just_write() would fail.
-        dest_repo.just_write(item.oid, item.type, item.data)
+        metadata = False
+        if item.type in (b'tree', b'commit'):
+            metadata = True
+        elif (item.type == b'blob' and
+              ((item.mode is not None and S_ISLNK(item.mode)) or
+               (item.path and item.path[-1] == b'.bupm'))):
+            metadata = True
+        dest_repo.just_write(item.oid, item.type, item.data, metadata=metadata)
 
 
 def append_commit(name, hash, parent, src_repo, dest_repo, opt):

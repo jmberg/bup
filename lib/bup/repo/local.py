@@ -122,7 +122,7 @@ class LocalRepo(BaseRepo):
         self._ensure_packwriter()
         return self._packwriter.new_blob(data)
 
-    def just_write(self, sha, type, content):
+    def just_write(self, sha, type, content, metadata=False):
         self._ensure_packwriter()
         return self._packwriter.just_write(sha, type, content)
 
