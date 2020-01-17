@@ -181,7 +181,7 @@ class BaseRepo(object):
         return self.write_data(data)
 
     @notimplemented
-    def just_write(self, oid, type, content):
+    def just_write(self, oid, type, content, metadata=False):
         """
         TODO
         """
