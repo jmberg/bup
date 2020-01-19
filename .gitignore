@@ -18,4 +18,3 @@ nbproject
 /lib/cmd/bup-*
 /test/sampledata/var/
 /test/tmp/
-.hypothesis/
