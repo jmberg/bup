@@ -766,7 +766,7 @@ def _make_objcache(repo_dir):
 
 class PackWriter:
     """Writes Git objects inside a pack file."""
-    def __init__(self, objcache_maker=None, compression_level=1,
+    def __init__(self, objcache_maker=None, compression_level=None,
                  run_midx=True, on_pack_finish=None,
                  max_pack_size=None, max_pack_objects=None, repo_dir=None):
         self.closed = False
@@ -779,6 +779,8 @@ class PackWriter:
         self.idx = None
         self.objcache_maker = objcache_maker or _make_objcache
         self.objcache = None
+        if compression_level is None:
+            compression_level = 1
         self.compression_level = compression_level
         self.run_midx=run_midx
         self.on_pack_finish = on_pack_finish
