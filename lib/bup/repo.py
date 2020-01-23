@@ -72,7 +72,7 @@ class LocalRepo:
     def read_ref(self, refname):
         return git.read_ref(refname, repo_dir=self.repo_dir)
 
-    def new_packwriter(self, compression_level=1,
+    def new_packwriter(self, compression_level=None,
                        max_pack_size=None, max_pack_objects=None,
                        objcache_maker=None):
         return git.PackWriter(repo_dir=self.repo_dir,
