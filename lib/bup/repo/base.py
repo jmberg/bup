@@ -27,6 +27,14 @@ class BaseRepo:
                  max_pack_size=None, max_pack_objects=None):
         self.closed = False
         self.vfs_cache_id = _repo_cache_id(key)
+        if compression_level is None:
+            compression_level = self.config_get(b'pack.compression',
+                                                opttype='int')
+        if compression_level is None:
+            compression_level = self.config_get(b'core.compression',
+                                                opttype='int')
+        # if it's still None, use the built-in default in the
+        # lower levels (which should be 1)
         self.compression_level = compression_level
         self.max_pack_size = max_pack_size
         self.max_pack_objects = max_pack_objects
