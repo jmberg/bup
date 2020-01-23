@@ -24,6 +24,15 @@ core.compression
 : Also a git setting; like git, bup will use this if `pack.compression`
   doesn't exist. See the documentation there.
 
+pack.packSizeLimit
+: Another git setting, used to limit pack file size. Note that bup will
+  honor this value from the repository written to (which may be remote)
+  and also from the local repository (where the index is) if different.
+  The default value is 1e9 bytes, i.e. about 0.93 GiB.
+  Note that bup may run over this limit by a chunk. However, setting it
+  to e.g. "2g" (2 GiB) would still mean that all objects in the pack can
+  be addressed by a 31-bit offset, and thus need no large offset in the
+  idx file.
 
 # BUP
 
