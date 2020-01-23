@@ -48,7 +48,8 @@ used to help test before/after results.)
 -*#*, \--compress=*#*
 :   set the compression level to # (a value from 0-9, where
     9 is the highest and 0 is no compression).  The default
-    is 1 (fast, loose compression).
+    is taken from the config file (pack.compress, core.compress)
+    or is 1 (fast, loose compression) if those are not found.
 
 \--ignore-missing
 :   report missing objects, but don't stop the collection.

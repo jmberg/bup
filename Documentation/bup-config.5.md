@@ -74,6 +74,16 @@ pack.packSizeLimit
     being written, excepting `bup on REMOTE...` which incorrectly
     reads the value from the `REMOTE` repository.
 
+pack.compression
+:   A git setting, bup will honor this setting for the compression level
+    used inside pack files. If not given, fall back to `core.compression`,
+    and if that isn't given either will default to 1.
+    A compression level given on the command-line overrides this.
+
+core.compression
+:   Also a git setting; like git, bup will use this if `pack.compression`
+    doesn't exist. See the documentation there.
+
 # SEE ALSO
 
 `git-config`(1)
