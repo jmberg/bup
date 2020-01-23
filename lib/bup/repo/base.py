@@ -37,6 +37,12 @@ class BaseRepo(object):
         # if it's still None, use the built-in default in the
         # lower levels (which should be 1)
         self.compression_level = compression_level
+        if max_pack_size is None:
+            max_pack_size = self.config_get(b'pack.packSizeLimit',
+                                            opttype='int')
+        # if it's still None, use the lower level logic, which
+        # (in the case of remote repo) might also read it from
+        # the local (otherwise unused) repo's config
         self.max_pack_size = max_pack_size
         self.max_pack_objects = max_pack_objects
         self.dumb_server_mode = False
