@@ -3,6 +3,11 @@ class _Base():
     """Components shared by all repos."""
     def __init__(self, config_get, *,
                  compression_level, max_pack_size, max_pack_objects):
+        if compression_level is None:
+            compression_level = config_get(b'pack.compression', opttype='int')
+        if compression_level is None:
+            compression_level = config_get(b'core.compression', opttype='int')
+        # If it's still None, the lower levels should choose 1
         self.compression_level = compression_level
         self.max_pack_objects = max_pack_objects
         self.max_pack_size = max_pack_size \
