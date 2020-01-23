@@ -26,6 +26,14 @@ class BaseRepo(object):
     def __init__(self, key, compression_level=None,
                  max_pack_size=None, max_pack_objects=None):
         self._id = _repo_id(key)
+        if compression_level is None:
+            compression_level = self.config(b'pack.compression',
+                                            opttype='int')
+        if compression_level is None:
+            compression_level = self.config(b'core.compression',
+                                            opttype='int')
+        # if it's still None, use the built-in default in the
+        # lower levels (which should be 1)
         self.compression_level = compression_level
         self.max_pack_size = max_pack_size
         self.max_pack_objects = max_pack_objects
