@@ -36,8 +36,10 @@ if py3:
         """Return hex string (not bytes as with hexlify) representation of b."""
         return b.hex()
 
-    def reraise(ex):
-        raise ex.with_traceback(sys.exc_info()[2])
+    def reraise(ex, tb=None):
+        if tb is None:
+            tb = sys.exc_info()[2]
+        raise ex.with_traceback(tb)
 
     def add_ex_tb(ex):
         """Do nothing (already handled by Python 3 infrastructure)."""
