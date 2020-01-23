@@ -13,13 +13,14 @@ class LocalRepo(BaseRepo):
                  max_pack_size=None, max_pack_objects=None,
                  objcache_maker=None):
         self.repo_dir = realpath(git.guess_repo(repo_dir))
+        self.config = partial(git.git_config_get, repo_dir=self.repo_dir)
+        # init the superclass only afterwards so it can access self.config()
         super(LocalRepo, self).__init__(self.repo_dir,
                                         compression_level=compression_level,
                                         max_pack_size=max_pack_size,
                                         max_pack_objects=max_pack_objects)
         self._cp = git.cp(self.repo_dir)
         self.rev_list = partial(git.rev_list, repo_dir=self.repo_dir)
-        self.config = partial(git.git_config_get, repo_dir=self.repo_dir)
         self._dumb_server_mode = None
         self._packwriter = None
         self.objcache_maker = objcache_maker
