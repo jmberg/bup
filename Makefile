@@ -126,7 +126,8 @@ config/config.h: config/config.vars
 
 lib/bup/_helpers$(SOEXT): \
 		config/config.h lib/bup/bupsplit.h \
-		lib/bup/bupsplit.c lib/bup/_helpers.c lib/bup/_hashsplit.c lib/bup/csetup.py
+		lib/bup/bupsplit.c lib/bup/_helpers.c lib/bup/_hashsplit.c lib/bup/csetup.py \
+		cmd/bup-coverage
 	@rm -f $@
 	cd lib/bup && \
 	LDFLAGS="$(LDFLAGS)" CFLAGS="$(CFLAGS)" "$(bup_python)" csetup.py build
@@ -255,18 +256,38 @@ check: test
 distcheck: all
 	./wvtest run t/test-release-archive.sh
 
-cmd/bup-python: cmd/python-cmd.sh config/config.var/bup-python
+cmd/bup-python: cmd/python-cmd.sh config/config.var/bup-python cmd/bup-coverage
 	"$$(cat config/config.var/bup-python)" dev/replace -l '@bup_python@' \
 	  "$$(dev/shquote < config/config.var/bup-python)" \
 	  < "$<" > "$@".$$PPID.tmp
 	chmod +x "$@".$$PPID.tmp
 	mv "$@".$$PPID.tmp "$@"
 
+H:=\#
+cmd/bup-coverage: config/config.var/bup-coverage cmd/coverage-cmd.sh t/tmp/tox.ini
+	sed "s^@bup_coverage@^$$(cat config/config.var/bup-coverage)^" < cmd/coverage-cmd.sh > "$@".$$PPID.tmp
+	chmod +x "$@".$$PPID.tmp
+	mv "$@".$$PPID.tmp "$@"
+
+t/tmp/tox.ini:
+	mkdir -p t/tmp
+	echo "[run]" > $@
+	echo "data_file=$$(pwd)/t/tmp/coverage" >> $@
+
 long-test: export BUP_TEST_LEVEL=11
 long-test: test
 
 long-check: export BUP_TEST_LEVEL=11
 long-check: check
+
+.PHONY: check-coverage
+check-coverage:
+	$(MAKE) BUP_COVERAGE=1 clean
+	$(MAKE) BUP_COVERAGE=1 cmd/bup-coverage
+	BUP_COV_MODE=erase cmd/bup-coverage
+	$(MAKE) BUP_COVERAGE=1 check
+	BUP_COV_MODE=combine cmd/bup-coverage
+	BUP_COV_MODE=html cmd/bup-coverage
 
 .PHONY: check-both
 check-both:
@@ -348,4 +369,4 @@ clean: Documentation/clean cmd/bup-python
 	./configure-version --clean
 	t/configure-sampledata --clean
         # Remove last so that cleanup tools can depend on it
-	rm -f cmd/bup-python
+	rm -f cmd/bup-python cmd/bup-coverage t/tmp/tox.ini
