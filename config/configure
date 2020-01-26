@@ -58,18 +58,38 @@ expr "$MAKE_VERSION" '>=' '3.81' || AC_FAIL "ERROR: $MAKE must be >= version 3.8
 
 AC_SUB bup_make "$MAKE"
 
-bup_python="$PYTHON"
-test -z "$bup_python" && bup_python="$(bup_find_prog python2.7 '')"
-test -z "$bup_python" && bup_python="$(bup_find_prog python2.6 '')"
-test -z "$bup_python" && bup_python="$(bup_find_prog python2 '')"
-test -z "$bup_python" && bup_python="$(bup_find_prog python '')"
-if test -z "$bup_python"; then
-    AC_FAIL "ERROR: unable to find python"
+if [ "$BUP_COVERAGE" = "1" ] ; then
+    PYTHON="${PYTHON/python/coverage-}"
+    PYPFX=coverage-
 else
-    AC_SUB bup_python "$bup_python"
-    AC_SUB bup_python_majver \
-           "$("$bup_python" -c 'import sys; print(sys.version_info[0])')"
+    PYPFX=python
 fi
+
+bup_python="$PYTHON"
+test -z "$bup_python" && bup_python="$(bup_find_prog ${PYPFX}2.7 '')"
+test -z "$bup_python" && bup_python="$(bup_find_prog ${PYPFX}2.6 '')"
+test -z "$bup_python" && bup_python="$(bup_find_prog ${PYPFX}2 '')"
+test -z "$bup_python" && bup_python="$(bup_find_prog ${PYPFX} '')"
+# on debian, installed as python<VER>-coverage
+if [ "${PYPFX}" = "coverage-" ] ; then
+    test -z "$bup_python" && bup_python="$(bup_find_prog python2.7-coverage '')"
+    test -z "$bup_python" && bup_python="$(bup_find_prog python2.6-coverage '')"
+    test -z "$bup_python" && bup_python="$(bup_find_prog python2-coverage '')"
+    test -z "$bup_python" && bup_python="$(bup_find_prog python-coverage '')"
+fi
+if test -z "$bup_python"; then
+    AC_FAIL "ERROR: unable to find ${PYPFX}"
+fi
+
+if [ "$BUP_COVERAGE" = "1" ] ; then
+    bup_coverage="$bup_python"
+    bup_python="$(realpath "$(dirname "$0")/../cmd/bup-coverage")"
+else
+    bup_coverage=false
+fi
+AC_SUB bup_python "$bup_python"
+AC_SUB bup_python_majver \
+       "$("$bup_python" -c 'import sys; print(sys.version_info[0])')"
 
 if test -z "$(bup_find_prog git '')"; then
     AC_FAIL "ERROR: unable to find git"
@@ -182,3 +202,4 @@ AC_OUTPUT config.vars
 mkdir -p config.var
 echo -n "$MAKE" > config.var/bup-make
 echo -n "$bup_python" > config.var/bup-python
+echo -n "$bup_coverage" > config.var/bup-coverage
