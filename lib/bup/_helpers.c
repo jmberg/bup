@@ -1701,6 +1701,93 @@ static PyObject *bup_mincore(PyObject *self, PyObject *args)
 }
 #endif /* def BUP_MINCORE_BUF_TYPE */
 
+static unsigned int vuint_encode(long long val, char *buf)
+{
+    unsigned int len = 0;
+
+    if (val < 0) {
+        PyErr_SetString(PyExc_Exception, "vuints must not be negative");
+        return 0;
+    }
+
+    do {
+        buf[len] = val & 0x7f;
+
+        val >>= 7;
+        if (val)
+            buf[len] |= 0x80;
+
+        len++;
+    } while (val);
+
+    return len;
+}
+
+static unsigned int vint_encode(long long val, char *buf)
+{
+    unsigned int len = 1;
+    char sign = 0;
+
+    if (val < 0) {
+        sign = 0x40;
+        val = -val;
+    }
+
+    buf[0] = (val & 0x3f) | sign;
+    val >>= 6;
+    if (val)
+        buf[0] |= 0x80;
+
+    while (val) {
+        buf[len] = val & 0x7f;
+        val >>= 7;
+        if (val)
+            buf[len] |= 0x80;
+        len++;
+    }
+
+    return len;
+}
+
+static PyObject *bup_vuint_encode(PyObject *self, PyObject *args)
+{
+    unsigned int len;
+    long long val;
+    // size the buffer appropriately - need 8 bits to encode each 7
+    char buf[(sizeof(val) + 1) / 7 * 8];
+    PyObject *result;
+
+    if (!PyArg_ParseTuple(args, "L", &val))
+	return NULL;
+
+    len = vuint_encode(val, buf);
+    if (!len)
+        return NULL;
+
+    result = PyBytes_FromStringAndSize(buf, len);
+    if (!result)
+        return PyErr_NoMemory();
+    return result;
+}
+
+static PyObject *bup_vint_encode(PyObject *self, PyObject *args)
+{
+    unsigned int len;
+    long long val;
+    // size the buffer appropriately - need 8 bits to encode each 7
+    char buf[(sizeof(val) + 1) / 7 * 8];
+    PyObject *result;
+
+    if (!PyArg_ParseTuple(args, "L", &val))
+	return NULL;
+
+    len = vint_encode(val, buf);
+
+    result = PyBytes_FromStringAndSize(buf, len);
+    if (!result)
+        return PyErr_NoMemory();
+    return result;
+}
 
 static PyObject *tuple_from_cstrs(char **cstrs)
 {
@@ -2312,6 +2399,8 @@ static PyMethodDef helper_methods[] = {
       "apply_acl(name, acl, def=None)\n\n"
       "Given a file/dirname (bytes) and the ACLs to restore, do that." },
 #endif /* HAVE_ACLS */
+    { "vuint_encode", bup_vuint_encode, METH_VARARGS, "encode an int to vuint" },
+    { "vint_encode", bup_vint_encode, METH_VARARGS, "encode an int to vint" },
     { NULL, NULL, 0, NULL },  // sentinel
 };
 
