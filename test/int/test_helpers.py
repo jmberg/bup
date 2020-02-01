@@ -1,9 +1,16 @@
 
 from time import tzset
-import os, os.path, re
+import os, os.path, re, subprocess
 from bup import helpers
 
 from wvpytest import *
+
+try:
+    from hypothesis import given, assume
+    import hypothesis.strategies as st
+    hypothesis = True
+except ImportError:
+    hypothesis = False
 
 from bup.compat import bytes_from_byte, bytes_from_uint, environ
 from bup.helpers import (atomically_replaced_file, batchpipe, detect_fakeroot,
@@ -228,3 +235,13 @@ def test_valid_save_name():
     WVFAIL(valid(b'foo/bar.lock/baz'))
     WVFAIL(valid(b'.bar/baz'))
     WVFAIL(valid(b'foo/.bar/baz'))
+
+if hypothesis:
+    _echopath = os.path.join(os.path.dirname(__file__), '..', 'bin', 'echo.sh')
+
+    @given(arg=st.binary())
+    def test_quote(arg):
+        assume(b'\x00' not in arg)
+        p = subprocess.Popen([b'bash', _echopath, shstr(arg)],
+                             stdout=subprocess.PIPE)
+        WVPASSEQ(arg, p.communicate()[0][:-1]) # strip one \0

@@ -34,3 +34,4 @@
 /test/tmp/
 \#*#
 __pycache__/
+.hypothesis/
