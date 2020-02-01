@@ -2280,6 +2280,96 @@ static PyObject *bup_apply_acl(PyObject *self, PyObject *args)
 }
 #endif
 
+static PyObject *bup_pack(PyObject *self, PyObject *args)
+{
+    const char *fmt;
+    PyObject *packargs, *result;
+    Py_ssize_t sz, i, bufsz;
+    char *buf, *pos, *end;
+
+    if (!PyArg_ParseTuple(args, "sO", &fmt, &packargs))
+        return NULL;
+
+    if (!PyTuple_Check(packargs))
+        return PyErr_Format(PyExc_Exception, "pack() arg must be tuple");
+
+    sz = PyTuple_GET_SIZE(packargs);
+    if (sz != (Py_ssize_t)strlen(fmt))
+        return PyErr_Format(PyExc_Exception,
+                            "number of arguments (%ld) does not match format string (%ld)",
+                            (unsigned long)sz, (unsigned long)strlen(fmt));
+
+    if (sz > INT_MAX / 20)
+        return PyErr_Format(PyExc_Exception, "format is far too long");
+
+    // estimate no more than 20 bytes for each on average, the maximum
+    // vint/vuint we can encode is anyway 10 bytes, so this gives us
+    // some headroom for a few strings before we need to realloc ...
+    bufsz = sz * 20;
+    buf = malloc(bufsz);
+    if (!buf)
+        return PyErr_Format(PyExc_Exception, "malloc() out of memory");
+
+    pos = buf;
+    end = buf + bufsz;
+    for (i = 0; i < sz; i++) {
+        PyObject *item = PyTuple_GET_ITEM(packargs, i);
+        const char *bytes;
+        long long val;
+
+        switch (fmt[i]) {
+        case 'V':
+            val = PyLong_AsLongLong(item);
+            if (val == -1 && PyErr_Occurred())
+                return PyErr_Format(PyExc_OverflowError,
+                                    "pack arg %d invalid", (int)i);
+            if (end - pos < 10)
+                goto overflow;
+	    pos += vuint_encode(val, pos);
+            break;
+        case 'v':
+            val = PyLong_AsLongLong(item);
+            if (val == -1 && PyErr_Occurred())
+                return PyErr_Format(PyExc_OverflowError,
+                                    "pack arg %d invalid", (int)i);
+            if (end - pos < 10)
+                goto overflow;
+            pos += vint_encode(val, pos);
+            break;
+        case 's':
+            bytes = PyBytes_AsString(item);
+            if (!bytes)
+                goto error;
+            if (end - pos < 10)
+                goto overflow;
+            val = PyBytes_GET_SIZE(item);
+            pos += vuint_encode(val, pos);
+            if (end - pos < val)
+                goto overflow;
+            memcpy(pos, bytes, val);
+            pos += val;
+            break;
+        default:
+            PyErr_Format(PyExc_Exception,
+                         "unknown xpack format string item %c",
+                         fmt[i]);
+            goto error;
+        }
+    }
+
+    result = PyBytes_FromStringAndSize(buf, pos - buf);
+    free(buf);
+    if (!result)
+        return PyErr_NoMemory();
+    return result;
+
+overflow:
+    PyErr_SetString(PyExc_OverflowError, "buffer (potentially) overflowed");
+error:
+    free(buf);
+    return NULL;
+}
+
 static PyMethodDef helper_methods[] = {
     { "write_sparsely", bup_write_sparsely, METH_VARARGS,
       "Write buf excepting zeros at the end. Return trailing zero count." },
@@ -2401,6 +2491,7 @@ static PyMethodDef helper_methods[] = {
 #endif /* HAVE_ACLS */
     { "vuint_encode", bup_vuint_encode, METH_VARARGS, "encode an int to vuint" },
     { "vint_encode", bup_vint_encode, METH_VARARGS, "encode an int to vint" },
+    { "pack", bup_pack, METH_VARARGS, "pack vint/vuint/str" },
     { NULL, NULL, 0, NULL },  // sentinel
 };
 
