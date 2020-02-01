@@ -5,6 +5,13 @@ import helpers, math, os, os.path, re, subprocess
 
 from wvtest import *
 
+try:
+    from hypothesis import given, assume
+    import hypothesis.strategies as st
+    hypothesis = True
+except ImportError:
+    hypothesis = False
+
 from bup.compat import bytes_from_byte, bytes_from_uint, environ
 from bup.helpers import (atomically_replaced_file, batchpipe, detect_fakeroot,
                          grafted_path_components, mkdirp, parse_num,
@@ -257,3 +264,15 @@ def test_valid_save_name():
         WVFAIL(valid(b'foo/bar.lock/baz'))
         WVFAIL(valid(b'.bar/baz'))
         WVFAIL(valid(b'foo/.bar/baz'))
+
+_echopath = os.path.join(os.path.dirname(__file__), 'echo.sh')
+
+if hypothesis:
+    @wvtest
+    @given(arg=st.binary())
+    def test_quote(arg):
+        assume(b'\x00' not in arg)
+        with no_lingering_errors():
+            p = subprocess.Popen([b'bash', _echopath, shstr(arg)],
+                                 stdout=subprocess.PIPE)
+            WVPASSEQ(arg, p.communicate()[0][:-1]) # strip one \0
