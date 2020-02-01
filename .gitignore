@@ -16,3 +16,4 @@ nbproject
 /t/tmp/
 /lib/bup/_checkout.py
 /htmlcov
+.hypothesis
