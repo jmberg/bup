@@ -3,6 +3,7 @@ import os, struct
 from binascii import hexlify, unhexlify
 
 from bup import git, vfs, vint
+from bup.config import ConfigError
 from bup.helpers import debug1, debug2, linereader, lines_until_sentinel, log
 from bup.io import path_msg
 from bup.metadata import Metadata
@@ -15,13 +16,17 @@ from bup.vfs import Item, Chunky, RevList, Root, Tags, Commit, FakeLink
 # is that None is the appropriate value for an option whenever the
 # server does not support config-get.
 
-valid_config_opts = \
-    frozenset((b'bup.repo.id',
-               b'bup.split.trees',
+writable_opts = \
+    frozenset((b'bup.split.trees',
                b'bup.split.files',
                b'pack.packsizelimit',
                b'core.compression',
                b'pack.compression'))
+
+
+valid_config_opts = \
+    frozenset(tuple(writable_opts) +
+              (b'bup.repo.id', ))
 
 
 def read_item(port):
@@ -493,6 +498,39 @@ class Server:
                 raise TypeError(f'Unrecognized result type {type(val)}')
         else:
             write_vuint(self.conn, 5)
+        self.conn.ok()
+
+    @_command
+    def config_write(self, args):
+        self.init_session()
+        assert not args
+        # pylint: disable-next=unbalanced-tuple-unpacking
+        name, unset, value = vint.recv(self.conn, 'sss')
+        if name not in writable_opts:
+            result = 1
+        else:
+            try:
+                self.repo.config_write(name, None if unset else value)
+                result = 0
+            except ConfigError:
+                result = 2
+            except git.GitError:
+                result = 3
+        write_vuint(self.conn, result)
+        self.conn.ok()
+
+    @_command
+    def config_list(self, args):
+        self.init_session()
+        assert args in ('', b'values')
+        values = args == b'values'
+        for item in self.repo.config_list(values=values):
+            key, value = item if values else (item, None)
+            if key in valid_config_opts:
+                write_bvec(self.conn, key)
+                if values:
+                    write_bvec(self.conn, value)
+        write_bvec(self.conn, b'') # end of list
         self.conn.ok()
 
     def handle(self):

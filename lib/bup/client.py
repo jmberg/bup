@@ -8,6 +8,7 @@ import socket, shutil
 
 from bup import git, ssh, vint, protocol
 from bup.compat import dataclass
+from bup.config import ConfigError
 from bup.git import PackWriter
 from bup.helpers import \
     (Conn,
@@ -685,6 +686,47 @@ class Client:
                 raise TypeError(f'Unrecognized result type {kind}')
         # kind == 5
         raise PermissionError(f'config-get does not allow remote access to {name}')
+
+    def config_write(self, name, value):
+        assert isinstance(name, bytes)
+        assert value is None or isinstance(value, bytes)
+        name = name.lower() # git is case insensitive here
+        conn = self.conn
+        with self._call('config-write'):
+            vint.send(conn, 'sss', name,
+                      b'1' if value is None else b'',
+                      b'' if value is None else value)
+            result = read_vuint(conn)
+            if result is None:
+                raise EOFError('EOF while reading config-write result')
+        if result == 0:
+            return
+        if result == 1:
+            raise PermissionError(f'config-write does not allow remote access to {name}')
+        if result == 2:
+            raise ConfigError(f'remote rejected invalid value for {name}')
+        if result == 3:
+            raise git.GitError(f'remote failed to write {name}')
+        raise TypeError(f'Unrecognized config-write result {result}')
+
+    def config_list(self, *, values=False):
+        conn = self.conn
+        with self._call('config-list', b'values' if values else None):
+            result = []
+            while True:
+                key = read_bvec(conn)
+                if key is None:
+                    raise EOFError('EOF while reading config key')
+                if not key:
+                    break
+                if values:
+                    value = read_bvec(conn)
+                    if value is None:
+                        raise EOFError('EOF while reading config value')
+                    result.append((key, value))
+                else:
+                    result.append(key)
+        return result
 
 
 class RemotePackStore:

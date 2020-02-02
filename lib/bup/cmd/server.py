@@ -28,8 +28,8 @@ def _vet_update_ref(repo, refname, new_oid, prev_oid):
         if hexlify(prev_oid) not in parents:
             raise cd(f'update-ref {pm(refname)}: {new_oid.hex()} is not a child of {prev_oid.hex()}')
 
-_READ_COMMANDS = (b'config-get', b'cat-batch', b'join', b'read-ref',
-                  b'refs', b'rev-list', b'resolve')
+_READ_COMMANDS = (b'config-get', b'config-list', b'cat-batch', b'join',
+                  b'read-ref', b'refs', b'rev-list', b'resolve')
 _APPEND_COMMANDS = (b'config-get', b'read-ref', b'receive-objects-v2',
                     b'update-ref')
 
