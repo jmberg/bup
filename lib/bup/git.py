@@ -105,6 +105,57 @@ def git_config_get(option, repo_dir=None, opttype=None, cfg_file=None):
         return None
     raise GitError('%r returned %d' % (cmd, rc))
 
+def git_config_check(option, value, opttype):
+    assert opttype is not None
+    with temp_dir(prefix=b'conftest') as tmpdir:
+        cfg_file = os.path.join(tmpdir, b'test.conf')
+        git_config_write(option, value, cfg_file=cfg_file)
+        try:
+            git_config_get(option, cfg_file=cfg_file, opttype=opttype)
+            return True
+        except GitError:
+            return False
+
+def git_config_write(option, value, repo_dir=None, cfg_file=None):
+    assert repo_dir or cfg_file, "repo_dir or cfg_file must be used"
+    cfg_file = repo_cfg_file(repo_dir, cfg_file)
+    cmd = [b'git', b'config']
+    cmd.extend([b'--file', cfg_file])
+    if value is None:
+        cmd.append(b'--unset')
+    cmd.append(option)
+    if value is not None:
+        cmd.append(value)
+    env = None
+    if repo_dir:
+        env = _gitenv(repo_dir=repo_dir)
+    p = subprocess.Popen(cmd, env=env)
+    rc = p.wait()
+    if rc != 0:
+        raise GitError('%r returned %d' % (cmd, rc))
+
+def git_config_list(values=False, repo_dir=None, cfg_file=None):
+    assert repo_dir or cfg_file, "repo_dir or cfg_file must be used"
+    cfg_file = repo_cfg_file(repo_dir, cfg_file)
+    cmd = [b'git', b'config']
+    cmd.extend([b'--list', b'--null'])
+    cmd.extend([b'--file', cfg_file])
+    env = None
+    if repo_dir:
+        env = _gitenv(repo_dir=repo_dir)
+    p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE)
+    # assume this will fit in memory
+    output = p.stdout.read()
+    items = output.split(b'\0')
+    for item in items[:-1]:
+        key, value = item.split(b'\n', 1)
+        if values:
+            yield key, value
+        else:
+            yield key
+    rc = p.wait()
+    if rc != 0:
+        raise GitError('%r returned %d' % (cmd, rc))
 
 def parse_tz_offset(s):
     """UTC offset in seconds."""

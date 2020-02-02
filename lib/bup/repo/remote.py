@@ -10,6 +10,8 @@ class RemoteRepo(BaseRepo):
         self.client = client.Client(address, create=create)
         self.closed = False
         self.config_get = self.client.config_get
+        self.config_write = self.client.config_write
+        self.config_list = self.client.config_list
         # init the superclass only afterwards so it can access self.config_get()
         super(RemoteRepo, self).__init__(address,
                                          compression_level=compression_level,
