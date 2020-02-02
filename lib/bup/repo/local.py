@@ -89,6 +89,14 @@ class LocalRepo(RepoProtocol):
             raise ConfigError('bup-dumb-server exists and bup.server.deduplicate-writes is true')
         return cfg
 
+    def _config_write(self, name, value):
+        path = git.repo_config_file(self.repo_dir)
+        git.git_config_write(path, name, value)
+
+    def config_list(self, *, values=False):
+        return git.git_config_list(git.repo_config_file(self.repo_dir),
+                                   values=values)
+
     def list_indexes(self):
         yield from os.listdir(git.repo(b'objects/pack', repo_dir=self.repo_dir))
 

@@ -1,8 +1,12 @@
 
+import re
 from binascii import unhexlify
 
+from bup import git, hashsplit
 from bup.compat import dataclass
+from bup.config import ConfigError
 from bup.helpers import notimplemented
+from bup.io import path_msg
 
 
 def _make_base(config_get, compression_level, max_pack_size, max_pack_objects):
@@ -46,6 +50,45 @@ class RepoProtocol:
         """
         Return the configuration value of 'name', returning None if it doesn't
         exist. opttype indicates the type of option.
+        """
+
+    @notimplemented
+    def _config_write(self, name, value):
+        """
+        Set the configuration option 'name' to 'value', or unset
+        the option if the value is None. Raise ConfigError if
+        the value is not valid (for the option).
+
+        This is the internal version that implementations provide,
+        the user-facing config_write() already checks some values.
+        """
+
+    def config_write(self, name, value):
+        _config_opt_types = {
+            b'pack.compression': 'int',
+            b'pack.packsizelimit': 'int',
+            b'core.compression': 'int',
+            b'bup.split.trees': 'bool',
+        }
+
+        if value is None:
+            # allowed to unset all of the above and bup.split.files
+            valid = True
+        elif name.lower() == b'bup.split.files':
+            valid = re.fullmatch(hashsplit._method_rx, value) is not None
+        else:
+            valid = git.git_config_check(name, value,
+                                         _config_opt_types.get(name.lower()))
+        if not valid:
+            raise ConfigError(f'invalid value {path_msg(value)} for {path_msg(name)}')
+        return self._config_write(name, value)
+
+
+    @notimplemented
+    def config_list(self, *, values=False):
+        """
+        Return an iterable over the configuration keys,
+        or (key, value)pairs if values is true, as bytes.
         """
 
     @notimplemented
