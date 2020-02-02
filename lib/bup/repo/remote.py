@@ -22,6 +22,8 @@ class RemoteRepo(RepoProtocol):
             self.config_get = self.client.config_get
         else:
             self.config_get = self._config_get_fallback
+        self._config_write = self.client.config_write
+        self.config_list = self.client.config_list
         self._base = _make_base(self.config_get, compression_level,
                                 max_pack_size, max_pack_objects)
         self.write_symlink = self.write_data

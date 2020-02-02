@@ -124,6 +124,54 @@ def git_config_get(path, option, *, opttype=None):
     raise GitError(f'unexpected exit {rc} for {cmd_msg(cmd)}')
 
 
+def git_config_write(path, option, value):
+    """Set option to value in the git config file at path,
+    unset the option if value is None.
+
+    """
+    cmd = [b'git', b'config', b'--file', path]
+    if value is None:
+        cmd.append(b'--unset')
+    cmd.append(option)
+    if value is not None:
+        cmd.append(value)
+    rc = subprocess.run(cmd, stderr=PIPE).returncode
+    if rc != 0:
+        raise GitError(f'unexpected exit {rc} for {cmd_msg(cmd)}')
+
+
+def git_config_list(path, *, values=False):
+    """Yield the keys (or (key, value) tuples if values is true)
+    of the git config file at path, as bytes.
+
+    """
+    cmd = [b'git', b'config', b'--file', path, b'--list', b'--null']
+    cp = subprocess.run(cmd, stdout=PIPE)
+    if cp.returncode != 0:
+        raise GitError(f'unexpected exit {cp.returncode} for {cmd_msg(cmd)}')
+    # with --null, each entry is terminated by \0 and the key and value
+    # are separated by \n (a key without a value has no \n)
+    for item in cp.stdout.split(b'\0')[:-1]:
+        key, _, value = item.partition(b'\n')
+        yield (key, value) if values else key
+
+
+def git_config_check(option, value, opttype):
+    """Return true if value would be accepted by git and bup
+    as an option of opttype, false otherwise.
+
+    """
+    assert opttype in ('bool', 'int', None)
+    with temp_dir(prefix=b'conftest-') as tmpdir:
+        scratch = os.path.join(tmpdir, b'test.conf')
+        try:
+            git_config_write(scratch, option, value)
+            git_config_get(scratch, option, opttype=opttype)
+            return True
+        except (ConfigError, GitError):
+            return False
+
+
 def get_commit_items(ref, get_ref):
     _, kind, _, it = get_ref(ref)
     if kind != b'commit':
