@@ -247,6 +247,21 @@ class BaseServer:
             vfs.write_resolution(self.conn, res)
         self.conn.ok()
 
+    def config(self, args):
+        self._init_session()
+        opttype, key = args.split(None, 1)
+        opttype = opttype.decode('ascii')
+        if opttype == 'string':
+            opttype = None
+        val = self._config(key, opttype=opttype)
+        if val is None:
+            self.conn.write(b'\x00\n')
+        elif isinstance(val, int_types) or isinstance(val, bool):
+            self.conn.write(b'%d\n' % val)
+        else:
+            self.conn.write(b'%s\n' % val)
+        self.conn.ok()
+
     def handle(self):
         commands = self._commands
 
@@ -405,17 +420,5 @@ class BupServer(BaseServer):
         return vfs.resolve(self.repo, path, parent=parent, want_meta=want_meta,
                            follow=follow)
 
-    def config(self, args):
-        self._init_session()
-        opttype, key = args.split(None, 1)
-        opttype = opttype.decode('ascii')
-        if opttype == 'string':
-            opttype = None
-        val = git.git_config_get(key, opttype=opttype)
-        if val is None:
-            self.conn.write(b'\x00\n')
-        elif isinstance(val, int_types) or isinstance(val, bool):
-            self.conn.write(b'%d\n' % val)
-        else:
-            self.conn.write(b'%s\n' % val)
-        self.conn.ok()
+    def _config(self, key, opttype):
+        return git.git_config_get(key, opttype=opttype)
