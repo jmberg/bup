@@ -568,6 +568,59 @@ class Client:
         self._not_busy()
         return val
 
+    def config_write(self, name, value):
+        assert isinstance(name, bytes)
+        assert isinstance(value, bytes) or value is None
+        name = name.lower() # git is case insensitive here
+        cmd = b'config-write'
+        # ignore this for now, server has it by itself, or not
+        # if/when we add actual config writing, try to pass it
+        # through but handle calls from _ensure_repo_id() in a
+        # graceful manner
+        if not cmd in self._available_commands and name == b'bup.repo-id':
+            return
+        self._require_command(cmd)
+        self.check_busy()
+        self._busy = b'config-write'
+        conn = self.conn
+        conn.write(b'config-write\n')
+        vint.send(conn, 'sss',
+                  name,
+                  b'1' if value is None else b'',
+                  b'' if value is None else value)
+        result = read_vuint(conn)
+        if result != 0:
+            raise PermissionError(f"config-write didn't allow writing {name}")
+        # FIXME: confusing
+        not_ok = self.check_ok()
+        if not_ok:
+            raise not_ok
+        self._not_busy()
+
+    def config_list(self, values=False):
+        self._require_command(b'config-list')
+        self.check_busy()
+        self._busy = b'config-list'
+        conn = self.conn
+        conn.write(b'config-list')
+        if values:
+            conn.write(b' values')
+        conn.write(b'\n')
+        while True:
+            k = read_bvec(conn)
+            if not k:
+                break
+            if values:
+                v = read_bvec(conn)
+                yield k, v
+            else:
+                yield k
+        not_ok = self.check_ok()
+        if not_ok:
+            raise not_ok
+        self._not_busy()
+
+
 # FIXME: disentangle this (stop inheriting) from PackWriter
 class PackWriter_Remote(git.PackWriter):
 
