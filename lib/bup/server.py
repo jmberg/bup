@@ -392,6 +392,7 @@ class GitServerBackend(AbstractServerBackend):
         self.cat = self.repo.cat
         self.refs = self.repo.refs
         self.resolve = self.repo.resolve
+        self.config = self.repo.config
         self.close = self.repo.close
         self.list_indexes = self.repo.list_indexes
 
@@ -418,6 +419,3 @@ class GitServerBackend(AbstractServerBackend):
         rv = p.wait()  # not fatal
         if rv:
             raise git.GitError('git rev-list returned error %d' % rv)
-
-    def config(self, key, opttype):
-        return git.git_config_get(key, opttype=opttype)
