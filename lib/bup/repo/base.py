@@ -3,6 +3,7 @@ import random
 
 from bup import vfs
 from bup.compat import pending_raise, bytes_from_byte
+from bup import git
 
 
 _next_repo_cache_id = 0
@@ -26,6 +27,13 @@ class BaseRepo:
     def __init__(self, key, compression_level=None,
                  max_pack_size=None, max_pack_objects=None):
         self.closed = False
+        self._required_config_types = {
+            b'pack.compression': 'int',
+            b'pack.packsizelimit': 'int',
+            b'core.compression': 'int',
+            b'bup.split.trees': 'bool',
+            b'bup.split.files': 'int',
+        }
         self.vfs_cache_id = _repo_cache_id(key)
         if compression_level is None:
             compression_level = self.config_get(b'pack.compression',
@@ -87,6 +95,42 @@ class BaseRepo:
         """
         Return the configuration value of 'name', returning None if it doesn't
         exist. opttype indicates the type of option.
+        """
+
+    def config_check(self, name, value):
+        """
+        Check validity of the given config option (for bup), so that
+        you can't write (using bup config) a setting that'll prevent
+        using the repository.
+        """
+        name = name.lower()
+        opttype = self._required_config_types.get(name, None)
+        if opttype is None:
+            return True
+        return git.git_config_check(name, value, opttype)
+
+    def register_config_types(self, new):
+        """
+        Subclasses call this to register their additional configuration
+        value types that need to be checked.
+        """
+        assert not set(self._required_config_types.keys()).intersection(new.keys())
+        self._required_config_types = self._required_config_types.copy()
+        self._required_config_types.update(new)
+
+    @notimplemented
+    def config_write(self, name, value):
+        """
+        Write the given configuration name=value to the config file/store.
+        When value is None, delete the given option.
+        """
+
+    @notimplemented
+    def config_list(self, values=False):
+        """
+        Return a generator over (key, value) tuples (if 'values' is True)
+        or just keys (if 'values' is False). The keys and values must be
+        just bytes, not coerced to any type (unlike config_get.)
         """
 
     @notimplemented
