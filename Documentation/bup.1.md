@@ -107,6 +107,9 @@ Subcommands are described in separate man pages.  For example
 `bup-cat-file`(1)
 :   Extract archive content
 
+`bup-config`(1)
+:   Show or set a bup repository configuration option
+
 `bup-drecurse`(1)
 :   Recursively list files in your filesystem
 
