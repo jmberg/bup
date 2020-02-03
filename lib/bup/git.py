@@ -365,20 +365,20 @@ def _encode_packobj(type, content, compression_level=1):
 
 
 def _decode_packobj(buf):
-    assert(buf)
-    c = buf[0]
-    type = _typermap[(c & 0x70) >> 4]
-    sz = c & 0x0f
-    shift = 4
-    i = 0
-    while c & 0x80:
-        i += 1
-        c = buf[i]
-        sz |= (c & 0x7f) << shift
-        shift += 7
-        if not (c & 0x80):
+    tp, offs, sz = _helpers.decode_hdr(buf)
+    yield (tp, sz)
+    it = zlib.decompressobj()
+    chunksz = 512
+    while True:
+        d = it.decompress(buf[offs:offs+chunksz])
+        if d:
+            yield d
+        offs += chunksz
+        if it.unused_data or not buf[offs:]:
             break
-    return (type, zlib.decompress(buf[i+1:]))
+    d = it.flush()
+    if d:
+        yield d
 
 
 class PackIdx:
