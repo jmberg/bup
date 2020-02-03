@@ -2202,6 +2202,41 @@ static PyObject *bup_limited_vint_pack(PyObject *self, PyObject *args)
     return NULL;
 }
 
+static PyObject *bup_decode_hdr(PyObject *self, PyObject *args)
+{
+    int offs = 0, type, shift = 4, sz;
+    char *hdr, *t = NULL;
+    Py_ssize_t len;
+
+    if (!PyArg_ParseTuple(args, rbuf_argf, &hdr, &len))
+        return NULL;
+
+    type = (hdr[0] & 0x70) >> 4;
+    sz = hdr[0] & 0xf;
+
+    while (offs < len && hdr[offs] & 0x80) {
+        offs++;
+        sz |= (hdr[offs] & 0x7f) << shift;
+        shift += 7;
+    }
+
+    if (offs + 1 >= len) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    offs++;
+
+    switch (type) {
+    case 3: t = "blob"; break;
+    case 2: t = "tree"; break;
+    case 1: t = "commit" ; break;
+    case 4: t = "tag"; break;
+    }
+
+    return Py_BuildValue(cstr_argf "ii", t, offs, sz);
+}
+
+
 static PyMethodDef helper_methods[] = {
     { "write_sparsely", bup_write_sparsely, METH_VARARGS,
       "Write buf excepting zeros at the end. Return trailing zero count." },
@@ -2314,6 +2349,7 @@ static PyMethodDef helper_methods[] = {
     { "vint_encode", bup_vint_encode, METH_VARARGS, "encode an int to vint" },
     { "limited_vint_pack", bup_limited_vint_pack, METH_VARARGS,
       "Try to pack vint/vuint/str, throwing OverflowError when unable." },
+    { "decode_hdr", bup_decode_hdr, METH_VARARGS, "decode pack hdr" },
     { NULL, NULL, 0, NULL },  // sentinel
 };
 
