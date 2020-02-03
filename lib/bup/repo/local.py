@@ -20,7 +20,6 @@ class LocalRepo(BaseRepo):
                                         compression_level=compression_level,
                                         max_pack_size=max_pack_size,
                                         max_pack_objects=max_pack_objects)
-        self._cp = git.cp(self.repo_dir)
         self.rev_list = partial(git.rev_list, repo_dir=self.repo_dir)
         self._dumb_server_mode = None
         self.objcache_maker = objcache_maker
@@ -60,13 +59,35 @@ class LocalRepo(BaseRepo):
         return git.update_ref(refname, newval, oldval, repo_dir=self.repo_dir)
 
     def cat(self, ref):
-        it = self._cp.get(ref)
-        oidx, typ, size = info = next(it)
-        yield info
-        if oidx:
-            for data in it:
-                yield data
-        assert not next(it, None)
+        from binascii import hexlify, unhexlify
+        self._ensure_packwriter()
+        self._packwriter._require_objcache()
+        if len(ref) == 40 and all([x in b'0123456789abcdefABCDEF' for x in ref]):
+            oid = unhexlify(ref)
+        else:
+            oid = self.read_ref(ref)
+            if oid is None:
+                yield (None, None, None)
+                return
+        oidx = hexlify(oid)
+        res = self._packwriter.objcache.exists(oid,
+                                  want_source=True,
+                                  want_offs=True)
+        if res is None:
+            yield (None, None, None)
+            return
+        where = res.pack
+        offs = res.offset
+        assert where.startswith(b'pack-') and where.endswith(b'.idx')
+        where = where.replace(b'.idx', b'.pack')
+        f = open(os.path.join(self.repo_dir, b'objects/pack/', where), 'rb')
+        from bup.helpers import mmap_read
+        m = mmap_read(f)
+        it = git._decode_packobj(m[offs:])
+        objtype, sz = next(it)
+        yield (oidx, objtype, sz)
+        for data in it:
+            yield data
 
     def refs(self, patterns=None, limit_to_heads=False, limit_to_tags=False):
         for ref in git.list_refs(patterns=patterns,
