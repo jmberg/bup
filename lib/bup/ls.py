@@ -113,13 +113,14 @@ def within_repo(repo, opt, out):
                          human_readable=opt.human_readable)
 
     ret = 0
+    want_meta = bool(opt.long_listing or opt.classification)
     pending = []
     for path in opt.paths:
         try:
             if opt.directory:
                 resolved = vfs.resolve(repo, path, follow=False)
             else:
-                resolved = vfs.try_resolve(repo, path)
+                resolved = vfs.try_resolve(repo, path, want_meta=want_meta)
 
             leaf_name, leaf_item = resolved[-1]
             if not leaf_item:
@@ -129,7 +130,7 @@ def within_repo(repo, opt, out):
                 ret = 1
                 continue
             if not opt.directory and S_ISDIR(vfs.item_mode(leaf_item)):
-                items = vfs.contents(repo, leaf_item)
+                items = vfs.contents(repo, leaf_item, want_meta=want_meta)
                 if opt.show_hidden == 'all':
                     # Match non-bup "ls -a ... /".
                     parent = resolved[-2] if len(resolved) > 1 else resolved[0]
@@ -143,7 +144,7 @@ def within_repo(repo, opt, out):
                     if opt.l:
                         sub_item = vfs.ensure_item_has_metadata(repo, sub_item,
                                                                 include_size=True)
-                    else:
+                    elif want_meta:
                         sub_item = vfs.augment_item_meta(repo, sub_item,
                                                          include_size=True)
                     line = item_line(sub_item, sub_name)
@@ -153,8 +154,9 @@ def within_repo(repo, opt, out):
                         out.write(line)
                         out.write(b'\n')
             else:
-                leaf_item = vfs.augment_item_meta(repo, leaf_item,
-                                                  include_size=True)
+                if opt.long_listing:
+                    leaf_item = vfs.augment_item_meta(repo, leaf_item,
+                                                      include_size=True)
                 line = item_line(leaf_item, os.path.normpath(path))
                 if not opt.long_listing and istty1:
                     pending.append(line)
