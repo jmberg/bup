@@ -645,7 +645,7 @@ def ordered_tree_entries(tree_data, bupm=None):
     for ent in tree_ents:
         yield ent
 
-def tree_items(oid, tree_data, names=frozenset(), bupm=None):
+def _tree_items(oid, tree_data, names=frozenset(), bupm=None):
 
     def tree_item(ent_oid, kind, gitmode):
         if kind == BUP_CHUNKED:
@@ -665,8 +665,6 @@ def tree_items(oid, tree_data, names=frozenset(), bupm=None):
 
     assert len(oid) == 20
     if not names:
-        dot_meta = _read_dir_meta(bupm) if bupm else default_dir_mode
-        yield b'.', Item(oid=oid, meta=dot_meta)
         tree_entries = ordered_tree_entries(tree_data, bupm)
         for name, mangled_name, kind, gitmode, ent_oid in tree_entries:
             if mangled_name == b'.bupm':
@@ -684,13 +682,6 @@ def tree_items(oid, tree_data, names=frozenset(), bupm=None):
     # Account for the bupm sort order issue (cf. ordered_tree_entries above)
     last_name = max(names) if bupm else max(names) + b'/'
 
-    if b'.' in names:
-        dot_meta = _read_dir_meta(bupm) if bupm else default_dir_mode
-        yield b'.', Item(oid=oid, meta=dot_meta)
-        if remaining == 1:
-            return
-        remaining -= 1
-
     tree_entries = ordered_tree_entries(tree_data, bupm)
     for name, mangled_name, kind, gitmode, ent_oid in tree_entries:
         if mangled_name == b'.bupm':
@@ -707,20 +698,29 @@ def tree_items(oid, tree_data, names=frozenset(), bupm=None):
             break
         remaining -= 1
 
-def tree_items_with_meta(repo, oid, tree_data, names):
+def tree_items(repo, oid, tree_data, names, metadata, level=None):
     # For now, the .bupm order doesn't quite match git's, and we don't
     # load the tree data incrementally anyway, so we just work in RAM
     # via tree_data.
     assert len(oid) == 20
     bupm = None
-    for _, mangled_name, sub_oid in tree_decode(tree_data):
-        if mangled_name == b'.bupm':
-            bupm = _FileReader(repo, sub_oid)
-            break
-        if mangled_name > b'.bupm':
-            break
+    if metadata:
+        for _, mangled_name, sub_oid in tree_decode(tree_data):
+            if mangled_name == b'.bupm':
+                bupm = _FileReader(repo, sub_oid)
+                break
+            if mangled_name > b'.bupm':
+                break
     with nullcontext_if_not(bupm):
-        for item in tree_items(oid, tree_data, names, bupm):
+        if not names or b'.' in names:
+            dot_meta = _read_dir_meta(bupm) if bupm else default_dir_mode
+            yield b'.', Item(oid=oid, meta=dot_meta)
+            if names:
+                names = set(names)
+                names.remove(b'.')
+                if not names:
+                    return
+        for item in _tree_items(oid, tree_data, names, bupm):
             yield item
 
 _save_name_rx = re.compile(br'^\d\d\d\d-\d\d-\d\d-\d{6}(-\d+)?$')
@@ -911,10 +911,7 @@ def contents(repo, item, names=None, want_meta=True):
             # Note: it shouldn't be possible to see an Item with type
             # 'commit' since a 'commit' should always produce a Commit.
             raise Exception('unexpected git ' + obj_t.decode('ascii'))
-        if want_meta:
-            item_gen = tree_items_with_meta(repo, item.oid, data, names)
-        else:
-            item_gen = tree_items(item.oid, data, names)
+        item_gen = tree_items(repo, item.oid, data, names, want_meta)
     elif isinstance(item, RevList):
         item_gen = revlist_items(repo, item.oid, names,
                                  require_meta=want_meta)
