@@ -283,12 +283,13 @@ def is_valid_cache_key(x):
       res:... -> resolution
       itm:OID -> Commit
       rvl:OID -> {'.', commit, '2012...', next_commit, ...}
+      lat:OID -> { ... same as rvl:OID ... }
     """
     # Suspect we may eventually add "(container_oid, name) -> ...", and others.
     x_t = type(x)
     if x_t is bytes:
         tag = x[:4]
-        if tag in (b'itm:', b'rvl:') and len(x) == 24:
+        if tag in (b'itm:', b'rvl:', b'lat:') and len(x) == 24:
             return True
         if tag == b'res:':
             return True
@@ -681,13 +682,53 @@ def _item_for_rev(rev):
 # non-string singleton
 _HAS_META_ENTRY = object()
 
-def cache_commit(repo, oid, require_meta=True):
+def cache_commit(repo, oid, require_meta=True, names=None):
     """Build, cache, and return a "name -> commit_item" dict of the entire
     commit rev-list.
 
     """
     entries = {}
     entries[b'.'] = _revlist_item_from_oid(repo, oid, require_meta)
+
+    # Check if this a query related to a /latest/ query, i.e. if it
+    # is cached in the latest cache for this oid and this path, then
+    # we've been asked for <oid>/latest/ before and cached it, and
+    # then we can resolve it easily...
+    # This is necessary so that doing a <oid>/latest/ with the link
+    # we create below doesn't have to then go back to a full rev-list
+    # to resolve the symlink, and if it does it may even fail due to
+    # the missing _reverse_suffix_duplicates() in the /latest/ code.
+    if names and len(names) == 2 and names[0] == b'.':
+        latest_key = b'lat:' + oid
+        ret = cache_get(latest_key)
+        if ret and names[1] in ret:
+            return ret
+
+    # Special-case <oid>/latest/ queries so that we can do this faster
+    # than doing a whole rev-list, which can take a very long time.
+    if names in ((b'latest',), (b'.', b'latest')):
+        latest_key = b'lat:' + oid
+        oidx = hexlify(oid)
+        it = repo.cat(oidx)
+        _, _, _ = next(it)
+        info = git.parse_commit(b''.join(it))
+        latest_rev = oidx, (unhexlify(info.tree), info.author_sec)
+        # This will not append the suffix as _reverse_suffix_duplicates()
+        # would, but it shouldn't really matter since we have no suffix
+        # here, but if you _do_ end up with one, the non-suffix version
+        # won't exist. So even if you 'remember' from a /latest/ run then
+        # you simply can't port it over to a clashing run with all.
+        latest_name = _name_for_rev(latest_rev)
+        latest_item = _item_for_rev(latest_rev)
+        ret = {
+            b'.': None, # HACK for ls -s, not sure why we're even
+                        # asked for this entry? nobody cares if
+                        # we already gave <branch>/latest/
+            b'latest': FakeLink(meta=default_symlink_mode, target=latest_name),
+            latest_name: latest_item,
+        }
+        cache_notice(latest_key, ret)
+        return ret
     revs = repo.rev_list((hexlify(oid),), format=b'%T %at',
                          parse=parse_rev)
     rev_items, rev_names = tee(revs)
@@ -721,7 +762,7 @@ def revlist_items(repo, oid, names, require_meta=True):
     if entries and require_meta and not entries[_HAS_META_ENTRY]:
         entries = None
     if not entries:
-        entries = cache_commit(repo, oid, require_meta)
+        entries = cache_commit(repo, oid, require_meta, names)
 
     if not names:
         for name in sorted((n for n in entries.keys() if n != _HAS_META_ENTRY)):
