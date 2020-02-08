@@ -29,7 +29,8 @@ from bup.helpers import (Sha1, add_error, chunkyreader, debug1, debug2,
                          parse_num,
                          progress, qprogress, stat_if_exists,
                          unlink,
-                         utc_offset_str)
+                         utc_offset_str,
+                         ExistsResult, ObjectExists)
 from bup.pwdgrp import username, userfullname
 
 
@@ -366,9 +367,12 @@ class PackIdx:
         return None
 
     def exists(self, hash, want_source=False):
-        """Return nonempty if the object exists in this index."""
+        """Return ExistsResult instance if the object exists in this index,
+           otherwise None."""
         if hash and (self._idx_from_hash(hash) != None):
-            return want_source and os.path.basename(self.name) or True
+            if want_source:
+                return ExistsResult(os.path.basename(self.name))
+            return ObjectExists
         return None
 
     def _idx_from_hash(self, hash):
@@ -521,7 +525,8 @@ class PackIdxList:
         return sum(len(pack) for pack in self.packs)
 
     def exists(self, hash, want_source=False):
-        """Return nonempty if the object exists in the index files."""
+        """Return ExistsResult instance if the object exists in this index,
+           otherwise None."""
         global _total_searches
         _total_searches += 1
         if hash in self.also:
