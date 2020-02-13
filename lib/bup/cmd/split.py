@@ -4,6 +4,7 @@ from binascii import hexlify
 import sys, time
 
 from bup import compat, hashsplit, git, options, client
+from bup.repo import from_opts
 from bup.compat import argv_bytes, environ
 from bup.hashsplit import HashSplitter
 from bup.helpers import (add_error, hostname, log, parse_num,
@@ -12,7 +13,6 @@ from bup.helpers import (add_error, hostname, log, parse_num,
                          parse_date_or_fatal)
 from bup.io import byte_stream
 from bup.pwdgrp import userfullname, username
-from bup.repo import LocalRepo, make_repo
 
 
 optspec = """
@@ -66,7 +66,6 @@ def opts_from_cmdline(argv):
     opt.sources = extra
 
     if opt.name: opt.name = argv_bytes(opt.name)
-    if opt.remote: opt.remote = argv_bytes(opt.remote)
     if opt.verbose is None: opt.verbose = 0
 
     if not (opt.blobs or opt.tree or opt.commit or opt.name or
@@ -83,10 +82,6 @@ def opts_from_cmdline(argv):
     if opt.verbose >= 2:
         git.verbose = opt.verbose - 1
         opt.bench = 1
-    if opt.max_pack_size:
-        opt.max_pack_size = parse_num(opt.max_pack_size)
-    if opt.max_pack_objects:
-        opt.max_pack_objects = parse_num(opt.max_pack_objects)
     if opt.fanout:
         opt.fanout = parse_num(opt.fanout)
     if opt.bwlimit:
@@ -230,25 +225,7 @@ def main(argv):
     remote_dest = opt.remote or opt.is_reverse
 
     if writing:
-        git.check_repo_or_die()
-        try:
-            if opt.remote:
-                repo = make_repo(opt.remote,
-                                 compression_level=opt.compress,
-                                 max_pack_size=opt.max_pack_size,
-                                 max_pack_objects=opt.max_pack_objects)
-            elif opt.is_reverse:
-                repo = make_repo(b'bup-rev://' + opt.is_reverse,
-                                 compression_level=opt.compress,
-                                 max_pack_size=opt.max_pack_size,
-                                 max_pack_objects=opt.max_pack_objects)
-            else:
-                repo = LocalRepo(compression_level=opt.compress,
-                                 max_pack_size=opt.max_pack_size,
-                                 max_pack_objects=opt.max_pack_objects)
-        except client.ClientError as e:
-            log('error: %s' % e)
-            sys.exit(1)
+        repo = from_opts(opt)
     else:
         repo = NoOpRepo()
 
