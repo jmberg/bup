@@ -3,11 +3,11 @@ from __future__ import absolute_import
 
 import re, stat, sys
 
-from bup import options, git, vfs
+from bup import options, vfs
 from bup.compat import argv_bytes
 from bup.helpers import chunkyreader, log, saved_errors
 from bup.io import byte_stream
-from bup.repo import LocalRepo, make_repo
+from bup.repo import from_opts
 
 optspec = """
 bup cat-file [--meta|--bupm] /branch/revision/[path]
@@ -21,8 +21,6 @@ def main(argv):
     o = options.Options(optspec)
     opt, flags, extra = o.parse_bytes(argv[1:])
 
-    git.check_repo_or_die()
-
     if not extra:
         o.fatal('must specify a target')
     if len(extra) > 1:
@@ -35,7 +33,7 @@ def main(argv):
     if not re.match(br'/*[^/]+/[^/]+', target):
         o.fatal("path %r doesn't include a branch and revision" % target)
 
-    with make_repo(argv_bytes(opt.remote)) if opt.remote else LocalRepo() as repo:
+    with from_opts(opt, reverse=False) as repo:
         resolved = vfs.resolve(repo, target, follow=False)
         leaf_name, leaf_item = resolved[-1]
         if not leaf_item:
