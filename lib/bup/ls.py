@@ -7,11 +7,10 @@ from stat import S_ISDIR, S_ISLNK
 import copy, locale, os.path, stat, sys
 import posixpath
 
-from bup import metadata, options, vfs, xstat
+from bup import metadata, options, vfs, xstat, repo
 from bup.compat import argv_bytes
 from bup.io import path_msg
 from bup.options import Options
-from bup.repo import LocalRepo, make_repo
 from bup.helpers import columnate, istty1, last, log
 
 def item_hash(item, tree_for_commit):
@@ -193,5 +192,7 @@ def via_cmdline(args, out=None, onabort=None):
     """
     assert out
     opt = opts_from_cmdline(args, onabort=onabort)
-    repo = make_repo(argv_bytes(opt.remote)) if opt.remote else LocalRepo()
-    return within_repo(repo, opt, out)
+    if opt.remote:
+        opt.remote = argv_bytes(opt.remote)
+    r = repo.from_opts(opt, reverse=False)
+    return within_repo(r, opt, out)

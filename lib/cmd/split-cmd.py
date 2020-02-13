@@ -81,13 +81,6 @@ if opt.verbose >= 2:
     git.verbose = opt.verbose - 1
     opt.bench = 1
 
-max_pack_size = None
-if opt.max_pack_size:
-    max_pack_size = parse_num(opt.max_pack_size)
-max_pack_objects = None
-if opt.max_pack_objects:
-    max_pack_objects = parse_num(opt.max_pack_objects)
-
 if opt.fanout:
     hashsplit.fanout = parse_num(opt.fanout)
 if opt.blobs:
@@ -110,9 +103,6 @@ def prog(filenum, nbytes):
         qprogress('Splitting: %d kbytes\r' % (total_bytes // 1024))
 
 
-is_reverse = environ.get(b'BUP_SERVER_REVERSE')
-if is_reverse and opt.remote:
-    o.fatal("don't use -r in reverse mode; it's automatic")
 start_time = time.time()
 
 if opt.name and not valid_save_name(opt.name):
@@ -122,25 +112,7 @@ refname = opt.name and b'refs/heads/%s' % opt.name or None
 if opt.noop or opt.copy:
     repo = oldref = None
 else:
-    git.check_repo_or_die()
-    try:
-        if opt.remote:
-            repo = repo.make_repo(opt.remote, compression_level=opt.compress,
-                                  max_pack_size=max_pack_size,
-                                  max_pack_objects=max_pack_objects)
-        elif is_reverse:
-            repo = repo.make_repo(b'reverse://%s' % is_reverse,
-                                  compression_level=opt.compress,
-                                  max_pack_size=max_pack_size,
-                                  max_pack_objects=max_pack_objects)
-        else:
-            repo = repo.LocalRepo(compression_level=opt.compress,
-                                  max_pack_size=max_pack_size,
-                                  max_pack_objects=max_pack_objects)
-    except client.ClientError as e:
-        log('error: %s' % e)
-        sys.exit(1)
-
+    repo = repo.from_opts(opt)
     oldref = refname and repo.read_ref(refname) or None
 
 input = byte_stream(sys.stdin)
