@@ -27,7 +27,7 @@ from bup.helpers import (add_error, chunkyreader, die_if_errors, handle_ctrl_c,
                          log, mkdirp, parse_rx_excludes, progress, qprogress,
                          saved_errors, should_rx_exclude_path, unlink)
 from bup.io import byte_stream
-from bup.repo import LocalRepo, make_repo
+from bup.repo import from_opts
 
 
 optspec = """
@@ -238,8 +238,6 @@ def main():
     o = options.Options(optspec)
     opt, flags, extra = o.parse(compat.argv[1:])
     verbosity = (opt.verbose or 0) if not opt.quiet else -1
-    if opt.remote:
-        opt.remote = argv_bytes(opt.remote)
     if opt.outdir:
         opt.outdir = argv_bytes(opt.outdir)
     
@@ -258,7 +256,7 @@ def main():
         mkdirp(opt.outdir)
         os.chdir(opt.outdir)
 
-    repo = make_repo(argv_bytes(opt.remote)) if opt.remote else LocalRepo()
+    repo = from_opts(opt, reverse=False)
     top = fsencode(os.getcwd())
     hardlinks = {}
     for path in [argv_bytes(x) for x in extra]:
