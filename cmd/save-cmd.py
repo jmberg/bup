@@ -94,27 +94,13 @@ if opt.graft:
             graft_points.append((resolve_parent(old_path),
                                  resolve_parent(new_path)))
 
-is_reverse = environ.get(b'BUP_SERVER_REVERSE')
-if is_reverse and opt.remote:
-    o.fatal("don't use -r in reverse mode; it's automatic")
-
 name = opt.name
 if name and not valid_save_name(name):
     o.fatal("'%s' is not a valid branch name" % path_msg(name))
 refname = name and b'refs/heads/%s' % name or None
 
-try:
-    if opt.remote:
-        repo = repo.make_repo(opt.remote, compression_level=opt.compress)
-    elif is_reverse:
-        repo = repo.make_repo(b'reverse://%s' % is_reverse,
-                              compression_level=opt.compress)
-    else:
-        repo = repo.LocalRepo(compression_level=opt.compress)
-    use_treesplit = repo.config(b'bup.treesplit', opttype='bool')
-except client.ClientError as e:
-    log('error: %s' % e)
-    sys.exit(1)
+repo = repo.from_opts(opt)
+use_treesplit = repo.config(b'bup.treesplit', opttype='bool')
 
 oldref = refname and repo.read_ref(refname) or None
 
