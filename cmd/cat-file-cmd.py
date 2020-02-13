@@ -12,7 +12,7 @@ from bup import options, git, vfs
 from bup.compat import argv_bytes
 from bup.helpers import chunkyreader, handle_ctrl_c, log, saved_errors
 from bup.io import byte_stream
-from bup.repo import LocalRepo, make_repo
+from bup.repo import from_opts
 
 optspec = """
 bup cat-file [--meta|--bupm] /branch/revision/[path]
@@ -27,8 +27,6 @@ handle_ctrl_c()
 o = options.Options(optspec)
 (opt, flags, extra) = o.parse(sys.argv[1:])
 
-git.check_repo_or_die()
-
 if not extra:
     o.fatal('must specify a target')
 if len(extra) > 1:
@@ -42,9 +40,8 @@ if not re.match(br'/*[^/]+/[^/]+', target):
     o.fatal("path %r doesn't include a branch and revision" % target)
 
 if opt.remote:
-    repo = make_repo(argv_bytes(opt.remote))
-else:
-    repo = LocalRepo()
+    opt.remote = argv_bytes(opt.remote)
+repo = from_opts(opt, reverse=False)
 resolved = vfs.resolve(repo, target, follow=False)
 leaf_name, leaf_item = resolved[-1]
 if not leaf_item:

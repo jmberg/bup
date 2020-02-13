@@ -12,14 +12,14 @@ from collections import namedtuple
 from functools import partial
 from stat import S_ISDIR
 
-from bup import git, client, helpers, vfs
+from bup import git, client, helpers, vfs, repo
 from bup.compat import argv_bytes, environ, hexstr, items, wrap_main
 from bup.git import get_cat_data, parse_commit, walk_object
 from bup.helpers import add_error, debug1, handle_ctrl_c, log, saved_errors
 from bup.helpers import hostname, shstr, tty_width
 from bup.io import path_msg
 from bup.pwdgrp import userfullname, username
-from bup.repo import LocalRepo, make_repo
+from bup.repo import LocalRepo
 
 argspec = (
     "usage: bup get [-s source] [-r remote] (<--ff|--append|...> REF [DEST])...",
@@ -578,25 +578,15 @@ def log_item(name, type, opt, tree=None, commit=None, tag=None):
 
 def main():
     handle_ctrl_c()
-    is_reverse = environ.get(b'BUP_SERVER_REVERSE')
     opt = parse_args(sys.argv)
-    git.check_repo_or_die()
     if opt.source:
         opt.source = argv_bytes(opt.source)
     src_dir = opt.source or git.repo()
     if opt.bwlimit:
         client.bwlimit = parse_num(opt.bwlimit)
-    if is_reverse and opt.remote:
-        misuse("don't use -r in reverse mode; it's automatic")
     if opt.remote:
         opt.remote = argv_bytes(opt.remote)
-    if is_reverse:
-        dest_repo = make_repo(b'reverse://%s' % is_reverse,
-                              compression_level=opt.compress)
-    elif opt.remote:
-        dest_repo = make_repo(opt.remote, compression_level=opt.compress)
-    else:
-        dest_repo = LocalRepo(compression_level=opt.compress)
+    dest_repo = repo.from_opts(opt)
 
     with dest_repo as dest_repo:
         with LocalRepo(repo_dir=src_dir) as src_repo:
