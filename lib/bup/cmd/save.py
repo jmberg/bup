@@ -5,6 +5,7 @@ from errno import ENOENT
 import math, os, stat, sys, time
 
 from bup import hashsplit, git, options, index, client, metadata
+from bup.repo import from_opts
 from bup import hlinkdb
 from bup.compat import argv_bytes, environ
 from bup.hashsplit import GIT_MODE_TREE, GIT_MODE_FILE, GIT_MODE_SYMLINK
@@ -16,7 +17,6 @@ from bup.helpers import (add_error, grafted_path_components, handle_ctrl_c,
 from bup.io import byte_stream, path_msg
 from bup.pwdgrp import userfullname, username
 from bup.tree import Stack
-from bup.repo import LocalRepo, make_repo
 
 
 optspec = """
@@ -55,8 +55,6 @@ def opts_from_cmdline(argv):
         opt.indexfile = argv_bytes(opt.indexfile)
     if opt.name:
         opt.name = argv_bytes(opt.name)
-    if opt.remote:
-        opt.remote = argv_bytes(opt.remote)
     if opt.strip_path:
         opt.strip_path = argv_bytes(opt.strip_path)
     if not (opt.tree or opt.commit or opt.name):
@@ -430,21 +428,7 @@ def main(argv):
     client.bwlimit = opt.bwlimit
     git.check_repo_or_die()
 
-    try:
-        if opt.remote:
-            repo = make_repo(opt.remote,
-                             compression_level=opt.compress)
-        elif opt.is_reverse:
-            repo = make_repo(b'bup-rev://' + opt.is_reverse,
-                             compression_level=opt.compress)
-        else:
-            repo = LocalRepo(compression_level=opt.compress)
-    except client.ClientError as e:
-        log('error: %s' % e)
-        sys.exit(1)
-
-    # repo creation must be last nontrivial command in each if clause above
-    with repo:
+    with from_opts(opt) as repo:
         split_trees = repo.config_get(b'bup.split-trees', opttype='bool')
         sys.stdout.flush()
         out = byte_stream(sys.stdout)

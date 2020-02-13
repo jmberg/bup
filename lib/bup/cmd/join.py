@@ -3,11 +3,11 @@ from __future__ import absolute_import
 
 import sys
 
-from bup import git, options
+from bup import options
 from bup.compat import argv_bytes
 from bup.helpers import linereader, log
 from bup.io import byte_stream
-from bup.repo import LocalRepo, make_repo
+from bup.repo import from_opts
 
 
 optspec = """
@@ -20,10 +20,6 @@ o=         output filename
 def main(argv):
     o = options.Options(optspec)
     opt, flags, extra = o.parse_bytes(argv[1:])
-    if opt.remote:
-        opt.remote = argv_bytes(opt.remote)
-
-    git.check_repo_or_die()
 
     stdin = byte_stream(sys.stdin)
 
@@ -31,7 +27,7 @@ def main(argv):
         extra = linereader(stdin)
 
     ret = 0
-    with make_repo(opt.remote) if opt.remote else LocalRepo() as repo:
+    with from_opts(opt) as repo:
 
         if opt.o:
             outfile = open(opt.o, 'wb')
