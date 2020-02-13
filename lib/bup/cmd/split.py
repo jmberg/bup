@@ -3,7 +3,8 @@ from __future__ import absolute_import, division, print_function
 from binascii import hexlify
 import sys, time
 
-from bup import compat, hashsplit, git, options, client, repo
+from bup import compat, hashsplit, git, options, client
+from bup.repo import from_opts
 from bup.compat import argv_bytes, environ
 from bup.helpers import (add_error, handle_ctrl_c, hostname, log, parse_num,
                          qprogress, reprogress, saved_errors,
@@ -45,7 +46,6 @@ def main(argv):
     o = options.Options(optspec)
     opt, flags, extra = o.parse_bytes(argv[1:])
     if opt.name: opt.name = argv_bytes(opt.name)
-    if opt.remote: opt.remote = argv_bytes(opt.remote)
     if opt.verbose is None: opt.verbose = 0
 
     if not (opt.blobs or opt.tree or opt.commit or opt.name or
@@ -63,13 +63,6 @@ def main(argv):
     if opt.verbose >= 2:
         git.verbose = opt.verbose - 1
         opt.bench = 1
-
-    max_pack_size = None
-    if opt.max_pack_size:
-        max_pack_size = parse_num(opt.max_pack_size)
-    max_pack_objects = None
-    if opt.max_pack_objects:
-        max_pack_objects = parse_num(opt.max_pack_objects)
 
     if opt.fanout:
         hashsplit.fanout = parse_num(opt.fanout)
@@ -93,9 +86,6 @@ def main(argv):
             qprogress('Splitting: %d kbytes\r' % (total_bytes[0] // 1024))
 
 
-    is_reverse = environ.get(b'BUP_SERVER_REVERSE')
-    if is_reverse and opt.remote:
-        o.fatal("don't use -r in reverse mode; it's automatic")
     start_time = time.time()
 
     if opt.name and not valid_save_name(opt.name):
@@ -105,25 +95,7 @@ def main(argv):
     if opt.noop or opt.copy:
         repo = oldref = None
     else:
-        git.check_repo_or_die()
-        try:
-            if opt.remote:
-                repo = repo.make_repo(opt.remote, compression_level=opt.compress,
-                                      max_pack_size=max_pack_size,
-                                      max_pack_objects=max_pack_objects)
-            elif is_reverse:
-                repo = repo.make_repo(b'reverse://%s' % is_reverse,
-                                      compression_level=opt.compress,
-                                      max_pack_size=max_pack_size,
-                                      max_pack_objects=max_pack_objects)
-            else:
-                repo = repo.LocalRepo(compression_level=opt.compress,
-                                      max_pack_size=max_pack_size,
-                                      max_pack_objects=max_pack_objects)
-        except client.ClientError as e:
-            log('error: %s' % e)
-            sys.exit(1)
-
+        repo = from_opts(opt)
         oldref = refname and repo.read_ref(refname) or None
 
     input = byte_stream(sys.stdin)
