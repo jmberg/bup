@@ -9,6 +9,9 @@ from bup.helpers import (Conn, debug2)
 
 optspec = """
 bup server
+--
+Options:
+force-repo force the configured (environment, --bup-dir) repository to be used
 """
 
 def main(argv):
@@ -22,6 +25,8 @@ def main(argv):
 
     class ServerRepo(LocalRepo):
         def __init__(self, repo_dir):
+            if opt.force_repo:
+                repo_dir = None
             git.check_repo_or_die(repo_dir)
             LocalRepo.__init__(self, repo_dir)
 
