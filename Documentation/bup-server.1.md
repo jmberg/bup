@@ -19,6 +19,15 @@ server` to receive the transmitted objects.
 
 There is normally no reason to run `bup server` yourself.
 
+# OPTIONS
+
+\--force-repo
+:   Force using the bup repository given in the environment or the
+    global *-d*/*\--bup-dir* option. This can be useful for ssh forced
+    commands (*command="..."* in an authorized_keys file) as it forces the
+    connection to use a given bup repository; it cannot read from
+    or write to any other location on the filesystem.
+
 # MODES
 
 smart
