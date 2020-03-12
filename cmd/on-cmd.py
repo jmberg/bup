@@ -56,7 +56,9 @@ try:
         argvs = b'\0'.join([b'bup'] + argv)
         p.stdin.write(struct.pack('!I', len(argvs)) + argvs)
         p.stdin.flush()
-        sp = subprocess.Popen([path.exe(), b'server'],
+        # we already put BUP_DIR into the environment, which
+        # is inherited here
+        sp = subprocess.Popen([path.exe(), b'server', b'--force-repo'],
                               stdin=p.stdout, stdout=p.stdin)
         p.stdin.close()
         p.stdout.close()
