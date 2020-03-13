@@ -51,10 +51,29 @@ def main(argv):
             argvs = b'\0'.join([b'bup'] + argv)
             p.stdin.write(struct.pack('!I', len(argvs)) + argvs)
             p.stdin.flush()
-            # we already put BUP_DIR into the environment, which
-            # is inherited here
-            sp = subprocess.Popen([path.exe(), b'server', b'--force-repo'],
-                                  stdin=p.stdout, stdout=p.stdin)
+
+            # for commands not listed here don't even execute the server
+            # (e.g. bup on <host> index ...)
+            cmdmodes =  {
+                b'get': b'unrestricted',
+                b'save': b'append',
+                b'split': b'append',
+                b'tag': b'append',
+                b'join': b'read',
+                b'cat-file': b'read',
+                b'ftp': b'read',
+                b'ls': b'read',
+                b'margin': b'read',
+                b'meta': b'read',
+            }
+            mode = cmdmodes.get(argv[0], None)
+
+            if mode is not None:
+                # we already put BUP_DIR into the environment, which
+                # is inherited here
+                sp = subprocess.Popen([path.exe(), b'server', b'--force-repo',
+                                       b'--mode=' + mode],
+                                       stdin=p.stdout, stdout=p.stdin)
             p.stdin.close()
             p.stdout.close()
             # Demultiplex remote client's stderr (back to stdout/stderr).
