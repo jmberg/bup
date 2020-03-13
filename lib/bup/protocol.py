@@ -125,20 +125,22 @@ def _command(fn):
     return fn
 
 class BupProtocolServer:
-    def __init__(self, conn, backend):
+    def __init__(self, conn, backend, permitted_commands=None):
         self.conn = conn
         self._backend = backend
-        self._commands = self._get_commands()
+        self._commands = self._get_commands(permitted_commands)
         self.suspended = False
         self.repo = None
 
-    def _get_commands(self):
+    def _get_commands(self, permitted_commands):
         commands = []
         for name in dir(self):
             fn = getattr(self, name)
 
             if getattr(fn, 'bup_server_command', False):
-                commands.append(name.replace('_', '-').encode('ascii'))
+                cmdname = name.replace('_', '-').encode('ascii')
+                if permitted_commands is None or cmdname in permitted_commands:
+                    commands.append(cmdname)
 
         return commands
 
