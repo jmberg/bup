@@ -125,20 +125,45 @@ def _command(fn):
     return fn
 
 class Server:
-    def __init__(self, conn, backend):
+    def __init__(self, conn, backend, mode=None):
         self.conn = conn
         self._backend = backend
-        self._commands = self._get_commands()
+        self._only_ff_updates = mode is not None and mode != 'unrestricted'
+        self._commands = self._get_commands(mode or 'unrestricted')
         self.suspended = False
         self.repo = None
 
-    def _get_commands(self):
+    def _get_commands(self, mode):
+        # always allow these - even if set-dir may actually be
+        # a no-op (if --force-repo is given)
+        permitted = set([b'quit', b'help', b'set-dir', b'list-indexes',
+                         b'send-index', b'config-get', b'config-list'])
+
+        read_cmds = set([b'read-ref', b'join', b'cat-batch',
+                         b'refs', b'rev-list', b'resolve'])
+        append_cmds = set([b'receive-objects-v2', b'read-ref', b'update-ref',
+                           b'init-dir'])
+
+        if mode == 'unrestricted':
+            permitted = None # all commands permitted
+        elif mode == 'append':
+            permitted.update(append_cmds)
+        elif mode == 'read-append':
+            permitted.update(read_cmds)
+            permitted.update(append_cmds)
+        elif mode == 'read':
+            permitted.update(read_cmds)
+        else:
+            assert False # should be caught elsewhere
+
         commands = []
         for name in dir(self):
             fn = getattr(self, name)
 
             if getattr(fn, 'bup_server_command', False):
-                commands.append(name.replace('_', '-').encode('ascii'))
+                cmdname = name.replace('_', '-').encode('ascii')
+                if permitted is None or cmdname in permitted:
+                    commands.append(cmdname)
 
         return commands
 
@@ -273,9 +298,11 @@ class Server:
     @_command
     def update_ref(self, refname):
         self.init_session()
-        newval = self.conn.readline().strip()
-        oldval = self.conn.readline().strip()
-        self.repo.update_ref(refname, unhexlify(newval), unhexlify(oldval))
+        newval = unhexlify(self.conn.readline().strip())
+        oldval = unhexlify(self.conn.readline().strip())
+        if self._only_ff_updates:
+            assert (self.repo.read_ref(refname) or b'') == oldval
+        self.repo.update_ref(refname, newval, oldval)
         self.conn.ok()
 
     @_command

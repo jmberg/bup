@@ -105,13 +105,13 @@ class Client:
                 self.sockw = self.sock.makefile('wb')
                 self.conn = DemuxConn(self.sock.fileno(), self.sockw)
             self._available_commands = self._get_available_commands()
-            self._require_command(b'init-dir')
-            self._require_command(b'set-dir')
             if self.dir:
                 self.dir = re.sub(br'[\r\n]', b' ', self.dir)
                 if create:
+                    self._require_command(b'init-dir')
                     self.conn.write(b'init-dir %s\n' % self.dir)
                 else:
+                    self._require_command(b'set-dir')
                     self.conn.write(b'set-dir %s\n' % self.dir)
                 self.check_ok()
 
