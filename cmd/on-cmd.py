@@ -56,10 +56,32 @@ try:
         argvs = b'\0'.join([b'bup'] + argv)
         p.stdin.write(struct.pack('!I', len(argvs)) + argvs)
         p.stdin.flush()
-        # we already put BUP_DIR into the environment, which
-        # is inherited here
-        sp = subprocess.Popen([path.exe(), b'server', b'--force-repo'],
-                              stdin=p.stdout, stdout=p.stdin)
+
+        # for commands not listed here don't even execute the server
+        # (e.g. bup on <host> index ...)
+        # (FIXME: consider parsing get arguments?)
+        read_append_commands = [b'get']
+        append_commands = [b'save', b'split', b'tag']
+        read_commands = [b'restore', b'web', b'fuse']
+        # FIXME: is there any value in even allowing these?
+        #        it's inefficient to make the roundtrip ...
+        read_commands += [b'join', b'cat-file', b'ftp', b'ls',
+                          b'margin', b'meta']
+
+        mode = None
+        if argv[0] in read_append_commands:
+            mode = b'read-append'
+        elif argv[0] in append_commands:
+            mode = b'append'
+        elif argv[0] in read_commands:
+            mode = b'read'
+
+        if mode is not None:
+            # we already put BUP_DIR into the environment, which
+            # is inherited here
+            sp = subprocess.Popen([path.exe(), b'server', b'--force-repo',
+                                   b'--mode=' + mode],
+                                   stdin=p.stdout, stdout=p.stdin)
         p.stdin.close()
         p.stdout.close()
         # Demultiplex remote client's stderr (back to stdout/stderr).
