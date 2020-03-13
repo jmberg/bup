@@ -8,7 +8,7 @@ bup-server - the server side of the bup client-server relationship
 
 # SYNOPSIS
 
-bup server
+bup server [--mode=MODE]
 
 # DESCRIPTION
 
@@ -22,6 +22,28 @@ There is normally no reason to run `bup server` yourself.
 The server's resource usage can be limited by setting
 `bup.server.deduplicate-writes` to `false`.  See the description in
 `bup-config(5)` for additional information.
+
+# OPTIONS
+
+--mode=MODE
+:   Restrict the commands the server will accept from the client.
+    MODE may be one of:
+
+    `unrestricted`
+    :   Allow all commands.  This is the default.
+
+    `read`
+    :   Allow only commands that read references and objects, such
+        as reading refs and listing or fetching objects.
+
+    `append`
+    :   Allow reading refs, receiving new objects, and updating
+        refs.  An existing ref may only be moved to a commit that
+        has its current value as a parent, so history cannot be
+        rewritten.  New refs can be created, but none deleted.
+
+    `read-append`
+    :   Allow both `read` and `append` per above.
 
 # FILES
 
