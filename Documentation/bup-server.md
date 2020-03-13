@@ -28,6 +28,25 @@ There is normally no reason to run `bup server` yourself.
     connection to use a given bup repository; it cannot read from
     or write to any other location on the filesystem.
 
+\--mode=*mode*
+:   Set the server mode, the following modes are accepted:
+
+    *unrestricted*: No restrictions, this is the default if this option
+    is not given.
+
+    *append*: Data can only be written to this repository, and refs can
+    be updated. (Obviously, object existence can be proven since indexes
+    are needed to save data to a repository.)
+
+    *read-append*: Data can be written to and read back.
+
+    *read*: Data can only be read.
+
+    **NOTE**: Currently, the server doesn't support any destructive
+    operations, so *unrestricted* is really identical to *read-append*,
+    but as this may change in the future there's a difference already
+    to avoid breaking setups.
+
 # MODES
 
 smart
