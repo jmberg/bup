@@ -8,9 +8,9 @@ bup-web - Start web server to browse bup repositiory
 
 # SYNOPSIS
 
-bup web [[hostname]:port]
+bup web [-r *host*:[*path*]] [[hostname]:port]
 
-bup web unix://path
+bup web [-r *host*:[*path*]] unix://path
 
 # DESCRIPTION
 
@@ -30,6 +30,10 @@ A `SIGTERM` signal may be sent to the server to request an orderly
 shutdown.
 
 # OPTIONS
+
+-r, \--remote=[*user*@]*host*:[*path*], \--remote=URL
+:   serve the specified remote repository, by default via SSH.  See
+    `bup`(1) REMOTE OPTIONS for further information.
 
 \--human-readable
 :   display human readable file sizes (i.e. 3.9K, 4.7M)
