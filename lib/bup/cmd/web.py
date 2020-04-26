@@ -5,7 +5,7 @@ from urllib import parse
 from urllib.parse import urlencode
 import mimetypes, os, posixpath, signal, stat, sys, time, traceback, webbrowser
 
-from bup import options, git, vfs, xstat
+from bup import options, vfs, xstat
 from bup.helpers \
     import (EXIT_FAILURE,
             chunkyreader,
@@ -16,7 +16,7 @@ from bup.helpers \
 from bup.io import path_msg
 from bup.metadata import Metadata
 from bup.path import resource_path
-from bup.repo import LocalRepo
+from bup.repo import from_opts
 
 try:
     from tornado import gen
@@ -342,6 +342,7 @@ optspec = """
 bup web [[hostname]:port]
 bup web unix://path
 --
+r,remote=         remote repository path
 human-readable    display human readable file sizes (i.e. 3.9K, 4.7M)
 browser           show repository in default browser (incompatible with unix://)
 """
@@ -379,8 +380,6 @@ def main(argv):
                 o.fatal('port must be an integer, not %r' % port)
             address = InetAddress(host=host, port=port)
 
-    git.check_repo_or_die()
-
     settings = dict(
         debug = 1,
         template_path = resource_path(b'web').decode('utf-8'),
@@ -393,7 +392,7 @@ def main(argv):
     except AttributeError:
         sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
-    with LocalRepo() as repo:
+    with from_opts(opt, reverse=False) as repo:
         handlers = [ (r"(?P<path>/.*)", BupRequestHandler,
                       dict(repo=repo, human=opt.human_readable))]
         application = tornado.web.Application(handlers, **settings)
