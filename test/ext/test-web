@@ -77,6 +77,19 @@ fi
 WVPASS kill -s TERM "$web_pid"
 WVPASS wait "$web_pid"
 
+WVSTART 'web -r'
+WVPASS rm -f socket
+"$top/bup" web -r -:"$BUP_DIR" unix://socket </dev/null >bup-web-remote.log 2>&1 &
+web_pid=$!
+trap 'cat bup-web-remote.log' EXIT
+wait-for-server-start
+
+WVPASS curl --unix-socket ./socket \
+       'http://localhost/%C2%A1excitement%21/latest/data' > result-remote
+WVPASSEQ '¡excitement!' "$(cat result-remote)"
+WVPASS kill -s TERM "$web_pid"
+WVPASS wait "$web_pid"
+
 trap - EXIT
 WVPASS cd "$top"
 WVPASS rm -r "$tmpdir"
