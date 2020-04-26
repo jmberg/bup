@@ -31,6 +31,10 @@ shutdown.
 
 # OPTIONS
 
+-r, \--remote=*host*:[*path*]
+:   browse the remote repository specified by this option instead of
+    the default one.
+
 \--human-readable
 :   display human readable file sizes (i.e. 3.9K, 4.7M)
 
