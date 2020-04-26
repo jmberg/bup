@@ -6,7 +6,8 @@ from urllib.parse import urlencode
 import mimetypes, os, posixpath, signal, stat, sys, time, traceback, webbrowser
 import asyncio
 
-from bup import options, git, vfs, xstat
+from bup import options, vfs, xstat
+from bup.compat import argv_bytes
 from bup.helpers import \
     (EXIT_FAILURE,
      chunkyreader,
@@ -16,7 +17,7 @@ from bup.helpers import \
 from bup.io import path_msg
 from bup.metadata import Metadata
 from bup.path import resource_path
-from bup.repo import LocalRepo
+from bup.repo import main_repo_location, repo_for_location
 
 try:
     from tornado import gen
@@ -341,9 +342,10 @@ def handle_sigterm():
 
 
 optspec = """
-bup web [[hostname]:port]
-bup web unix://path
+bup web [-r host:path] [[hostname]:port]
+bup web [-r host:path] unix://path
 --
+r,remote=   remote repository path
 human-readable    display human readable file sizes (i.e. 3.9K, 4.7M)
 browser           show repository in default browser (incompatible with unix://)
 debug             start tornado in debug mode (tracebacks, autoreload, no caches)
@@ -360,6 +362,9 @@ async def async_main(argv):
 
     if len(extra) > 1:
         o.fatal("at most one argument expected")
+
+    loc = main_repo_location(argv_bytes(opt.remote) if opt.remote else None,
+                             o.fatal)
 
     if len(extra) == 0:
         address = InetAddress(host='127.0.0.1', port=8080)
@@ -380,8 +385,6 @@ async def async_main(argv):
                 o.fatal(f'port {path_msg(port)} is not an integer')
             address = InetAddress(host=host, port=port)
 
-    git.check_repo_or_die()
-
     settings = {
         'template_path': resource_path(b'web').decode('utf-8'),
         'static_path': resource_path(b'web/static').decode('utf-8')
@@ -401,7 +404,7 @@ async def async_main(argv):
     except AttributeError:
         sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
-    with LocalRepo() as repo:
+    with repo_for_location(loc) as repo:
         handlers = [(r"(?P<path>/.*)", BupRequestHandler,
                      {'repo': repo, 'human': opt.human_readable})]
         application = tornado.web.Application(handlers, **settings)
