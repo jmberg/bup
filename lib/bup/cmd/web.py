@@ -10,7 +10,7 @@ from bup.helpers import (chunkyreader, debug1, format_filesize, handle_ctrl_c,
                          log, saved_errors)
 from bup.metadata import Metadata
 from bup.path import resource_path
-from bup.repo import LocalRepo
+from bup.repo import from_opts
 from bup.io import path_msg
 
 try:
@@ -311,6 +311,7 @@ optspec = """
 bup web [[hostname]:port]
 bup web unix://path
 --
+r,remote=         remote repository path
 human-readable    display human readable file sizes (i.e. 3.9K, 4.7M)
 browser           show repository in default browser (incompatible with unix://)
 """
@@ -349,8 +350,6 @@ def main(argv):
                 o.fatal('port must be an integer, not %r' % port)
             address = InetAddress(host=host, port=port)
 
-    git.check_repo_or_die()
-
     settings = dict(
         debug = 1,
         template_path = resource_path(b'web').decode('utf-8'),
@@ -363,8 +362,9 @@ def main(argv):
     except AttributeError:
         sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
+    repo = from_opts(opt, reverse=False)
     application = tornado.web.Application([
-        (r"(?P<path>/.*)", BupRequestHandler, dict(repo=LocalRepo())),
+        (r"(?P<path>/.*)", BupRequestHandler, dict(repo=repo)),
     ], **settings)
 
     http_server = HTTPServer(application)
