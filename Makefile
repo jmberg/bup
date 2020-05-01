@@ -121,7 +121,7 @@ config/config.h: config/config.vars
 
 lib/bup/_helpers$(SOEXT): \
 		config/config.h lib/bup/bupsplit.h \
-		lib/bup/bupsplit.c lib/bup/_helpers.c lib/bup/csetup.py
+		lib/bup/bupsplit.c lib/bup/_helpers.c lib/bup/_hashsplit.c lib/bup/csetup.py
 	@rm -f $@
 	cd lib/bup && \
 	LDFLAGS="$(LDFLAGS)" CFLAGS="$(CFLAGS)" "$(bup_python)" csetup.py build
