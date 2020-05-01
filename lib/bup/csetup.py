@@ -13,8 +13,8 @@ _helpers_ldflags = shlex.split(sys.argv[3])
 sys.argv = sys.argv[:2]
 
 _helpers_mod = Extension('_helpers',
-                         sources=['_helpers.c', 'bupsplit.c'],
-                         depends=['../../config/config.h', 'bupsplit.h'],
+                         sources=['_helpers.c', 'bupsplit.c', '_hashsplit.c'],
+                         depends=['../../config/config.h', 'bupsplit.h', '_hashsplit.h'],
                          extra_compile_args=_helpers_cflags,
                          extra_link_args=_helpers_ldflags)
 
