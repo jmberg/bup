@@ -148,7 +148,7 @@ config/config.h: config/config.vars
 
 lib/bup/_helpers$(SOEXT): \
 		config/config.h lib/bup/bupsplit.h \
-		lib/bup/bupsplit.c lib/bup/_helpers.c lib/bup/csetup.py
+		lib/bup/bupsplit.c lib/bup/_helpers.c lib/bup/_hashsplit.c lib/bup/csetup.py
 	@rm -f $@
 	cd lib/bup && $(cfg_py) csetup.py build "$(CFLAGS)" "$(LDFLAGS)"
         # Make sure there's just the one file we expect before we copy it.
