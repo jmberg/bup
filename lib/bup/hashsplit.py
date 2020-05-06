@@ -21,12 +21,13 @@ def fanbits(fanout):
     return int(math.log(fanout or DEFAULT_FANOUT, 2))
 
 total_split = 0
-def split_to_blobs(makeblob, files, keep_boundaries, progress, fanout=None):
+def split_to_blobs(makeblob, files, keep_boundaries, progress, fanout=None,
+                   blobbits=None):
     global total_split
     for blob, level in HashSplitter(files,
                                     keep_boundaries=keep_boundaries,
                                     progress=progress,
-                                    bits=BUP_BLOBBITS,
+                                    bits=blobbits or BUP_BLOBBITS,
                                     fanbits=fanbits(fanout)):
         sha = makeblob(blob)
         total_split += len(blob)
@@ -65,8 +66,9 @@ def _squish(maketree, stacks, n):
 
 def split_to_shalist(makeblob, maketree, files,
                      keep_boundaries, progress=None,
-                     fanout=None):
-    sl = split_to_blobs(makeblob, files, keep_boundaries, progress, fanout)
+                     fanout=None, blobbits=None):
+    sl = split_to_blobs(makeblob, files, keep_boundaries, progress,
+                        fanout, blobbits)
     assert(fanout != 0)
     if not fanout:
         shal = []
@@ -86,10 +88,10 @@ def split_to_shalist(makeblob, maketree, files,
 
 def split_to_blob_or_tree(makeblob, maketree, files,
                           keep_boundaries, progress=None,
-                          fanout=None):
+                          fanout=None, blobbits=None):
     shalist = list(split_to_shalist(makeblob, maketree,
                                     files, keep_boundaries,
-                                    progress, fanout))
+                                    progress, fanout, blobbits))
     if len(shalist) == 1:
         return (shalist[0][0], shalist[0][2])
     elif len(shalist) == 0:
