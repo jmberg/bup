@@ -20,7 +20,8 @@ COMMON\_OPTIONS
   ~ \[-r *host*:*path*\] \[-v\] \[-q\] \[-d *seconds-since-epoch*\] \[\--bench\]
     \[\--max-pack-size=*bytes*\] \[-#\] \[\--bwlimit=*bytes*\]
     \[\--max-pack-objects=*n*\] \[\--fanout=*count*\]
-    \[\--keep-boundaries\] \[\--git-ids | filenames...\]
+    \[\--keep-boundaries\] \[\--blobbits=*n*\]
+    \[\--git-ids | filenames...\]
 
 # DESCRIPTION
 
@@ -159,6 +160,14 @@ being the most likely choice.
     9 is the highest and 0 is no compression).  The default
     is 1 (fast, loose compression)
 
+\--blobbits=*n*
+:   set the number of bits for hashsplitting, must be in [13, 21].
+    The default is 13 or, if writing to a repo, the value
+    configured in the repository config file. It can be changed
+    on the command line but will log a warning if this conflicts
+    the repository setting. See also `bup-settings`(7).
+    Consider the command-line option mostly for testing, not for
+    actually writing to a repository.
 
 # EXAMPLES
 
@@ -172,7 +181,8 @@ being the most likely choice.
 
 # SEE ALSO
 
-`bup-join`(1), `bup-index`(1), `bup-save`(1), `bup-on`(1), `ssh_config`(5)
+`bup-join`(1), `bup-index`(1), `bup-save`(1), `bup-on`(1), `ssh_config`(5),
+`bup-settings`(7)
 
 # BUP
 

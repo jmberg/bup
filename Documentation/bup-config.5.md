@@ -39,6 +39,35 @@ bup.split.trees
     splitting will have to be re-read and its related hashes
     recalculated.
 
+bup.split.files
+:   This setting determines the number of fixed bits in the hash-split
+    algorithm that lead to a chunk boundary, and thus the average size of
+    objects. This represents a trade-off between the efficiency of the
+    deduplication (fewer bits means better deduplication) and the amount
+    of metadata to keep on disk and RAM usage during repo operations
+    (more bits means fewer objects, means less metadata space and RAM use).
+    The expected average block size is expected to be 2^bits (1 << bits),
+    a sufficiently small change in a file would lead to that much new data
+    to be saved (plus tree metadata). The maximum blob size is 4x that.
+:   The default of this setting is 13 for backward compatibility, but it
+    is recommended to change this to a higher value (e.g. 16) on all but
+    very small repos.
+
+    *NOTE:*
+    Changing this value in an existing repository is *strongly
+    discouraged*. It would cause a subsequent store of anything but files
+    that were not split to store all data (and to some extent metadata) in
+    the repository again, rather than deduplicating. Consider the disk
+    usage of this to be mostly equivalent to starting a new repository.
+
+    *NOTE:*
+    Similarly to bup.split.trees above, using the same index for
+    repositories with different bup.split.files settings will result in the
+    index optimizations not working correctly. This will lead to bup save
+    having to re-read files that are known to be unmodified. Just like for
+    bup.split.trees this is a performance, not correctness, issue, however,
+    it's something to avoid.
+
 pack.packSizeLimit
 :   Respected when writing pack files (e.g. via `bup save ...`).
     Currently read from the repository to which the pack files are
