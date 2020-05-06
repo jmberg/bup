@@ -66,21 +66,23 @@ def test_rolling_sums():
 @wvtest
 def test_fanout_behaviour():
     with no_lingering_errors():
-        old_fanout = hashsplit.fanout
-
         global hashbits
+        global fanout
 
         levels = lambda data: [(len(b), l) for b, l in
-            hashsplit.hashsplit_iter([BytesIO(data)], True, None)]
+            hashsplit.hashsplit_iter([BytesIO(data)], True, None,
+                                     fanout=fanout)]
         def hslevels(data):
             global hashbits
+            global fanout
             return [(len(b), l) for b, l in
                 HashSplitter([BytesIO(data)], bits=hashbits,
-                             fanbits=int(math.log(hashsplit.fanout, 2)))]
+                             fanbits=int(math.log(fanout, 2)))]
         # This is a tuple of max blob size (4 << 13 bytes) and expected level (0)
         # Return tuple with split content and expected level (from table)
         def sb(pfx, n):
-            needed = hashbits + int(math.log(hashsplit.fanout, 2)) * n
+            global fanout
+            needed = hashbits + int(math.log(fanout, 2)) * n
             # internal algorithm ignores one bit after the split bits,
             # adjust for that (if n > 0):
             if n:
@@ -98,18 +100,16 @@ def test_fanout_behaviour():
 
         for hashbits in (13, 14, 15):
             max_blob = (b'\x00' * (4 << hashbits), 0)
-            for hashsplit.fanout in (2, 4):
+            for fanout in (2, 4):
                 # never split - just max blobs
                 check([max_blob] * 4)
                 check([sb(0, 0)])
                 check([max_blob, sb(1, 3), max_blob])
                 check([sb(13, 1)])
                 check([sb(13, 1), end(200)])
-            hashsplit.fanout = 2
+            fanout = 2
             check([sb(0, 1), sb(30, 2), sb(20, 0), sb(10, 5)])
             check([sb(0, 1), sb(30, 2), sb(20, 0), sb(10, 5), end(10)])
-
-        hashsplit.fanout = old_fanout
 
 @wvtest
 def test_hashsplit_files():
