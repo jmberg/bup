@@ -111,6 +111,7 @@ refname = name and b'refs/heads/%s' % name or None
 
 repo = repo.from_opts(opt)
 use_treesplit = repo.config(b'bup.treesplit', opttype='bool')
+blobbits = repo.config(b'bup.blobbits', opttype='int')
 
 oldref = refname and repo.read_ref(refname) or None
 
@@ -381,7 +382,8 @@ for (transname,ent) in r.filter(extra, wantrecurse=wantrecurse_during):
                 with hashsplit.open_noatime(ent.name) as f:
                     (mode, id) = hashsplit.split_to_blob_or_tree(
                                             write_data, repo.write_tree, [f],
-                                            keep_boundaries=False)
+                                            keep_boundaries=False,
+                                            blobbits=blobbits)
             except (IOError, OSError) as e:
                 add_error('%s: %s' % (ent.name, e))
                 lastskip_name = ent.name
