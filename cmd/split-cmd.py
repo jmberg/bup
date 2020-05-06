@@ -26,7 +26,7 @@ bup split --copy OPTIONS [--git-ids | filenames...]
 bup split --noop [-b|-t] OPTIONS [--git-ids | filenames...]
 --
  Modes:
-b,blobs    output a series of blob ids.  Implies --fanout=0.
+b,blobs    output a series of blob ids.  Ignores --fanout.
 t,tree     output a tree id
 c,commit   output a commit id
 n,name=    save the result under the given name
@@ -70,10 +70,12 @@ if opt.verbose >= 2:
     git.verbose = opt.verbose - 1
     opt.bench = 1
 
+fanout = None
 if opt.fanout:
-    hashsplit.fanout = parse_num(opt.fanout)
-if opt.blobs:
-    hashsplit.fanout = 0
+    # This used to be in hashsplit, but that's just confusing;
+    # hashsplit now defaults to the real default (16) if 0 (or
+    # None) is passed, but keep the command-line compatible...
+    fanout = parse_num(opt.fanout) or 128
 if opt.bwlimit:
     client.bwlimit = parse_num(opt.bwlimit)
 if opt.date:
@@ -164,19 +166,20 @@ elif opt.tree or opt.commit or opt.name:
         mode, sha = \
             hashsplit.split_to_blob_or_tree(write_data, write_tree, files,
                                             keep_boundaries=opt.keep_boundaries,
-                                            progress=prog)
+                                            progress=prog, fanout=fanout)
         splitfile_name = git.mangle_name(b'data', hashsplit.GIT_MODE_FILE, mode)
         shalist = [(mode, splitfile_name, sha)]
     else:
         shalist = hashsplit.split_to_shalist(
                       write_data, write_tree, files,
-                      keep_boundaries=opt.keep_boundaries, progress=prog)
+                      keep_boundaries=opt.keep_boundaries,
+                      progress=prog, fanout=fanout)
     tree = write_tree(shalist)
 else:
     last = 0
     it = hashsplit.hashsplit_iter(files,
                                   keep_boundaries=opt.keep_boundaries,
-                                  progress=prog)
+                                  progress=prog, fanout=fanout)
     for (blob, level) in it:
         hashsplit.total_split += len(blob)
         if opt.copy:
