@@ -117,6 +117,8 @@ def split(opt, files, parent, out, split_cfg, *,
 
     # Hack around lack of nonlocal vars in python 2
     total_bytes = [0]
+    fanout = 0 if opt.blobs else (opt.fanout or hashsplit.DEFAULT_FANOUT)
+    split_cfg['fanbits'] = hashsplit.fanbits(fanout)
     def prog(filenum, nbytes):
         total_bytes[0] += nbytes
         if filenum > 0:
@@ -138,12 +140,14 @@ def split(opt, files, parent, out, split_cfg, *,
         if opt.name: # insert dummy_name which may be used as a restore target
             mode, sha = \
                 split_to_blob_or_tree(new_blob, new_tree,
-                                      hashsplit.from_config(files, split_cfg))
+                                      hashsplit.from_config(files, split_cfg),
+                                      fanout)
             splitfile_name = git.mangle_name(b'data', hashsplit.GIT_MODE_FILE, mode)
             shalist = [(mode, splitfile_name, sha)]
         else:
             shalist = split_to_shalist(new_blob, new_tree,
-                                       hashsplit.from_config(files, split_cfg))
+                                       hashsplit.from_config(files, split_cfg),
+                                       fanout)
         tree = new_tree(shalist)
         if opt.verbose: log('\n')
         if opt.tree: out.write(hexlify(tree) + b'\n')
@@ -173,10 +177,6 @@ def main(argv):
     opt, opt_parser = opts_from_cmdline(argv)
     if opt.verbose >= 2:
         git.verbose = opt.verbose - 1
-    if opt.fanout:
-        hashsplit.fanout = opt.fanout
-    if opt.blobs:
-        hashsplit.fanout = 0
     if opt.bwlimit:
         client.bwlimit = opt.bwlimit
 
