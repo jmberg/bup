@@ -9,25 +9,26 @@ BUP_BLOBBITS = 13
 BUP_TREE_BLOBBITS = 13
 MAX_PER_TREE = 256
 progress_callback = None
-fanout = 16
+DEFAULT_FANOUT = 16
 
 GIT_MODE_FILE = 0o100644
 GIT_MODE_TREE = 0o40000
 GIT_MODE_SYMLINK = 0o120000
 
 
-def hashsplit_iter(files, keep_boundaries, progress):
+def hashsplit_iter(files, keep_boundaries, progress, fanout=None):
+    fanbits = int(math.log(fanout or DEFAULT_FANOUT, 2))
     # yield from ...
     for buf, level in _helpers.HashSplitter(files, bits=BUP_BLOBBITS, progress=progress,
                                             keep_boundaries=keep_boundaries,
-                                            fanbits=int(math.log(fanout or 128, 2))):
+                                            fanbits=fanbits):
         yield buf, level
 
 
 total_split = 0
-def split_to_blobs(makeblob, files, keep_boundaries, progress):
+def split_to_blobs(makeblob, files, keep_boundaries, progress, fanout=None):
     global total_split
-    for (blob, level) in hashsplit_iter(files, keep_boundaries, progress):
+    for (blob, level) in hashsplit_iter(files, keep_boundaries, progress, fanout):
         sha = makeblob(blob)
         total_split += len(blob)
         if progress_callback:
@@ -64,8 +65,9 @@ def _squish(maketree, stacks, n):
 
 
 def split_to_shalist(makeblob, maketree, files,
-                     keep_boundaries, progress=None):
-    sl = split_to_blobs(makeblob, files, keep_boundaries, progress)
+                     keep_boundaries, progress=None,
+                     fanout=None):
+    sl = split_to_blobs(makeblob, files, keep_boundaries, progress, fanout)
     assert(fanout != 0)
     if not fanout:
         shal = []
@@ -84,9 +86,11 @@ def split_to_shalist(makeblob, maketree, files,
 
 
 def split_to_blob_or_tree(makeblob, maketree, files,
-                          keep_boundaries, progress=None):
+                          keep_boundaries, progress=None,
+                          fanout=None):
     shalist = list(split_to_shalist(makeblob, maketree,
-                                    files, keep_boundaries, progress))
+                                    files, keep_boundaries,
+                                    progress, fanout))
     if len(shalist) == 1:
         return (shalist[0][0], shalist[0][2])
     elif len(shalist) == 0:
