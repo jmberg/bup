@@ -1,13 +1,13 @@
 
 from io import BytesIO
 from binascii import unhexlify
-import math, os
+import os
 
 from wvpytest import *
 
 from bup import hashsplit, _helpers
 from bup._helpers import HashSplitter, RecordHashSplitter
-from bup.hashsplit import BUP_BLOBBITS, fanout
+from bup.hashsplit import BUP_BLOBBITS
 
 # These test objects generate a number of least significant bits set
 # to one according to their key.  Note that these were generated with
@@ -66,10 +66,11 @@ def test_rolling_sums():
     WVPASS(_helpers.selftest())
 
 def test_fanout_behaviour():
+    fanout = -1
     for hashbits in 13, 14, 15:
         def sb(pfx, level):
             """Return tuple of split content and expected level (from table)."""
-            needed = hashbits + hashsplit.fanbits() * level
+            needed = hashbits + hashsplit.fanbits(fanout) * level
             # internal algorithm ignores one bit after the split bits,
             # adjust for that (if n > 0):
             if level:
@@ -81,25 +82,20 @@ def test_fanout_behaviour():
         def check(chunks_and_levels):
             data = b''.join([x[0] for x in chunks_and_levels])
             split = list(HashSplitter([BytesIO(data)], bits=hashbits,
-                                      fanbits=hashsplit.fanbits()))
+                                      fanbits=hashsplit.fanbits(fanout)))
             WVPASSEQ(chunks_and_levels, split)
 
-        old_fanout = hashsplit.fanout
-        try:
-            # cf. max_blob in _hashsplit.c
-            max_blob = b'\x00' * (1 << hashbits + 2), 0
-            for hashsplit.fanout in 2, 4:
-                # never split - just max blobs
-                check([max_blob] * 4)
-                check([sb(0, 0)])
-                check([max_blob, sb(1, 3), max_blob])
-                check([sb(13, 1)])
-                check([sb(13, 1), end(200)])
-            hashsplit.fanout = 2
-            check([sb(0, 1), sb(30, 2), sb(20, 0), sb(10, 5)])
-            check([sb(0, 1), sb(30, 2), sb(20, 0), sb(10, 5), end(10)])
-        finally:
-            hashsplit.fanout = old_fanout
+        # cf. max_blob in _hashsplit.c
+        max_blob = b'\x00' * (1 << hashbits + 2), 0
+        for fanout in 2, 4:
+            # never split - just max blobs
+            check([max_blob] * 4)
+            check([sb(0, 0)])
+            check([max_blob, sb(1, 3), max_blob])
+            check([sb(13, 1)])
+            check([sb(13, 1), end(200)])
+        check([sb(0, 1), sb(30, 2), sb(20, 0), sb(10, 5)])
+        check([sb(0, 1), sb(30, 2), sb(20, 0), sb(10, 5), end(10)])
 
 def test_hashsplit_files(tmpdir):
     # See HashSplitter_init for source of sizes
@@ -123,7 +119,7 @@ def test_hashsplit_files(tmpdir):
     def split_bytes(n):
         return BytesIO(split_test_objs[n])
     def ex(n):
-        fanout_bits = math.log(fanout, 2)
+        fanout_bits = hashsplit.fanbits(None)
         # Add 1 because bup has always ignored one bit between the
         # blob bits and the fanout bits.
         return [(len(split_test_objs[n]),
@@ -176,7 +172,7 @@ def test_hashsplit_boundaries():
         # Subtract 1 because bup has always ignored one bit between
         # the blob bits and the fanout bits.
         if p > BUP_BLOBBITS: p -= 1
-        fanout_bits = math.log(fanout, 2)
+        fanout_bits = hashsplit.fanbits(None)
         return (len(split_test_objs[n]), (p - BUP_BLOBBITS) // fanout_bits)
     exp = [ex(13), ex(14), ex(15)]
     hs = HashSplitter([split_bytes(13), split_bytes(14), split_bytes(15)],
