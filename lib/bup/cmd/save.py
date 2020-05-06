@@ -107,7 +107,7 @@ def opts_from_cmdline(argv):
 
     return opt
 
-def save_tree(opt, reader, hlink_db, msr, repo, split_trees):
+def save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits):
     # Metadata is stored in a file named .bupm in each directory.  The
     # first metadata entry will be the metadata for the current directory.
     # The remaining entries will be for each of the other directory
@@ -367,7 +367,8 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_trees):
                     with hashsplit.open_noatime(ent.name) as f:
                         (mode, id) = hashsplit.split_to_blob_or_tree(
                                                 write_data, repo.write_tree, [f],
-                                                keep_boundaries=False)
+                                                keep_boundaries=False,
+                                                blobbits=blobbits)
                 except (IOError, OSError) as e:
                     add_error('%s: %s' % (ent.name, e))
                     lastskip_name = ent.name
@@ -430,6 +431,7 @@ def main(argv):
 
     with from_opts(opt) as repo:
         split_trees = repo.config_get(b'bup.split-trees', opttype='bool')
+        blobbits = repo.config_get(b'bup.blobbits', opttype='int')
         sys.stdout.flush()
         out = byte_stream(sys.stdout)
 
@@ -451,7 +453,7 @@ def main(argv):
         with msr, \
              hlinkdb.HLinkDB(indexfile + b'.hlink') as hlink_db, \
              index.Reader(indexfile) as reader:
-            tree = save_tree(opt, reader, hlink_db, msr, repo, split_trees)
+            tree = save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits)
 
         if not tree:
             log('ERROR: nothing saved (%d errors encountered)\n' % len(saved_errors))
