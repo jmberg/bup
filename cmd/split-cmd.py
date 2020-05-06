@@ -45,6 +45,7 @@ max-pack-objects=  maximum number of objects in a single pack
 fanout=    average number of blobs in a single tree
 bwlimit=   maximum bytes/sec to transmit to server
 #,compress=  set compression level to # (0-9, 9 is highest)
+blobbits=  number of bits for blob splitting (see man page)
 """
 handle_ctrl_c()
 
@@ -76,6 +77,9 @@ if opt.fanout:
     # hashsplit now defaults to the real default (16) if 0 (or
     # None) is passed, but keep the command-line compatible...
     fanout = parse_num(opt.fanout) or 128
+blobbits = None
+if opt.blobbits:
+    blobbits = parse_num(opt.blobbits)
 if opt.bwlimit:
     client.bwlimit = parse_num(opt.bwlimit)
 if opt.date:
@@ -105,6 +109,11 @@ if opt.noop or opt.copy:
 else:
     repo = repo.from_opts(opt)
     oldref = refname and repo.read_ref(refname) or None
+    repobits = repo.config(b'bup.blobbits', opttype='int') or hashsplit.BUP_BLOBBITS
+    if not blobbits:
+        blobbits = repobits
+    else:
+        print("overriding repo blobbits %d from cmdline with %d" % (repobits, blobbits))
 
 input = byte_stream(sys.stdin)
 
@@ -157,7 +166,7 @@ out = byte_stream(sys.stdout)
 if opt.blobs:
     shalist = hashsplit.split_to_blobs(write_data, files,
                                        keep_boundaries=opt.keep_boundaries,
-                                       progress=prog)
+                                       progress=prog, blobbits=blobbits)
     for (sha, size, level) in shalist:
         out.write(hexlify(sha) + b'\n')
         reprogress()
@@ -166,20 +175,23 @@ elif opt.tree or opt.commit or opt.name:
         mode, sha = \
             hashsplit.split_to_blob_or_tree(write_data, write_tree, files,
                                             keep_boundaries=opt.keep_boundaries,
-                                            progress=prog, fanout=fanout)
+                                            progress=prog, fanout=fanout,
+                                            blobbits=blobbits)
         splitfile_name = git.mangle_name(b'data', hashsplit.GIT_MODE_FILE, mode)
         shalist = [(mode, splitfile_name, sha)]
     else:
         shalist = hashsplit.split_to_shalist(
                       write_data, write_tree, files,
                       keep_boundaries=opt.keep_boundaries,
-                      progress=prog, fanout=fanout)
+                      progress=prog, fanout=fanout,
+                      blobbits=blobbits)
     tree = write_tree(shalist)
 else:
     last = 0
     it = hashsplit.hashsplit_iter(files,
                                   keep_boundaries=opt.keep_boundaries,
-                                  progress=prog, fanout=fanout)
+                                  progress=prog, fanout=fanout,
+                                  blobbits=blobbits)
     for (blob, level) in it:
         hashsplit.total_split += len(blob)
         if opt.copy:
