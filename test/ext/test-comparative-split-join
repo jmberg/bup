@@ -93,6 +93,10 @@ test-split-join()
     WVPASS this-bup join "$(<this-split-tree)" > this-join.data
     WVPASS cmp other-join.data this-join.data
 
+    WVPASS other-bup split -b data > other-split-blobs
+    WVPASS this-bup split -b data > this-split-blobs
+    WVPASS cmp other-split-blobs this-split-blobs
+
     if ! test "$test_packnames"; then
         # Make sure there's just one of each file in each repo and
         # compare those via cmp, then delete them.
