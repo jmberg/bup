@@ -21,7 +21,7 @@ bup split --copy OPTIONS [--git-ids | filenames...]
 bup split --noop [-b|-t] OPTIONS [--git-ids | filenames...]
 --
  Modes:
-b,blobs    output a series of blob ids.  Implies --fanout=0.
+b,blobs    output a series of blob ids.  Ignores --fanout.
 t,tree     output a tree id
 c,commit   output a commit id
 n,name=    save the result under the given name
@@ -82,8 +82,14 @@ def opts_from_cmdline(argv):
     if opt.verbose >= 2:
         git.verbose = opt.verbose - 1
         opt.bench = 1
+    # This used to be in hashsplit, but that's just confusing;
+    # hashsplit now defaults to the real default (16) if 0 (or
+    # None) is passed, but this keeps the command-line for the
+    # split command compatible with what it did before.
     if opt.fanout:
-        opt.fanout = parse_num(opt.fanout)
+        opt.fanout = parse_num(opt.fanout) or 128
+    else:
+        opt.fanout = 16
     if opt.blobbits:
         opt.blobbits = parse_num(opt.blobbits)
     if opt.bwlimit:
@@ -130,21 +136,23 @@ def split(opt, files, parent, out, repo):
             mode, sha = \
                 hashsplit.split_to_blob_or_tree(new_blob, new_tree, files,
                                                 keep_boundaries=opt.keep_boundaries,
-                                                progress=prog, blobbits=opt.blobbits)
+                                                progress=prog, blobbits=opt.blobbits,
+                                                fanout=opt.fanout)
             splitfile_name = git.mangle_name(b'data', hashsplit.GIT_MODE_FILE, mode)
             shalist = [(mode, splitfile_name, sha)]
         else:
             shalist = \
                 hashsplit.split_to_shalist(new_blob, new_tree, files,
                                            keep_boundaries=opt.keep_boundaries,
-                                           progress=prog, blobbits=opt.blobbits)
+                                           progress=prog, blobbits=opt.blobbits,
+                                           fanout=opt.fanout)
         tree = new_tree(shalist)
     else:
         last = 0
         for blob, level in HashSplitter(files, progress=prog,
                                         keep_boundaries=opt.keep_boundaries,
                                         bits=opt.blobbits or hashsplit.BUP_BLOBBITS,
-                                        fanbits=hashsplit.fanbits()):
+                                        fanbits=hashsplit.fanbits(opt.fanout)):
             hashsplit.total_split += len(blob)
             if opt.copy:
                 sys.stdout.write(str(blob))
@@ -172,10 +180,6 @@ def main(argv):
     opt = opts_from_cmdline(argv)
     if opt.verbose >= 2:
         git.verbose = opt.verbose - 1
-    if opt.fanout:
-        hashsplit.fanout = opt.fanout
-    if opt.blobs:
-        hashsplit.fanout = 0
     if opt.bwlimit:
         client.bwlimit = opt.bwlimit
 
