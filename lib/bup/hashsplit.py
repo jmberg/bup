@@ -9,7 +9,7 @@ from bup.helpers import dict_subset
 BUP_BLOBBITS = 13
 BUP_TREE_BLOBBITS = 13
 MAX_PER_TREE = 256
-fanout = 16
+DEFAULT_FANOUT = 16
 
 GIT_MODE_FILE = 0o100644
 GIT_MODE_EXEC = 0o100755
@@ -18,7 +18,7 @@ GIT_MODE_SYMLINK = 0o120000
 
 HashSplitter = _helpers.HashSplitter
 
-def _fanbits():
+def _fanbits(fanout=DEFAULT_FANOUT):
     return int(math.log(fanout or 128, 2))
 
 fanbits = _fanbits
@@ -100,7 +100,7 @@ def _squish(maketree, stacks, n):
 
 def split_to_shalist(makeblob, maketree,
                      # pylint: disable-next=redefined-outer-name
-                     splitter):
+                     splitter, fanout=DEFAULT_FANOUT):
     sl = split_to_blobs(makeblob, splitter)
     assert(fanout != 0)
     if not fanout:
@@ -120,8 +120,8 @@ def split_to_shalist(makeblob, maketree,
 
 def split_to_blob_or_tree(makeblob, maketree,
                           # pylint: disable-next=redefined-outer-name
-                          splitter):
-    shalist = list(split_to_shalist(makeblob, maketree, splitter))
+                          splitter, fanout=DEFAULT_FANOUT):
+    shalist = list(split_to_shalist(makeblob, maketree, splitter, fanout))
     if len(shalist) == 1:
         return (shalist[0][0], shalist[0][2])
     if len(shalist) == 0:
