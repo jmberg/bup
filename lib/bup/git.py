@@ -531,7 +531,7 @@ _mpi_count = 0
 class PackIdxList:
     def __init__(self, dir, ignore_midx=False):
         global _mpi_count
-        assert(_mpi_count <= 1) # these things suck tons of VM; don't waste it
+        assert(_mpi_count == 0) # these things suck tons of VM; don't waste it
         _mpi_count += 1
         self.dir = dir
         self.also = set()
@@ -544,7 +544,7 @@ class PackIdxList:
     def __del__(self):
         global _mpi_count
         _mpi_count -= 1
-        assert(_mpi_count <= 1)
+        assert(_mpi_count == 0)
 
     def __iter__(self):
         return iter(idxmerge(self.packs))
