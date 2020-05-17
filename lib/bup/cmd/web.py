@@ -35,17 +35,21 @@ def http_date_from_utc_ns(utc_ns):
 class QueryArgs:
     __slots__ = (
         'args',
+        'opts',
         # arg names - also see below for types/defaults
         'hidden',
         'meta',
         'hashes',
+        'hsizes',
     )
 
-    def __init__(self, **kw):
+    def __init__(self, opts, **kw):
+        self.opts = opts
         self.args = (
             ('hidden', int, 0),
             ('meta', int, 0),
             ('hashes', int, 0),
+            ('hsizes', int, 1 if (opts and opts.human_readable) else 0),
         )
         for name, tp, default in self.args:
             if name in kw:
@@ -54,9 +58,9 @@ class QueryArgs:
                 setattr(self, name, default)
 
     @classmethod
-    def from_args(cls, args):
-        new = QueryArgs()
-        for name, tp, default in cls.args:
+    def from_args(cls, opts, args):
+        new = QueryArgs(opts)
+        for name, tp, default in new.args:
             try:
                 setattr(new, name, tp(args.get(name, [default])[-1]))
             except ValueError:
@@ -64,7 +68,7 @@ class QueryArgs:
         return new
 
     def change(self, **kw):
-        new = QueryArgs()
+        new = QueryArgs(self.opts)
         for name, tp, default in self.args:
             if name in kw:
                 setattr(new, name, tp(kw[name]))
@@ -134,7 +138,7 @@ def _dir_contents(repo, resolution, args):
 
         if not omitsize:
             size = vfs.item_size(repo, item)
-            if opt.human_readable:
+            if args.hsizes:
                 display_size = format_filesize(size)
             else:
                 display_size = size
@@ -213,7 +217,8 @@ class BupRequestHandler(tornado.web.RequestHandler):
         Return value is either a file object, or None (indicating an
         error).  In either case, the headers are sent.
         """
-        args = QueryArgs.from_args(self.request.arguments)
+        global opt
+        args = QueryArgs.from_args(opt, self.request.arguments)
 
         if not path.endswith(b'/') and len(path) > 0:
             print('Redirecting from %s to %s' % (path_msg(path), path_msg(path + b'/')))
