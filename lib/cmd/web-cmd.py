@@ -84,7 +84,7 @@ def _dir_contents(repo, resolution, show_hidden=False):
 
     url_query = b'?hidden=1' if show_hidden else b''
 
-    def display_info(name, item, resolved_item, display_name=None):
+    def display_info(name, item, resolved_item, display_name=None, omitsize=False):
         # link should be based on fully resolved type to avoid extra
         # HTTP redirect.
         link = tornado.escape.url_escape(name, plus=False)
@@ -92,18 +92,23 @@ def _dir_contents(repo, resolution, show_hidden=False):
             link += '/'
         link = link.encode('ascii')
 
-        size = vfs.item_size(repo, item)
-        if opt.human_readable:
-            display_size = format_filesize(size)
+        if not omitsize:
+            size = vfs.item_size(repo, item)
+            if opt.human_readable:
+                display_size = format_filesize(size)
+            else:
+                display_size = size
         else:
-            display_size = size
+            display_size = None
 
         if not display_name:
             mode = vfs.item_mode(item)
             if stat.S_ISDIR(mode):
                 display_name = name + b'/'
+                display_size = None
             elif stat.S_ISLNK(mode):
                 display_name = name + b'@'
+                display_size = None
             else:
                 display_name = name
 
@@ -115,9 +120,9 @@ def _dir_contents(repo, resolution, show_hidden=False):
             if (name not in (b'.', b'..')) and name.startswith(b'.'):
                 continue
         if name == b'.':
-            yield display_info(name, item, item, b'.')
+            yield display_info(name, item, item, b'.', omitsize=True)
             parent_item = resolution[-2][1] if len(resolution) > 1 else dir_item
-            yield display_info(b'..', parent_item, parent_item, b'..')
+            yield display_info(b'..', parent_item, parent_item, b'..', omitsize=True)
             continue
         res_item = vfs.ensure_item_has_metadata(repo, item, include_size=True)
         yield display_info(name, item, res_item)
