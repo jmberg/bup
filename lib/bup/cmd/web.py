@@ -35,6 +35,7 @@ def http_date_from_utc_ns(utc_ns):
 class QueryArgs:
     args = (
         ('hidden', int, 0),
+        ('meta', int, 0),
     )
     __slots__ = (a[0] for a in args)
 
@@ -144,7 +145,10 @@ def _dir_contents(repo, resolution, args):
             else:
                 display_name = name
 
-        return display_name, link + args, display_size
+        meta = resolved_item.meta
+        if not isinstance(meta, Metadata):
+            meta = None
+        return display_name, link + args, display_size, meta
 
     dir_item = resolution[-1][1]    
     for name, item in vfs.contents(repo, dir_item):
