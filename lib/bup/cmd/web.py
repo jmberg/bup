@@ -31,7 +31,65 @@ def http_date_from_utc_ns(utc_ns):
     return time.strftime('%a, %d %b %Y %H:%M:%S', time.gmtime(utc_ns / 10**9))
 
 
-def _compute_breadcrumbs(path, show_hidden=False):
+class QueryArgs:
+    __slots__ = (
+        'args',
+        # arg names - also see below for types/defaults
+        'hidden',
+    )
+
+    def __init__(self, **kw):
+        self.args = (
+            ('hidden', int, 0),
+        )
+        for name, tp, default in self.args:
+            if name in kw:
+                setattr(self, name, tp(kw[name]))
+            else:
+                setattr(self, name, default)
+
+    @classmethod
+    def from_args(cls, args):
+        new = QueryArgs()
+        for name, tp, default in cls.args:
+            try:
+                setattr(new, name, tp(args.get(name, [default])[-1]))
+            except ValueError:
+                pass
+        return new
+
+    def change(self, **kw):
+        new = QueryArgs()
+        for name, tp, default in self.args:
+            if name in kw:
+                setattr(new, name, tp(kw[name]))
+            else:
+                setattr(new, name, getattr(self, name))
+        return new
+
+    def __radd__(self, v):
+        return v + bytes(self)
+
+    def __bytes__(self):
+        vals = []
+        fmts = {
+            int: b'%d',
+        }
+        for name, tp, default in self.args:
+            val = getattr(self, name)
+            if val != default:
+                fmt = fmts[tp]
+                n = name.encode('ascii')
+                vals.append(n + b'=' + fmt % val)
+        if not vals:
+            return b''
+        return b'?' + b'&'.join(vals)
+
+    def __str__(self):
+        return self.__bytes__().decode('ascii')
+
+
+def _compute_breadcrumbs(path, args):
     """Returns a list of breadcrumb objects for a path."""
     breadcrumbs = []
     breadcrumbs.append((b'[root]', b'/'))
@@ -40,9 +98,7 @@ def _compute_breadcrumbs(path, show_hidden=False):
     for part in path_parts:
         full_path += part + b"/"
         url_append = b""
-        if show_hidden:
-            url_append = b'?hidden=1'
-        breadcrumbs.append((part, full_path+url_append))
+        breadcrumbs.append((part, full_path + args))
     return breadcrumbs
 
 
@@ -59,10 +115,8 @@ def _contains_hidden_files(repo, dir_item):
     return False
 
 
-def _dir_contents(repo, resolution, show_hidden=False):
+def _dir_contents(repo, resolution, args):
     """Yield the display information for the contents of dir_item."""
-
-    url_query = b'?hidden=1' if show_hidden else b''
 
     def display_info(name, item, resolved_item, display_name=None, omitsize=False):
         global opt
@@ -93,11 +147,11 @@ def _dir_contents(repo, resolution, show_hidden=False):
             else:
                 display_name = name
 
-        return display_name, link + url_query, display_size
+        return display_name, link + args, display_size
 
     dir_item = resolution[-1][1]
     for name, item in vfs.contents(repo, dir_item):
-        if not show_hidden:
+        if not args.hidden:
             if (name not in (b'.', b'..')) and name.startswith(b'.'):
                 continue
         if name == b'.':
@@ -151,20 +205,15 @@ class BupRequestHandler(tornado.web.RequestHandler):
             print('Redirecting from %s to %s' % (path_msg(path), path_msg(path + b'/')))
             return self.redirect(path + b'/', permanent=True)
 
-        hidden_arg = self.request.arguments.get('hidden', [0])[-1]
-        try:
-            show_hidden = int(hidden_arg)
-        except ValueError as e:
-            show_hidden = False
+        args = QueryArgs.from_args(self.request.arguments)
 
         self.render(
             'list-directory.html',
             path=path,
-            breadcrumbs=_compute_breadcrumbs(path, show_hidden),
+            breadcrumbs=_compute_breadcrumbs(path, args),
             files_hidden=_contains_hidden_files(self.repo, resolution[-1][1]),
-            hidden_shown=show_hidden,
-            dir_contents=_dir_contents(self.repo, resolution,
-                                       show_hidden=show_hidden))
+            args=args,
+            dir_contents=_dir_contents(self.repo, resolution, args))
         return None
 
     @gen.coroutine
