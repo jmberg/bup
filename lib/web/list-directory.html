@@ -31,6 +31,11 @@
                 {% else %}
                     <a href=".{{ args.change(hashes=1) }}">Show hashes</a>
                 {% end %}
+                {% if args.hsizes %}
+                    <a href=".{{ args.change(hsizes=0) }}">Show sizes as bytes</a>
+                {% else %}
+                    <a href=".{{ args.change(hsizes=1) }}">Show readable sizes</a>
+                {% end %}
             </div>
             <table>
                 <tr>
