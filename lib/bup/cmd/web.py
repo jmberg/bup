@@ -8,6 +8,7 @@ from binascii import hexlify
 from bup import options, git, vfs
 from bup.helpers import (chunkyreader, debug1, format_filesize,
                          log, saved_errors)
+from bup.metadata import Metadata
 from bup.path import resource_path
 from bup.repo import LocalRepo
 from bup.io import path_msg
@@ -36,11 +37,13 @@ class QueryArgs:
         'args',
         # arg names - also see below for types/defaults
         'hidden',
+        'meta',
     )
 
     def __init__(self, **kw):
         self.args = (
             ('hidden', int, 0),
+            ('meta', int, 0),
         )
         for name, tp, default in self.args:
             if name in kw:
@@ -147,7 +150,10 @@ def _dir_contents(repo, resolution, args):
             else:
                 display_name = name
 
-        return display_name, link + args, display_size
+        meta = resolved_item.meta
+        if not isinstance(meta, Metadata):
+            meta = None
+        return display_name, link + args, display_size, meta
 
     dir_item = resolution[-1][1]
     for name, item in vfs.contents(repo, dir_item):
