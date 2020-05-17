@@ -16,10 +16,10 @@
             </div>
             {% if files_hidden %}
             <div id="message">
-                {% if hidden_shown %}
-                    <a href=".">Hide hidden files</a>
+                {% if args.hidden %}
+                    <a href=".{{ args.change(hidden=0) }}">Hide hidden files</a>
                 {% else %}
-                    <a href="?hidden=1">Show hidden files</a>
+                    <a href=".{{ args.change(hidden=1) }}">Show hidden files</a>
                 {% end %}
             </div>
             {% end %}
