@@ -97,7 +97,7 @@ class QueryArgs:
 def _compute_breadcrumbs(path, args):
     """Returns a list of breadcrumb objects for a path."""
     breadcrumbs = []
-    breadcrumbs.append((b'[root]', b'/'))
+    breadcrumbs.append((b'[root]', b'/' + args))
     path_parts = path.split(b'/')[1:-1]
     full_path = b'/'
     for part in path_parts:
