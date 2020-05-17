@@ -38,12 +38,14 @@ class QueryArgs:
         # arg names - also see below for types/defaults
         'hidden',
         'meta',
+        'hashes',
     )
 
     def __init__(self, **kw):
         self.args = (
             ('hidden', int, 0),
             ('meta', int, 0),
+            ('hashes', int, 0),
         )
         for name, tp, default in self.args:
             if name in kw:
@@ -153,7 +155,11 @@ def _dir_contents(repo, resolution, args):
         meta = resolved_item.meta
         if not isinstance(meta, Metadata):
             meta = None
-        return display_name, link + args, display_size, meta
+        try:
+            oidx = hexlify(resolved_item.oid)
+        except AttributeError:
+            oidx = ''
+        return display_name, link + args, display_size, meta, oidx
 
     dir_item = resolution[-1][1]
     for name, item in vfs.contents(repo, dir_item):
