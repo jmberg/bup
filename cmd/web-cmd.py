@@ -33,11 +33,22 @@ except ImportError:
 # FIXME: right now the way hidden files are handled causes every
 # directory to be traversed twice.
 
-handle_ctrl_c()
 
+handle_ctrl_c()
 
 def http_date_from_utc_ns(utc_ns):
     return time.strftime('%a, %d %b %Y %H:%M:%S', time.gmtime(utc_ns / 10**9))
+
+optspec = """
+bup web [[hostname]:port]
+bup web unix://path
+--
+r,remote=         remote repository path
+human-readable    display human readable file sizes (i.e. 3.9K, 4.7M)
+browser           show repository in default browser (incompatible with unix://)
+"""
+o = options.Options(optspec)
+(opt, flags, extra) = o.parse(sys.argv[1:])
 
 
 class QueryArgs:
@@ -45,6 +56,7 @@ class QueryArgs:
         ('hidden', int, 0),
         ('meta', int, 0),
         ('hashes', int, 0),
+        ('hsizes', int, 1 if opt.human_readable else 0),
     )
     __slots__ = (a[0] for a in args)
 
@@ -135,7 +147,7 @@ def _dir_contents(repo, resolution, args):
 
         if not omitsize:
             size = vfs.item_size(repo, item)
-            if opt.human_readable:
+            if args.hsizes:
                 display_size = format_filesize(size)
             else:
                 display_size = size
@@ -301,17 +313,6 @@ signal.signal(signal.SIGTERM, handle_sigterm)
 
 UnixAddress = namedtuple('UnixAddress', ['path'])
 InetAddress = namedtuple('InetAddress', ['host', 'port'])
-
-optspec = """
-bup web [[hostname]:port]
-bup web unix://path
---
-r,remote=         remote repository path
-human-readable    display human readable file sizes (i.e. 3.9K, 4.7M)
-browser           show repository in default browser (incompatible with unix://)
-"""
-o = options.Options(optspec)
-(opt, flags, extra) = o.parse(sys.argv[1:])
 
 if len(extra) > 1:
     o.fatal("at most one argument expected")
