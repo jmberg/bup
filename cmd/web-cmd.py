@@ -109,8 +109,9 @@ def _dir_contents(repo, resolution, show_hidden=False):
             if (name not in (b'.', b'..')) and name.startswith(b'.'):
                 continue
         if name == b'.':
-            parent_item = resolution[-2][1] if len(resolution) > 1 else dir_item
-            yield display_info(b'..', parent_item, parent_item, b'..', omitsize=True)
+            if len(resolution) > 1:
+                parent_item = resolution[-2][1] if len(resolution) > 1 else dir_item
+                yield display_info(b'..', parent_item, parent_item, b'..', omitsize=True)
             continue
         res = vfs.try_resolve(repo, name, parent=resolution, want_meta=False)
         res_name, res_item = res[-1]
