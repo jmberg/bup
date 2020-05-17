@@ -27,9 +27,17 @@
                 {% else %}
                     <a href=".{{ args.change(meta=1) }}">Show metadata</a>
                 {% end %}
+                {% if args.hashes %}
+                    <a href=".{{ args.change(hashes=0) }}">Hide hashes</a>
+                {% else %}
+                    <a href=".{{ args.change(hashes=1) }}">Show hashes</a>
+                {% end %}
             </div>
             <table>
                 <tr>
+                    {% if args.hashes %}
+                        <th class="dir-hash">Hash</th>
+                    {% end %}
                     {% if args.meta %}
                         <th class="dir-meta-mode">Mode</th>
                         <th class="dir-meta-owner" colspan="2">Owner</th>
@@ -41,8 +49,11 @@
                     {% end %}
                     <th class="dir-name">Name</th>
                 </tr>
-                {% for (display, link, size, meta) in dir_contents %}
+                {% for (display, link, size, meta, oid) in dir_contents %}
                 <tr>
+                    {% if args.hashes %}
+                        <td class="dir-hash">{{ oid }}</td>
+                    {% end %}
                     {% if args.meta %}
                         <td class="dir-meta-mode">{% if meta is not None %}{{ meta.mode_str }}{% end %}</td>
                         <td class="dir-meta-owner">{% if meta is not None %}{{ meta.user }}{% end %}</td>
