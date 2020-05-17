@@ -54,6 +54,7 @@ class QueryArgs:
     args = (
         ('hidden', int, 0),
         ('meta', int, 0),
+        ('hashes', int, 0),
     )
     __slots__ = (a[0] for a in args)
 
@@ -165,7 +166,11 @@ def _dir_contents(repo, resolution, args):
         meta = resolved_item.meta
         if not isinstance(meta, Metadata):
             meta = None
-        return display_name, link + args, display_size, meta
+        try:
+            oidx = hexlify(resolved_item.oid)
+        except AttributeError:
+            oidx = ''
+        return display_name, link + args, display_size, meta, oidx
 
     dir_item = resolution[-1][1]    
     for name, item in vfs.contents(repo, dir_item):
