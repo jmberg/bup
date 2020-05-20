@@ -99,11 +99,7 @@ def opts_from_cmdline(args, onabort=None, pwd=b'/'):
             opt.show_hidden = 'almost'
     return opt
 
-def within_repo(repo, opt, out, pwd=b''):
-
-    if opt.commit_hash:
-        opt.hash = True
-
+def show_paths(repo, opt, paths, out, pwd):
     def item_line(item, name):
         return item_info(item, name,
                          show_hash=opt.hash,
@@ -115,9 +111,11 @@ def within_repo(repo, opt, out, pwd=b''):
 
     ret = 0
     want_meta = bool(opt.long_listing or opt.classification)
+
     pending = []
-    last_n = len(opt.paths) - 1
-    for n, printpath in enumerate(opt.paths):
+
+    last_n = len(paths) - 1
+    for n, printpath in enumerate(paths):
         path = posixpath.join(pwd, printpath)
         try:
             if last_n > 0:
@@ -181,6 +179,12 @@ def within_repo(repo, opt, out, pwd=b''):
             out.write(b'\n')
 
     return ret
+
+def within_repo(repo, opt, out, pwd=b''):
+    if opt.commit_hash:
+        opt.hash = True
+
+    return show_paths(repo, opt, opt.paths, out, pwd)
 
 def via_cmdline(args, out=None, onabort=None):
     """Write a listing of a file or directory in the bup repository to out.
