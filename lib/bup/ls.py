@@ -97,10 +97,8 @@ def opts_from_cmdline(args, onabort=None):
             opt.show_hidden = 'almost'
     return opt
 
-def within_repo(repo, opt, out):
-
-    if opt.commit_hash:
-        opt.hash = True
+def show_paths(repo, opt, paths, out, pending):
+    want_meta = bool(opt.long_listing or opt.classification)
 
     def item_line(item, name):
         return item_info(item, name,
@@ -111,10 +109,7 @@ def within_repo(repo, opt, out):
                          numeric_ids=opt.numeric_ids,
                          human_readable=opt.human_readable)
 
-    ret = 0
-    want_meta = bool(opt.long_listing or opt.classification)
-    pending = []
-    for path in opt.paths:
+    for path in paths:
         try:
             if opt.directory:
                 resolved = vfs.resolve(repo, path, follow=False)
@@ -164,8 +159,15 @@ def within_repo(repo, opt, out):
                     out.write(b'\n')
         except vfs.IOError as ex:
             log('bup: %s\n' % ex)
-            ret = 1
+            return 1
+    return 0
 
+def within_repo(repo, opt, out):
+    if opt.commit_hash:
+        opt.hash = True
+
+    pending = []
+    ret = show_paths(repo, opt, opt.paths, out, pending)
     if pending:
         out.write(columnate(pending, b''))
 
