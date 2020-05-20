@@ -116,6 +116,44 @@ WVPASSEQ "$(bup ls indexfile/latest/)" "a
 b"
 
 
+WVSTART "ls -R"
+D=lsrecursive.tmp
+WVPASS force-delete $D
+WVPASS mkdir -p $D/a/b $D/c
+WVPASS touch $D/top $D/.hidden $D/a/mid $D/a/b/deep $D/c/x
+WVPASS ln -s a $D/link-to-a
+export BUP_DIR="$D/.bup"
+WVPASS bup init
+WVPASS bup index -ux $D
+WVPASS bup save --strip -n lsrec $D
+WVPASSEQ "$(bup ls -R lsrec/latest/)" "a
+a/b
+a/b/deep
+a/mid
+c
+c/x
+link-to-a
+top"
+WVPASSEQ "$(bup ls -FR lsrec/latest/)" "a/
+a/b/
+a/b/deep
+a/mid
+c/
+c/x
+link-to-a@
+top"
+WVPASSEQ "$(bup ls -aR lsrec/latest/a)" ".
+..
+b
+b/deep
+mid"
+WVPASSEQ "$(bup ls -dR lsrec/latest/a)" "lsrec/latest/a"
+WVPASSEQ "$(bup ls -R -r -:"$PWD/$D/.bup" lsrec/latest/a)" "b
+b/deep
+mid"
+WVPASS force-delete $D
+
+
 WVSTART "import-rsnapshot"
 # NOTE: if this test is made optional, say if it eventually depends on
 # rsnapshot being installed, we might want to add other "interactive

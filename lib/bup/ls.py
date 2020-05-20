@@ -70,6 +70,7 @@ a,all    show hidden files
 A,almost-all    show hidden files except . and ..
 l        use a detailed, long listing format
 d,directory show directories, not contents; don't follow symlinks
+R,recursive recurse into subdirectories
 F,classify append type indicator: dir/ sym@ fifo| sock= exec*
 file-type append type indicator: dir/ sym@ fifo| sock=
 human-readable    print human readable file sizes (i.e. 3.9K, 4.7M)
@@ -87,6 +88,7 @@ class LsOpts:
     long_listing: Optional[int]
     numeric_ids: Optional[int]
     paths: List[bytes]
+    recursive: Optional[int]
     repo: Any
     show_hidden: str
 
@@ -123,15 +125,20 @@ def opts_from_cmdline(args, onabort=None, pwd=b'/'):
                   numeric_ids=opt.numeric_ids,
                   human_readable=opt.human_readable,
                   directory=opt.directory,
+                  recursive=opt.recursive,
                   repo=main_repo_location(remote, o.fatal))
 
-def within_repo(repo, opt, out, pwd=b''):
+def within_repo(repo, opt, out, pwd=b'', paths=None, prefix=b''):
 
     if opt.commit_hash:
         opt.hash = True
 
+    if paths is None:
+        paths = opt.paths
+    should_columnate = not opt.recursive and not opt.long_listing and istty1
+
     def item_line(item, name):
-        return item_info(item, name,
+        return item_info(item, prefix + name,
                          show_hash=opt.hash,
                          commit_hash=opt.commit_hash,
                          long_fmt=opt.long_listing,
@@ -142,8 +149,8 @@ def within_repo(repo, opt, out, pwd=b''):
     ret = 0
     want_meta = bool(opt.long_listing or opt.classification)
     pending = []
-    last_n = len(opt.paths) - 1
-    for n, printpath in enumerate(opt.paths):
+    last_n = len(paths) - 1
+    for n, printpath in enumerate(paths):
         path = posixpath.join(pwd, printpath)
         try:
             if last_n > 0:
@@ -173,6 +180,8 @@ def within_repo(repo, opt, out, pwd=b''):
                     if sub_name.startswith(b'.') and \
                        opt.show_hidden not in ('almost', 'all'):
                         continue
+                    if prefix and sub_name in (b'.', b'..'):
+                        continue
                     if opt.l:
                         sub_item = vfs.ensure_item_has_metadata(repo, sub_item,
                                                                 include_size=True,
@@ -182,18 +191,23 @@ def within_repo(repo, opt, out, pwd=b''):
                                                          include_size=True,
                                                          public=True)
                     line = item_line(sub_item, sub_name)
-                    if not opt.long_listing and istty1:
+                    if should_columnate:
                         pending.append(line)
                     else:
                         out.write(line)
                         out.write(b'\n')
+                    if opt.recursive and sub_name not in (b'.', b'..') \
+                            and S_ISDIR(vfs.item_mode(sub_item)):
+                        within_repo(repo, opt, out,
+                                    paths=[posixpath.join(path, sub_name)],
+                                    prefix=prefix + sub_name + b'/')
             else:
                 if opt.long_listing:
                     leaf_item = vfs.augment_item_meta(repo, leaf_item,
                                                       include_size=True,
                                                       public=True)
                 line = item_line(leaf_item, os.path.normpath(path))
-                if not opt.long_listing and istty1:
+                if should_columnate:
                     pending.append(line)
                 else:
                     out.write(line)

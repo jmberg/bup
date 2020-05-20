@@ -57,6 +57,11 @@ you can view its contents using `bup join` or `git show`.
 :   show information about directories themselves, rather than their
     contents, and don't follow symlinks.
 
+-R, \--recursive
+:   recurse into subdirectories, printing each entry with its path
+    relative to the listed directory.  Doesn't format the output
+    as columns.
+
 -l
 :   provide a detailed, long listing for each item.
 
