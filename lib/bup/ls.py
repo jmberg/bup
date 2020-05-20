@@ -65,6 +65,7 @@ a,all    show hidden files
 A,almost-all    show hidden files except . and ..
 l        use a detailed, long listing format
 d,directory show directories, not contents; don't follow symlinks
+R,recursive recurse into subdirectories
 F,classify append type indicator: dir/ sym@ fifo| sock= exec*
 file-type append type indicator: dir/ sym@ fifo| sock=
 human-readable    print human readable file sizes (i.e. 3.9K, 4.7M)
@@ -98,9 +99,9 @@ def opts_from_cmdline(args, onabort=None, pwd=b'/'):
             opt.show_hidden = 'almost'
     return opt
 
-def show_paths(repo, opt, paths, out, pwd):
+def show_paths(repo, opt, paths, out, pwd, should_columnate, prefix=b''):
     def item_line(item, name):
-        return item_info(item, name,
+        return item_info(item, prefix + name,
                          show_hash=opt.hash,
                          commit_hash=opt.commit_hash,
                          long_fmt=opt.long_listing,
@@ -144,6 +145,9 @@ def show_paths(repo, opt, paths, out, pwd):
                     if sub_name.startswith(b'.') and \
                        opt.show_hidden not in ('almost', 'all'):
                         continue
+                    # always skip . and .. in the subfolders - already printed it anyway
+                    if prefix and sub_name in (b'.', b'..'):
+                        continue
                     if opt.l:
                         sub_item = vfs.ensure_item_has_metadata(repo, sub_item,
                                                                 include_size=True)
@@ -151,17 +155,21 @@ def show_paths(repo, opt, paths, out, pwd):
                         sub_item = vfs.augment_item_meta(repo, sub_item,
                                                          include_size=True)
                     line = item_line(sub_item, sub_name)
-                    if not opt.long_listing and istty1:
+                    if should_columnate:
                         pending.append(line)
                     else:
                         out.write(line)
                         out.write(b'\n')
+                    # recurse into subdirectories (apart from . and .., of course)
+                    if opt.recursive and S_ISDIR(vfs.item_mode(sub_item)) and sub_name not in (b'.', b'..'):
+                        show_paths(repo, opt, [path + b'/' + sub_name], out, pwd,
+                                   should_columnate, prefix=prefix + sub_name + b'/')
             else:
                 if opt.long_listing:
                     leaf_item = vfs.augment_item_meta(repo, leaf_item,
                                                       include_size=True)
                 line = item_line(leaf_item, os.path.normpath(path))
-                if not opt.long_listing and istty1:
+                if should_columnate:
                     pending.append(line)
                 else:
                     out.write(line)
@@ -183,7 +191,8 @@ def within_repo(repo, opt, out, pwd=b''):
     if opt.commit_hash:
         opt.hash = True
 
-    return show_paths(repo, opt, opt.paths, out, pwd)
+    should_columnate = not opt.recursive and not opt.long_listing and istty1
+    return show_paths(repo, opt, opt.paths, out, pwd, should_columnate)
 
 def via_cmdline(args, out=None, onabort=None):
     """Write a listing of a file or directory in the bup repository to out.
