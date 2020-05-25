@@ -1,21 +1,15 @@
 #!/bin/sh
-"""": # -*-python-*- # -*-python-*-
-set -e
-top="$(pwd)"
-cmdpath="$0"
-# loop because macos doesn't have recursive readlink/realpath utils
-while test -L "$cmdpath"; do
-    link="$(readlink "$cmdpath")"
-    cd "$(dirname "$cmdpath")"
-    cmdpath="$link"
-done
-script_home="$(cd "$(dirname "$cmdpath")" && pwd -P)"
-cd "$top"
-exec "$script_home/bup-python" "$0" ${1+"$@"}
+"""": # -*-python-*-
+bup_python="$(dirname "$0")/bup-python" || exit $?
+exec "$bup_python" "$0" ${1+"$@"}
 """
 # end of bup preamble
 
 from __future__ import absolute_import, print_function
+
+import os, sys
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
+
 import errno, getopt, os, re, select, signal, subprocess, sys
 from subprocess import PIPE
 

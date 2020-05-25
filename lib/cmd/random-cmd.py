@@ -8,6 +8,8 @@ exec "$bup_python" "$0" ${1+"$@"}
 from __future__ import absolute_import
 import os, sys
 
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
+
 from bup import options, _helpers
 from bup.helpers import atoi, handle_ctrl_c, log, parse_num
 

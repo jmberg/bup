@@ -7,7 +7,9 @@ exec "$bup_python" "$0" ${1+"$@"}
 
 from __future__ import absolute_import, print_function
 from binascii import hexlify
-import sys, stat, time, os, errno, re
+import errno, os, re, stat, sys, time
+
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import metadata, options, git, index, drecurse, hlinkdb
 from bup.compat import argv_bytes

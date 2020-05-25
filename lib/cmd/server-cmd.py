@@ -7,7 +7,9 @@ exec "$bup_python" "$0" ${1+"$@"}
 
 from __future__ import absolute_import
 from binascii import hexlify, unhexlify
-import os, sys, struct, subprocess
+import os, struct, subprocess, sys
+
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import options, git, vfs, vint
 from bup.compat import environ, hexstr

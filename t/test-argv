@@ -9,7 +9,7 @@ from __future__ import absolute_import, print_function
 
 from os.path import abspath, dirname
 from random import randint
-from subprocess import check_output
+from subprocess import CalledProcessError, check_output
 from sys import stderr, stdout
 import sys
 
@@ -24,6 +24,16 @@ def rand_bytes(n):
     return bytes([randint(1, 255) for x in range(n)])
 
 for trial in range(100):
-    cmd = [b't/echo-argv-bytes', rand_bytes(randint(1, 32))]
-    out = check_output(cmd)
-    wvpasseq(b'\0\n'.join(cmd) + b'\0\n', out)
+    canary = b'canary'
+    cmd = [b't/echo-argv-bytes', canary, rand_bytes(randint(1, 32))]
+    try:
+        out = check_output(cmd)
+    except CalledProcessError as ex:
+        if canary in ex.output:
+            raise
+        print('This failure may represent a known issue in glibc, see README:\n',
+              '  https://sourceware.org/bugzilla/show_bug.cgi?id=26034\n',
+              file=stderr)
+    else:
+        expected = b'\0\n'.join(cmd) + b'\0\n'
+        wvpasseq(expected, out)

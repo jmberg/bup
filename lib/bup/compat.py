@@ -14,17 +14,6 @@ py3 = py_maj >= 3
 if py3:
 
     from os import environb as environ
-
-    lc_ctype = environ.get(b'LC_CTYPE')
-    if lc_ctype and lc_ctype.lower() != b'iso-8859-1':
-        # Because of argv, options.py, pwd, grp, and any number of other issues
-        print('error: bup currently only works with ISO-8859-1, not LC_CTYPE=%s'
-              % lc_ctype.decode(),
-              file=sys.stderr)
-        print('error: this should already have been arranged, so indicates a bug',
-              file=sys.stderr)
-        sys.exit(2)
-
     from os import fsdecode, fsencode
     from shlex import quote
     input = input

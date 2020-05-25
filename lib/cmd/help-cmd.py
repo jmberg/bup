@@ -6,7 +6,10 @@ exec "$bup_python" "$0" ${1+"$@"}
 # end of bup preamble
 
 from __future__ import absolute_import
-import sys, os, glob
+import os, glob, sys
+
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
+
 from bup import options, path
 
 optspec = """

@@ -7,7 +7,10 @@ exec "$bup_python" "$0" ${1+"$@"}
 
 from __future__ import absolute_import, print_function
 from collections import namedtuple
-import mimetypes, os, posixpath, signal, stat, sys, time, urllib, webbrowser
+import mimetypes, os, posixpath, signal, stat, sys, time, urllib
+import webbrowser
+
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import options, git, vfs
 from bup.helpers import (chunkyreader, debug1, format_filesize, handle_ctrl_c,

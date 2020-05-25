@@ -7,7 +7,9 @@ exec "$bup_python" "$0" ${1+"$@"}
 
 from __future__ import absolute_import
 from stat import S_ISDIR
-import copy, errno, os, sys, stat, re
+import copy, errno, os, re, stat, sys
+
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import options, git, metadata, vfs
 from bup._helpers import write_sparsely

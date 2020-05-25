@@ -11,8 +11,11 @@ from pipes import quote
 from subprocess import check_call
 from time import strftime, strptime
 import os
+import os.path
 import sys
 import tempfile
+
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import git, helpers, options
 from bup.compat import argv_bytes, str_type

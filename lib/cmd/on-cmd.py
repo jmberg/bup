@@ -7,7 +7,9 @@ exec "$bup_python" "$0" ${1+"$@"}
 
 from __future__ import absolute_import
 from subprocess import PIPE
-import sys, os, struct, getopt, subprocess, signal
+import getopt, os, signal, struct, subprocess, sys
+
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import options, ssh, path
 from bup.compat import argv_bytes
