@@ -1,7 +1,6 @@
 #define _LARGEFILE64_SOURCE 1
 #define PY_SSIZE_T_CLEAN 1
 #undef NDEBUG
-#include "../../config/config.h"
 
 // According to Python, its header has to go first:
 //   http://docs.python.org/2/c-api/intro.html#include-files
