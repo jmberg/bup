@@ -132,7 +132,7 @@ def save_tree(opt, reader, hlink_db, msr, repo, use_treesplit, blobbits):
     _nonlocal['subcount'] = 0
     _nonlocal['lastremain'] = None
 
-    def progress_report(n):
+    def progress_report(file, n):
         _nonlocal['subcount'] += n
         cc = _nonlocal['count'] + _nonlocal['subcount']
         pct = total and (cc*100.0/total) or 0
@@ -199,7 +199,6 @@ def save_tree(opt, reader, hlink_db, msr, repo, use_treesplit, blobbits):
                     total += ent.size
             ftotal += 1
         progress('Reading index: %d, done.\n' % ftotal)
-        hashsplit.progress_callback = progress_report
 
     # Root collisions occur when strip or graft options map more than one
     # path to the same directory (paths which originally had separate
@@ -242,8 +241,8 @@ def save_tree(opt, reader, hlink_db, msr, repo, use_treesplit, blobbits):
                     log('%s %-70s\n' % (status, path_msg(os.path.join(dir, b''))))
                 lastdir = dir
 
-        if opt.progress:
-            progress_report(0)
+        if not opt.progress:
+            progress_report = None
         fcount += 1
 
         if not exists:
@@ -368,6 +367,7 @@ def save_tree(opt, reader, hlink_db, msr, repo, use_treesplit, blobbits):
                         (mode, id) = hashsplit.split_to_blob_or_tree(
                                                 write_data, repo.write_tree, [f],
                                                 keep_boundaries=False,
+                                                progress=progress_report,
                                                 blobbits=blobbits)
                 except (IOError, OSError) as e:
                     add_error('%s: %s' % (ent.name, e))
