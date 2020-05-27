@@ -35,7 +35,7 @@ def no_lingering_errors():
 
 
 # Assumes (of course) this file is at the top-level of the source tree
-_bup_tmp = realpath(dirname(fsencode(__file__))) + b'/t/tmp'
+_bup_tmp = realpath(dirname(fsencode(__file__))) + b'/test/tmp'
 try:
     os.makedirs(_bup_tmp)
 except OSError as e:

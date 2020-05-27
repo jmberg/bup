@@ -1,0 +1,24 @@
+#!/bin/sh
+"""": # -*-python-*-
+bup_python="$(dirname "$0")/../../config/bin/python" || exit $?
+exec "$bup_python" "$0" ${1+"$@"}
+"""
+# end of bup preamble
+
+from __future__ import absolute_import, print_function
+import os, sys
+
+if sys.platform.startswith('cygwin'):
+    groups = os.getgroups()
+    if 544 in groups or 0 in groups:
+        print('root')
+    else:
+        print('none')
+else:
+    if os.environ.get('FAKEROOTKEY'):
+        print('fake')
+    else:
+        if os.geteuid() == 0:
+            print('root')
+        else:
+            print('none')

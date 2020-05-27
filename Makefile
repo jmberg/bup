@@ -19,11 +19,11 @@ define shout
 $(if $(subst ok,,$(lastword $(1))),$(error $(2)),$(shell x="$(1)"; echo $${x%???}))
 endef
 
-sampledata_rev := $(shell t/configure-sampledata --revision $(isok))
+sampledata_rev := $(shell test/configure-sampledata --revision $(isok))
 sampledata_rev := \
   $(call shout,$(sampledata_rev),Could not parse sampledata revision)
 
-current_sampledata := t/sampledata/var/rev/v$(sampledata_rev)
+current_sampledata := test/sampledata/var/rev/v$(sampledata_rev)
 
 os := $(shell ($(pf); uname | sed 's/[-_].*//') $(isok))
 os := $(call shout,$(os),Unable to determine OS)
@@ -39,7 +39,7 @@ endif
 ifdef TMPDIR
   test_tmp := $(TMPDIR)
 else
-  test_tmp := $(CURDIR)/t/tmp
+  test_tmp := $(CURDIR)/test/tmp
 endif
 
 initial_setup := $(shell dev/update-checkout-info lib/bup/checkout_info.py $(isok))
@@ -81,7 +81,7 @@ bup_deps := lib/bup/_helpers$(SOEXT) $(bup_cmds)
 all: $(bup_deps) Documentation/all $(current_sampledata)
 
 $(current_sampledata):
-	t/configure-sampledata --setup
+	test/configure-sampledata --setup
 
 PANDOC ?= $(shell type -p pandoc)
 
@@ -155,80 +155,79 @@ lib/bup/_helpers$(SOEXT): \
 	  "import glob; assert(len(glob.glob('lib/bup/build/*/_helpers*$(SOEXT)')) == 1)"
 	cp lib/bup/build/*/_helpers*$(SOEXT) "$@"
 
-t/tmp:
-	mkdir t/tmp
+test/tmp:
+	mkdir test/tmp
 
 runtests: runtests-python runtests-cmdline
 
 python_tests := \
-  lib/bup/t/tbloom.py \
-  lib/bup/t/tclient.py \
-  lib/bup/t/tgit.py \
-  lib/bup/t/thashsplit.py \
-  lib/bup/t/thelpers.py \
-  lib/bup/t/tindex.py \
-  lib/bup/t/tmetadata.py \
-  lib/bup/t/toptions.py \
-  lib/bup/t/tresolve.py \
-  lib/bup/t/tshquote.py \
-  lib/bup/t/tvfs.py \
-  lib/bup/t/tvint.py \
-  lib/bup/t/txstat.py
+  test/lib/tbloom.py \
+  test/lib/tclient.py \
+  test/lib/tgit.py \
+  test/lib/thashsplit.py \
+  test/lib/thelpers.py \
+  test/lib/tindex.py \
+  test/lib/tmetadata.py \
+  test/lib/toptions.py \
+  test/lib/tresolve.py \
+  test/lib/tshquote.py \
+  test/lib/tvfs.py \
+  test/lib/tvint.py \
+  test/lib/txstat.py
 
 # The "pwd -P" here may not be appropriate in the long run, but we
 # need it until we settle the relevant drecurse/exclusion questions:
 # https://groups.google.com/forum/#!topic/bup-list/9ke-Mbp10Q0
-runtests-python: all t/tmp
-	mkdir -p t/tmp/test-log
-	$(pf); cd $$(pwd -P); TMPDIR="$(test_tmp)" \
+runtests-python: all test/tmp
+	mkdir -p test/tmp/test-log
+	$(pf); cd $$(pwd -P); TMPDIR="$(test_tmp)" PYTHONPATH=lib \
 	  ./wvtest.py  $(python_tests) 2>&1 \
-	    | tee -a t/tmp/test-log/$$$$.log
+	    | tee -a test/tmp/test-log/$$$$.log
 
 cmdline_tests := \
-  t/test-help \
-  t/test.sh \
-  t/test-argv \
-  t/test-cat-file.sh \
-  t/test-command-without-init-fails.sh \
-  t/test-compression.sh \
-  t/test-drecurse.sh \
-  t/test-fsck.sh \
-  t/test-fuse.sh \
-  t/test-ftp \
-  t/test-web.sh \
-  t/test-gc.sh \
-  t/test-import-duplicity.sh \
-  t/test-import-rdiff-backup.sh \
-  t/test-index.sh \
-  t/test-index-check-device.sh \
-  t/test-index-clear.sh \
-  t/test-list-idx.sh \
-  t/test-ls \
-  t/test-ls-remote \
-  t/test-main.sh \
-  t/test-meta.sh \
-  t/test-on.sh \
-  t/test-packsizelimit \
-  t/test-prune-older \
-  t/test-redundant-saves.sh \
-  t/test-restore-map-owner.sh \
-  t/test-restore-single-file.sh \
-  t/test-rm.sh \
-  t/test-rm-between-index-and-save.sh \
-  t/test-save-creates-no-unrefs.sh \
-  t/test-save-restore \
-  t/test-save-errors \
-  t/test-save-restore-excludes.sh \
-  t/test-save-strip-graft.sh \
-  t/test-save-with-valid-parent.sh \
-  t/test-sparse-files.sh \
-  t/test-split-join.sh \
-  t/test-tz.sh \
-  t/test-xdev.sh
+  test/cmd/test.sh \
+  test/cmd/test-argv \
+  test/cmd/test-cat-file.sh \
+  test/cmd/test-command-without-init-fails.sh \
+  test/cmd/test-compression.sh \
+  test/cmd/test-drecurse.sh \
+  test/cmd/test-fsck.sh \
+  test/cmd/test-fuse.sh \
+  test/cmd/test-ftp \
+  test/cmd/test-web.sh \
+  test/cmd/test-gc.sh \
+  test/cmd/test-import-duplicity.sh \
+  test/cmd/test-import-rdiff-backup.sh \
+  test/cmd/test-index.sh \
+  test/cmd/test-index-check-device.sh \
+  test/cmd/test-index-clear.sh \
+  test/cmd/test-list-idx.sh \
+  test/cmd/test-ls \
+  test/cmd/test-ls-remote \
+  test/cmd/test-main.sh \
+  test/cmd/test-meta.sh \
+  test/cmd/test-on.sh \
+  test/cmd/test-packsizelimit \
+  test/cmd/test-prune-older \
+  test/cmd/test-redundant-saves.sh \
+  test/cmd/test-restore-map-owner.sh \
+  test/cmd/test-restore-single-file.sh \
+  test/cmd/test-rm.sh \
+  test/cmd/test-rm-between-index-and-save.sh \
+  test/cmd/test-save-creates-no-unrefs.sh \
+  test/cmd/test-save-restore \
+  test/cmd/test-save-errors \
+  test/cmd/test-save-restore-excludes.sh \
+  test/cmd/test-save-strip-graft.sh \
+  test/cmd/test-save-with-valid-parent.sh \
+  test/cmd/test-sparse-files.sh \
+  test/cmd/test-split-join.sh \
+  test/cmd/test-tz.sh \
+  test/cmd/test-xdev.sh
 
-tmp-target-run-test-get-%: all t/tmp
+tmp-target-run-test-get-%: all test/tmp
 	$(pf); cd $$(pwd -P); TMPDIR="$(test_tmp)" \
-	  t/test-get $* 2>&1 | tee -a t/tmp/test-log/$$$$.log
+	  test/cmd/test-get $* 2>&1 | tee -a test/tmp/test-log/$$$$.log
 
 test_get_targets += \
   tmp-target-run-test-get-replace \
@@ -243,26 +242,26 @@ test_get_targets += \
 # The "pwd -P" here may not be appropriate in the long run, but we
 # need it until we settle the relevant drecurse/exclusion questions:
 # https://groups.google.com/forum/#!topic/bup-list/9ke-Mbp10Q0
-tmp-target-run-test%: all t/tmp
+tmp-target-run-test%: all test/tmp
 	$(pf); cd $$(pwd -P); TMPDIR="$(test_tmp)" \
-	  t/test$* 2>&1 | tee -a t/tmp/test-log/$$$$.log
+	  test/cmd/test$* 2>&1 | tee -a test/tmp/test-log/$$$$.log
 
-runtests-cmdline: $(test_get_targets) $(subst t/test,tmp-target-run-test,$(cmdline_tests))
+runtests-cmdline: $(test_get_targets) $(subst test/cmd/test,tmp-target-run-test,$(cmdline_tests))
 
 stupid:
 	PATH=/bin:/usr/bin $(MAKE) test
 
 test: all
-	if test -e t/tmp/test-log; then rm -r t/tmp/test-log; fi
-	mkdir -p t/tmp/test-log
+	if test -e test/tmp/test-log; then rm -r test/tmp/test-log; fi
+	mkdir -p test/tmp/test-log
 	./wvtest watch --no-counts \
-	  $(MAKE) runtests 2>t/tmp/test-log/$$$$.log
-	./wvtest report t/tmp/test-log/*.log
+	  $(MAKE) runtests 2>test/tmp/test-log/$$$$.log
+	./wvtest report test/tmp/test-log/*.log
 
 check: test
 
 distcheck: all
-	./wvtest run t/test-release-archive.sh
+	./wvtest run test/cmd/test-release-archive.sh
 
 long-test: export BUP_TEST_LEVEL=11
 long-test: test
@@ -328,18 +327,18 @@ clean: Documentation/clean config/bin/python
 		*.pyc */*.pyc lib/*/*.pyc lib/*/*/*.pyc \
 		lib/bup/checkout_info.py \
 		randomgen memtest \
-		testfs.img lib/bup/t/testfs.img
+		testfs.img test/lib/testfs.img
 	for x in $$(ls cmd/*-cmd.py cmd/*-cmd.sh | grep -vF python-cmd.sh | cut -b 5-); do \
 	    echo "cmd/bup-$${x%-cmd.*}"; \
 	done | xargs -t rm -f
-	if test -e t/mnt; then t/cleanup-mounts-under t/mnt; fi
-	if test -e t/mnt; then rm -r t/mnt; fi
-	if test -e t/tmp; then t/cleanup-mounts-under t/tmp; fi
-        # FIXME: migrate these to t/mnt/
-	if test -e lib/bup/t/testfs; \
-	  then umount lib/bup/t/testfs || true; fi
-	rm -rf *.tmp *.tmp.meta t/*.tmp lib/*/*/*.tmp build lib/bup/build lib/bup/t/testfs
-	if test -e t/tmp; then t/force-delete t/tmp; fi
-	t/configure-sampledata --clean
+	if test -e test/mnt; then test/cleanup-mounts-under test/mnt; fi
+	if test -e test/mnt; then rm -r test/mnt; fi
+	if test -e test/tmp; then test/cleanup-mounts-under test/tmp; fi
+        # FIXME: migrate these to test/mnt/
+	if test -e test/lib/testfs; \
+	  then umount test/lib/testfs || true; fi
+	rm -rf *.tmp *.tmp.meta test/*.tmp lib/*/*/*.tmp build lib/bup/build test/lib/testfs
+	if test -e test/tmp; then test/force-delete test/tmp; fi
+	test/configure-sampledata --clean
         # Remove last so that cleanup tools can depend on it
 	rm -rf config/bin
