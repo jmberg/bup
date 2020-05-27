@@ -8,7 +8,6 @@ DEFAULT_FANOUT = 16
 BUP_BLOBBITS = 13
 BUP_TREE_BLOBBITS = 13
 MAX_PER_TREE = 256
-progress_callback = None
 
 GIT_MODE_FILE = 0o100644
 GIT_MODE_TREE = 0o40000
@@ -30,8 +29,6 @@ def split_to_blobs(makeblob, files, keep_boundaries, progress, blobbits=None,
                                     fanbits=fanbits(fanout)):
         sha = makeblob(blob)
         total_split += len(blob)
-        if progress_callback:
-            progress_callback(len(blob))
         yield (sha, len(blob), level)
 
 
