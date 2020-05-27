@@ -8,7 +8,6 @@ from bup import _helpers
 BUP_BLOBBITS = 13
 BUP_TREE_BLOBBITS = 13
 MAX_PER_TREE = 256
-progress_callback = None
 DEFAULT_FANOUT = 16
 
 GIT_MODE_FILE = 0o100644
@@ -34,8 +33,6 @@ def split_to_blobs(makeblob, files, keep_boundaries, progress, fanout=None,
                                         fanout, blobbits):
         sha = makeblob(blob)
         total_split += len(blob)
-        if progress_callback:
-            progress_callback(len(blob))
         yield (sha, len(blob), level)
 
 
