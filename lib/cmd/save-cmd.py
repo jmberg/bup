@@ -141,7 +141,7 @@ stack = Stack()
 
 
 lastremain = None
-def progress_report(n):
+def progress_report(file, n):
     global count, subcount, lastremain
     subcount += n
     cc = count + subcount
@@ -219,7 +219,6 @@ if opt.progress:
                 total += ent.size
         ftotal += 1
     progress('Reading index: %d, done.\n' % ftotal)
-    hashsplit.progress_callback = progress_report
 
 # Root collisions occur when strip or graft options map more than one
 # path to the same directory (paths which originally had separate
@@ -261,8 +260,8 @@ for (transname,ent) in r.filter(extra, wantrecurse=wantrecurse_during):
                 log('%s %-70s\n' % (status, path_msg(os.path.join(dir, b''))))
             lastdir = dir
 
-    if opt.progress:
-        progress_report(0)
+    if not opt.progress:
+        progress_report = None
     fcount += 1
     
     if not exists:
@@ -353,6 +352,7 @@ for (transname,ent) in r.filter(extra, wantrecurse=wantrecurse_during):
                                             repo.write_data,
                                             repo.write_tree, [f],
                                             keep_boundaries=False,
+                                            progress=progress_report,
                                             blobbits=blobbits)
             except (IOError, OSError) as e:
                 add_error('%s: %s' % (ent.name, e))
