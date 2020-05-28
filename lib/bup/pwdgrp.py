@@ -2,8 +2,7 @@
 from __future__ import absolute_import, print_function
 import os, pwd, grp
 
-from bup import compat  # to force the LC_CTYPE check
-from bup.compat import py_maj
+from bup import _helpers
 from bup.helpers import cache_key_value
 
 
@@ -23,23 +22,12 @@ class Passwd:
          self.pw_gecos, self.pw_dir, self.pw_shell) = \
              name, passwd, uid, gid, gecos, dir, shell
 
-def _passwd_from_py(py):
-    if py_maj < 3:
-        return py
-    return Passwd(py.pw_name.encode('iso-8859-1'),
-                  py.pw_passwd.encode("iso-8859-1"),
-                  py.pw_uid, py.pw_gid,
-                  py.pw_gecos.encode('iso-8859-1'),
-                  py.pw_dir.encode('iso-8859-1'),
-                  py.pw_shell.encode('iso-8859-1'))
-
 def getpwuid(uid):
-    return _passwd_from_py(pwd.getpwuid(uid))
+    return Passwd(*_helpers.getpwuid(uid))
 
 def getpwnam(name):
     assert isinstance(name, bytes)
-    return _passwd_from_py(pwd.getpwnam(name.decode('iso-8859-1') if py_maj > 2
-                                        else name))
+    return Passwd(*_helpers.getpwnam(name))
 
 
 class Group:
@@ -53,21 +41,12 @@ class Group:
         self.gr_name, self.gr_passwd, self.gr_gid, self.gr_mem = \
             name, passwd, gid, mem
 
-def _group_from_py(py):
-    if py_maj < 3:
-        return py
-    return Group(py.gr_name.encode('iso-8859-1'),
-                 py.gr_passwd.encode('iso-8859-1'),
-                 py.gr_gid,
-                 tuple(x.encode('iso-8859-1') for x in py.gr_mem))
-
 def getgrgid(uid):
-    return _group_from_py(grp.getgrgid(uid))
+    return Group(*_helpers.getgrgid(uid))
 
 def getgrnam(name):
     assert isinstance(name, bytes)
-    return _group_from_py(grp.getgrnam(name.decode('iso-8859-1') if py_maj > 2
-                                       else name))
+    return Group(*_helper.getgrnam(name))
 
 
 _uid_to_pwd_cache = {}
