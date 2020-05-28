@@ -158,73 +158,16 @@ lib/bup/_helpers$(SOEXT): \
 test/tmp:
 	mkdir test/tmp
 
-runtests: runtests-python runtests-cmdline
-
-runtests-python: all test/tmp
-	$(pf); dev/bup-python -m pytest
-
-cmdline_tests := \
-  test/cmd/test.sh \
-  test/cmd/test-cat-file.sh \
-  test/cmd/test-command-without-init-fails.sh \
-  test/cmd/test-compression.sh \
-  test/cmd/test-drecurse.sh \
-  test/cmd/test-fsck.sh \
-  test/cmd/test-fuse.sh \
-  test/cmd/test-web.sh \
-  test/cmd/test-gc.sh \
-  test/cmd/test-import-duplicity.sh \
-  test/cmd/test-import-rdiff-backup.sh \
-  test/cmd/test-index.sh \
-  test/cmd/test-index-check-device.sh \
-  test/cmd/test-index-clear.sh \
-  test/cmd/test-list-idx.sh \
-  test/cmd/test-ls \
-  test/cmd/test-ls-remote \
-  test/cmd/test-main.sh \
-  test/cmd/test-meta.sh \
-  test/cmd/test-on.sh \
-  test/cmd/test-packsizelimit \
-  test/cmd/test-redundant-saves.sh \
-  test/cmd/test-restore-map-owner.sh \
-  test/cmd/test-restore-single-file.sh \
-  test/cmd/test-rm.sh \
-  test/cmd/test-rm-between-index-and-save.sh \
-  test/cmd/test-save-creates-no-unrefs.sh \
-  test/cmd/test-save-restore \
-  test/cmd/test-save-errors \
-  test/cmd/test-save-restore-excludes.sh \
-  test/cmd/test-save-strip-graft.sh \
-  test/cmd/test-save-with-valid-parent.sh \
-  test/cmd/test-sparse-files.sh \
-  test/cmd/test-split-join.sh \
-  test/cmd/test-tz.sh \
-  test/cmd/test-xdev.sh
-
-# For parallel runs.
-# The "pwd -P" here may not be appropriate in the long run, but we
-# need it until we settle the relevant drecurse/exclusion questions:
-# https://groups.google.com/forum/#!topic/bup-list/9ke-Mbp10Q0
-tmp-target-run-test%: all test/tmp
-	$(pf); cd $$(pwd -P); TMPDIR="$(test_tmp)" \
-	  test/cmd/test$* 2>&1 | tee -a test/tmp/test-log/$$$$.log
-
-runtests-cmdline: $(subst test/cmd/test,tmp-target-run-test,$(cmdline_tests))
+test: all test/tmp
+	@dev/bup-python -m pytest -v
 
 stupid:
 	PATH=/bin:/usr/bin $(MAKE) test
 
-test: all
-	if test -e test/tmp/test-log; then rm -r test/tmp/test-log; fi
-	mkdir -p test/tmp/test-log
-	./wvtest watch --no-counts \
-	  $(MAKE) runtests 2>test/tmp/test-log/$$$$.log
-	./wvtest report test/tmp/test-log/*.log
-
 check: test
 
 distcheck: all
-	./wvtest run test/cmd/test-release-archive.sh
+	@DISTCHECK=1 cmd/bup-python -m pytest -v test/cmd/test_cmd.py
 
 long-test: export BUP_TEST_LEVEL=11
 long-test: test
