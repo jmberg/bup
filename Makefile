@@ -160,29 +160,8 @@ test/tmp:
 
 runtests: runtests-python runtests-cmdline
 
-python_tests := \
-  test/lib/tbloom.py \
-  test/lib/tclient.py \
-  test/lib/tgit.py \
-  test/lib/thashsplit.py \
-  test/lib/thelpers.py \
-  test/lib/tindex.py \
-  test/lib/tmetadata.py \
-  test/lib/toptions.py \
-  test/lib/tresolve.py \
-  test/lib/tshquote.py \
-  test/lib/tvfs.py \
-  test/lib/tvint.py \
-  test/lib/txstat.py
-
-# The "pwd -P" here may not be appropriate in the long run, but we
-# need it until we settle the relevant drecurse/exclusion questions:
-# https://groups.google.com/forum/#!topic/bup-list/9ke-Mbp10Q0
 runtests-python: all test/tmp
-	mkdir -p test/tmp/test-log
-	$(pf); cd $$(pwd -P); TMPDIR="$(test_tmp)" PYTHONPATH=lib \
-	  ./wvtest.py  $(python_tests) 2>&1 \
-	    | tee -a test/tmp/test-log/$$$$.log
+	$(pf); dev/bup-python -m pytest
 
 cmdline_tests := \
   test/cmd/test.sh \

@@ -70,9 +70,9 @@ Individual non-Python tests can be run via "./wvtest run test/TEST" and
 if you'd like to see all of the test output, you can omit the wvtest
 run wrapper: "test/TEST"
 
-Individual Python tests can be run via "./wvtest run ./wvtest.py
-test/TEST", and as above, you can see all the output by omitting
-the wvtest run wrapper like this: "./wvtest.py test/TEST"
+Individual Python tests can be run via
+
+	./dev/bup-python -m pytest -v test/lib/test.py
 
 
 Submitting patches
