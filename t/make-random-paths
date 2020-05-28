@@ -1,0 +1,45 @@
+#!/bin/sh
+"""": # -*-python-*-
+bup_python="$(dirname "$0")/../cmd/bup-python" || exit $?
+exec "$bup_python" "$0" ${1+"$@"}
+"""
+# end of bup preamble
+
+from __future__ import absolute_import, print_function
+
+from os.path import abspath, dirname
+from random import randint
+from sys import argv, exit, stderr, stdout
+import re, sys
+
+script_home = abspath(dirname(sys.argv[0] or '.'))
+sys.path[:0] = [abspath(script_home + '/../lib'), abspath(script_home + '/..')]
+
+from bup.compat import fsencode, range
+
+
+def usage(out=stdout):
+    print('Usage:', argv[0], 'NUM', 'DEST_DIR', file=out)
+
+def misuse():
+    usage(stderr)
+    exit(2)
+
+path_disallowed_rx = re.compile(b'[/\x00]')
+
+def rand_path_bytes():
+    n = randint(1, 16)
+    while True:
+        result = bytearray([randint(1, 255) for x in range(n)])
+        result = path_disallowed_rx.sub(b'', result)
+        if result:
+            return bytes(result)
+
+if len(argv) != 3:
+    misuse()
+
+count, dest = argv[1:]
+
+for i in range(int(count)):
+    with open(fsencode(dest) + b'/' + rand_path_bytes(), 'w') as _:
+        pass
