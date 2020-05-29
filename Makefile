@@ -159,7 +159,7 @@ test/tmp:
 	mkdir test/tmp
 
 test: all test/tmp
-	@dev/bup-python -m pytest -v
+	@dev/bup-python -m pytest -v -nauto
 
 stupid:
 	PATH=/bin:/usr/bin $(MAKE) test
