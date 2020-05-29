@@ -32,7 +32,7 @@ def rand_path_bytes():
     while True:
         result = bytearray([randint(1, 255) for x in range(n)])
         result = path_disallowed_rx.sub(b'', result)
-        if result:
+        if result not in (b'', b'.', b'..'):
             return bytes(result)
 
 if len(argv) != 3:
