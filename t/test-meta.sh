@@ -9,6 +9,7 @@ root_status="$(t/root-status)" || exit $?
 TOP="$(WVPASS pwd)" || exit $?
 tmpdir="$(WVPASS wvmktempdir)" || exit $?
 export BUP_DIR="$tmpdir/bup"
+export PYTHONPATH="$TOP/lib:$PYTHONPATH"
 
 # Assume that mvmktempdir will always use the same dir.
 timestamp_resolutions="$(t/ns-timestamp-resolutions "$tmpdir/canary")" \
