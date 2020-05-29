@@ -23,11 +23,17 @@ class Passwd:
              name, passwd, uid, gid, gecos, dir, shell
 
 def getpwuid(uid):
-    return Passwd(*_helpers.getpwuid(uid))
+    r = _helpers.getpwuid(uid)
+    if r is None:
+        return None
+    return Passwd(*r)
 
 def getpwnam(name):
     assert isinstance(name, bytes)
-    return Passwd(*_helpers.getpwnam(name))
+    r = _helpers.getpwnam(name)
+    if r is None:
+        return None
+    return Passwd(*r)
 
 
 class Group:
@@ -42,11 +48,17 @@ class Group:
             name, passwd, gid, mem
 
 def getgrgid(uid):
-    return Group(*_helpers.getgrgid(uid))
+    r = _helpers.getgrgid(uid)
+    if r is None:
+        return None
+    return Group(*r)
 
 def getgrnam(name):
     assert isinstance(name, bytes)
-    return Group(*_helper.getgrnam(name))
+    r = _helpers.getgrnam(name)
+    if r is None:
+        return None
+    return Group(*r)
 
 
 _uid_to_pwd_cache = {}

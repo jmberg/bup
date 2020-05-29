@@ -1805,19 +1805,21 @@ static long getgr_buf_size;
 
 static PyObject *grp_struct_to_py(const struct group *grp, int rc)
 {
-    PyObject *members = tuple_from_cstrs(grp->gr_mem);
-    if (members == NULL)
-        return NULL;
-
     // We can check the known (via POSIX) signed and unsigned types at
     // compile time, but not (easily) the unspecified types, so handle
     // those via INTEGER_TO_PY().
-    if (grp != NULL)
+    if (grp != NULL) {
+        PyObject *members = tuple_from_cstrs(grp->gr_mem);
+
+        if (members == NULL)
+            return NULL;
+
         return Py_BuildValue(cstr_argf cstr_argf "OO",
                              grp->gr_name,
                              grp->gr_passwd,
                              INTEGER_TO_PY(grp->gr_gid),
                              members);
+    }
     if (rc == 0)
         return Py_BuildValue("O", Py_None);
     if (rc == EIO || rc == EMFILE || rc == ENFILE)
