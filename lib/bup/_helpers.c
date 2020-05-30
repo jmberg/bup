@@ -1864,6 +1864,15 @@ static PyObject *bup_getgrnam(PyObject *self, PyObject *args)
     return result;
 }
 
+static PyObject *bup_gethostname(PyObject *mod, PyObject *ignore)
+{
+    char buf[HOST_NAME_MAX + 1] = {};
+
+    if (gethostname(buf, sizeof(buf) - 1))
+        return PyErr_SetFromErrno(PyExc_IOError);
+    return PyBytes_FromString(buf);
+}
+
 static PyMethodDef helper_methods[] = {
     { "write_sparsely", bup_write_sparsely, METH_VARARGS,
       "Write buf excepting zeros at the end. Return trailing zero count." },
@@ -1951,6 +1960,8 @@ static PyMethodDef helper_methods[] = {
       "Return the group database entry for the given group name,"
       " as a tuple with all C strings as bytes(), or None if the group does"
       " not exist." },
+    { "gethostname", bup_gethostname, METH_NOARGS,
+      "Return the current hostname (as bytes)" },
     { NULL, NULL, 0, NULL },  // sentinel
 };
 
