@@ -313,7 +313,7 @@ def main(argv):
             if len(stack) == 1:
                 continue # We're at the top level -- keep the current root dir
             # Since there's no filename, this is a subdir -- finish it.
-            oldtree = already_saved(ent) # may be None
+            oldtree = hashvalid # may be None
             stack, newtree = stack.pop(repo, override_tree=oldtree)
             if not oldtree:
                 if lastskip_name and lastskip_name.startswith(ent.name):
