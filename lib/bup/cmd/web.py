@@ -201,11 +201,11 @@ class BupRequestHandler(tornado.web.RequestHandler):
         Return value is either a file object, or None (indicating an
         error).  In either case, the headers are sent.
         """
+        args = QueryArgs.from_args(self.request.arguments)
+
         if not path.endswith(b'/') and len(path) > 0:
             print('Redirecting from %s to %s' % (path_msg(path), path_msg(path + b'/')))
-            return self.redirect(path + b'/', permanent=True)
-
-        args = QueryArgs.from_args(self.request.arguments)
+            return self.redirect(path + b'/' + args, permanent=True)
 
         self.render(
             'list-directory.html',
