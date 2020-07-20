@@ -113,6 +113,9 @@ Subcommands are described in separate man pages.  For example
 `bup-config`(1)
 :   Show or set a bup repository configuration option
 
+`bup-diff`(1)
+:   Show differences between two paths in the bup repository
+
 `bup-drecurse`(1)
 :   Recursively list files in your filesystem
 
