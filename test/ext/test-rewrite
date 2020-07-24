@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+. wvtest.sh
+. wvtest-bup.sh
+. dev/lib.sh
+
+set -o pipefail
+
+top="$(WVPASS pwd)" || exit $?
+top="$(WVPASS realpath "$top")" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+export BUP_DIR="$tmpdir/bup"
+export BUP_DIR2="$tmpdir/bup2"
+export BUP_DIR3="$tmpdir/bup3"
+
+bup() { "$top/bup" "$@"; }
+
+WVPASS cd "$tmpdir"
+
+cat > $tmpdir/repo.conf << EOF
+[bup]
+  type = Encrypted
+  storage = File
+  path = $tmpdir/repo
+  cachedir = $tmpdir/cache/enc-cache
+EOF
+bup genkey | grep key >> $tmpdir/repo.conf
+mkdir -p $tmpdir/cache/enc-cache
+mkdir -p $tmpdir/repo
+
+WVPASS bup config -r config://$tmpdir/repo.conf bup.separatemeta true
+WVPASS bup config -r config://$tmpdir/repo.conf bup.split.trees true
+WVPASS bup config -r config://$tmpdir/repo.conf bup.split.files 14
+
+WVPASS bup init
+WVPASS bup -d $BUP_DIR2 init
+WVPASS bup -d $BUP_DIR3 init
+
+# FIXME: revisit this - should it work on 'split'? doesn't now.
+#WVPASS bup split -n split <"$top/test/testfile1"
+#
+#WVPASS bup -d $BUP_DIR2 rewrite --work-db=$tmpdir/db -s $BUP_DIR split:test
+#WVPASS bup -d $BUP_DIR ls -lR split > $tmpdir/old-split
+#WVPASS bup -d $BUP_DIR2 ls -lR test > $tmpdir/new-split
+#WVPASS diff -u $tmpdir/old-split $tmpdir/new-split
+
+WVPASS bup index "$top/test/sampledata"
+WVPASS bup save -n save --strip-path="$top" "$top/test/sampledata"
+WVPASS bup save -n save --strip-path="$top" "$top/test/sampledata"
+WVPASS bup save -n save --strip-path="$top" "$top/test/sampledata"
+WVPASS bup save -n save --strip-path="$top" "$top/test/sampledata"
+
+WVPASS bup rewrite --work-db=$tmpdir/db -r config://$tmpdir/repo.conf -s $BUP_DIR save
+WVPASS bup -d $BUP_DIR ls -lR save > $tmpdir/old-save
+WVPASS bup ls -r config://$tmpdir/repo.conf -lR save > $tmpdir/new-save-enc
+WVPASS diff -u $tmpdir/old-save $tmpdir/new-save-enc
+
+WVPASS bup -d $BUP_DIR3 rewrite --work-db=$tmpdir/db -s $BUP_DIR save
+WVPASS bup -d $BUP_DIR3 ls -lR save > $tmpdir/new-save
+WVPASS diff -u $tmpdir/old-save $tmpdir/new-save
+
+# now do a hack to save without saving the size in metadata ...
+WVPASS mkdir -p "$tmpdir/mod"
+cat > "$tmpdir/mod/metadata_encode_no_size.py" << EOF
+from bup import metadata, vfs
+
+_orig_encode_common = metadata.Metadata._encode_common
+def _new_encode_common(self):
+    self.size = None
+    print("encoding common with self.size None")
+    return _orig_encode_common(self)
+metadata.Metadata._encode_common = _new_encode_common
+
+vfs._compute_item_size = lambda repo, item: -1122334455
+EOF
+
+instrumented-bup()
+{
+    PYTHONPATH="$tmpdir/mod" bup --import-py-module metadata_encode_no_size "$@"
+}
+
+# force a re-save of the testfile1 to get it w/o size
+WVPASS bup index --fake-invalid "$top/test/sampledata/y/testfile1"
+WVPASS instrumented-bup save -n save --strip-path="$top" "$top/test/sampledata"
+
+# check that we get the "unknown" size out
+WVPASS instrumented-bup ls -l save/latest/test/sampledata/y/testfile1 |
+    WVPASS grep -- -1122334455
+
+# now rewrite again - but the size should be correct (per the diff)
+WVPASS bup rewrite --work-db=$tmpdir/db -r config://$tmpdir/repo.conf -s $BUP_DIR save:save2
+WVPASS bup -d $BUP_DIR ls -lR save > $tmpdir/old-save
+WVPASS bup ls -r config://$tmpdir/repo.conf -lR save2 > $tmpdir/new-save-enc
+WVPASS diff -u $tmpdir/old-save $tmpdir/new-save-enc
+
+WVPASS bup -d $BUP_DIR3 rewrite --work-db=$tmpdir/db -s $BUP_DIR save:save2
+WVPASS bup -d $BUP_DIR3 ls -lR save2 > $tmpdir/new-save
+WVPASS diff -u $tmpdir/old-save $tmpdir/new-save
+
+WVPASS rm -rf $tmpdir
