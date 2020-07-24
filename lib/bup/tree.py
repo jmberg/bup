@@ -14,8 +14,15 @@ from bup._helpers import RecordHashSplitter
 
 
 def _write_tree(repo, dir_meta, items, omit_meta=False):
-    if not omit_meta:
-        if dir_meta is None:
+    # This might be False if doing a 'bup rewrite' where the original is
+    # from an old repo without metadata, or created by 'bup split'.
+    meta_ok = all(isinstance(entry.meta, Metadata)
+                  for entry in items if entry.mode != GIT_MODE_TREE)
+    if not omit_meta and meta_ok:
+        # This might be None, or an integer if getting here in 'bup rewrite'
+        # with original data that didn't have metadata for a folder, e.g.
+        # due to --strip.
+        if not isinstance(dir_meta, Metadata):
             dir_meta = Metadata()
         metalist = [(b'', dir_meta)]
         metalist += [(shalist_item_sort_key((entry.mode, entry.name, None)),
