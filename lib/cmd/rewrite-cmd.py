@@ -1,0 +1,257 @@
+#!/bin/sh
+"""": # -*-python-*-
+# https://sourceware.org/bugzilla/show_bug.cgi?id=26034
+export "BUP_ARGV_0"="$0"
+arg_i=1
+for arg in "$@"; do
+    export "BUP_ARGV_${arg_i}"="$arg"
+    shift
+    arg_i=$((arg_i + 1))
+done
+# Here to end of preamble replaced during install
+bup_python="$(dirname "$0")/../../config/bin/python" || exit $?
+exec "$bup_python" "$0"
+"""
+# end of bup preamble
+
+from __future__ import absolute_import, print_function
+from binascii import hexlify
+from errno import EACCES
+import math, os, stat, sys, time
+import sqlite3
+
+sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
+
+from bup import compat, hashsplit, git, options, client, repo, metadata, vfs
+from bup.compat import argv_bytes, environ
+from bup.hashsplit import GIT_MODE_TREE, GIT_MODE_FILE, GIT_MODE_SYMLINK
+from bup.helpers import (add_error, grafted_path_components, handle_ctrl_c,
+                         hostname, istty2, log, parse_date_or_fatal, parse_num,
+                         path_components, progress, qprogress, resolve_parent,
+                         saved_errors, stripped_path_components,
+                         valid_save_name, Nonlocal)
+from bup.io import byte_stream, path_msg
+from bup.pwdgrp import userfullname, username
+from bup.tree import Stack
+
+
+optspec = """
+bup rewrite -s srcrepo <branch-name>
+--
+s,source=    source repository
+r,remote=    remote destination repository
+work-db=     work database filename (required, can be deleted after running)
+"""
+o = options.Options(optspec)
+opt, flags, extra = o.parse(compat.argv[1:])
+
+if len(extra) != 1:
+    o.fatal("no branch name given")
+
+src = argv_bytes(extra[0])
+if b':' in src:
+    src, dst = src.split(b':', 1)
+else:
+    dst = src
+if not valid_save_name(src):
+    o.fatal("'%s' is not a valid branch name" % path_msg(src))
+if not valid_save_name(dst):
+    o.fatal("'%s' is not a valid branch name" % path_msg(dst))
+
+srcref = b'refs/heads/%s' % src
+dstref = b'refs/heads/%s' % dst
+
+if opt.remote:
+    opt.remote = argv_bytes(opt.remote)
+
+if not opt.work_db:
+    o.fatal('--work-db argument is required')
+
+workdb_conn = sqlite3.connect(opt.work_db)
+workdb_conn.text_factory = bytes
+wdbc = workdb_conn.cursor()
+
+dstrepo = repo.from_opts(opt)
+blobbits = dstrepo.config(b'bup.blobbits', opttype='int') or 13
+treesplit = dstrepo.config(b'bup.treesplit', opttype='bool') or False
+
+tablename = 'mapping_to_bits_%d_treesplit_%d' % (blobbits, treesplit)
+wdbc.execute('CREATE TABLE IF NOT EXISTS %s (src BLOB PRIMARY KEY, dst BLOB NOT NULL, mode INTEGER, size INTEGER)' % tablename)
+
+# FIXME: support remote source repos ... probably after we
+# unify the handling?
+srcrepo = repo.LocalRepo(argv_bytes(opt.source))
+
+oldref = dstrepo.read_ref(dstref)
+if oldref is not None:
+    o.fatal("branch '%s' already exists in the destination repo" % path_msg(dst))
+
+handle_ctrl_c()
+
+# Maintain a stack of information representing the current location in
+# the archive being constructed.
+
+vfs_branch = vfs.resolve(srcrepo, src)
+item = vfs_branch[-1][1]
+contents = vfs.contents(srcrepo, item)
+contents = list(contents)
+commits = [c for c in contents if isinstance(c[1], vfs.Commit)]
+
+def converted_already(dstrepo, item, vfs_dir):
+    size = -1 # irrelevant
+    mode = item.meta
+    if isinstance(item.meta, metadata.Metadata):
+        size = item.meta.size
+        mode = item.meta.mode
+    # if we know the size, and the oid exists already
+    # (small file w/o hashsplit) then simply return it
+    # can't do that if it's a directory, since it might exist
+    # but in the non-augmented version, so dirs always go
+    # through the database lookup
+    if not vfs_dir and size is not None and dstrepo.exists(item.oid):
+        return item.oid, mode
+    wdbc.execute('SELECT dst, mode, size FROM %s WHERE src = ?' % tablename,
+                 (item.oid, ))
+    data = wdbc.fetchone()
+    # if it's not found, then we don't know anything
+    if not data:
+        return None, None
+    dst, mode, size = data
+    # augment the size if appropriate
+    if size is not None and isinstance(item.meta, metadata.Metadata):
+        assert item.meta.size is None or item.meta.size == size
+        item.meta.size = size
+    # if we have it in the DB and in the destination repo, return it
+    if dstrepo.exists(dst):
+        return dst, mode
+    # this only happens if you reuse a database
+    return None, None
+
+def vfs_walk_recursively(srcrepo, dstrepo, vfs_item, fullname=b''):
+    for name, item in vfs.contents(srcrepo, vfs_item):
+        if name in (b'.', b'..'):
+            continue
+        itemname = fullname + b'/' + name
+        if stat.S_ISDIR(vfs.item_mode(item)):
+            if converted_already(dstrepo, item, True)[0] is None:
+                # yield from
+                for n, i in vfs_walk_recursively(srcrepo, dstrepo, item,
+                                                 fullname=itemname):
+                    yield n, i
+            # and the dir itself
+            yield itemname + b'/', item
+        else:
+            yield itemname, item
+
+try:
+    with srcrepo, dstrepo:
+        for commit_vfs_name, commit in commits:
+            stack = Stack(dstrepo)
+
+            print("Rewriting %s ..." % path_msg(commit_vfs_name))
+            sys.stdout.flush()
+
+            for fullname, item in vfs_walk_recursively(srcrepo, dstrepo, commit):
+                (dirn, file) = os.path.split(fullname)
+                assert(dirn.startswith(b'/'))
+                dirp = path_components(dirn)
+
+                # If switching to a new sub-tree, finish the current sub-tree.
+                while list(stack.namestack) > [x[0] for x in dirp]:
+                    stack, _ = stack.pop()
+
+                # If switching to a new sub-tree, start a new sub-tree.
+                for path_component in dirp[len(stack):]:
+                    dir_name, fs_path = path_component
+
+                    dir_item = vfs.resolve(srcrepo, src + b'/' + commit_vfs_name + b'/' + fs_path)
+                    stack = stack.push(dir_name, dir_item[-1][1].meta)
+
+                # check if we already handled this item
+                id, mode = converted_already(dstrepo, item, not file)
+
+                if not file:
+                    if len(stack) == 1:
+                        continue # We're at the top level -- keep the current root dir
+                    # Since there's no filename, this is a subdir -- finish it.
+                    stack, newtree = stack.pop(override_tree=id)
+                    if id is None:
+                        wdbc.execute('INSERT INTO %s (src, dst) VALUES (?, ?)' % tablename,
+                                     (item.oid, newtree ))
+                    continue
+
+                vfs_mode = vfs.item_mode(item)
+
+                # already converted - id is known, item.meta was updated if needed
+                # (in converted_already()), and the proper new mode was returned
+                if id is not None:
+                    assert mode is not None, id
+                    stack.append(file, vfs_mode, mode, id, item.meta)
+                    continue
+
+                item_size_store = Nonlocal()
+                item_size_store.size = None
+                size_augmented = False
+                if stat.S_ISREG(vfs_mode):
+                    item_size_store.size = 0
+                    def write_data(data):
+                        item_size_store.size += len(data)
+                        return dstrepo.write_data(data)
+                    with vfs.tree_data_reader(srcrepo, item.oid) as f:
+                        (mode, id) = hashsplit.split_to_blob_or_tree(
+                                                write_data, dstrepo.write_tree, [f],
+                                                keep_boundaries=False,
+                                                #progress=progress_report,
+                                                blobbits=blobbits)
+                    if isinstance(item.meta, metadata.Metadata):
+                        if item.meta.size is None:
+                            item.meta.size = item_size_store.size
+                            size_augmented = True
+                        else:
+                            assert item.meta.size == item_size_store.size
+                elif stat.S_ISDIR(vfs_mode):
+                    assert(0)  # handled above
+                elif stat.S_ISLNK(vfs_mode):
+                    (mode, id) = (GIT_MODE_SYMLINK, dstrepo.write_symlink(item.meta.symlink_target))
+                    if item.meta.size is None:
+                        item.meta.size = len(item.meta.symlink_target)
+                        size_augmented = True
+                    else:
+                        assert item.meta.size == len(item.meta.symlink_target)
+                    item_size_store.size = len(item.meta.symlink_target)
+                else:
+                    # Everything else should be fully described by its
+                    # metadata, so just record an empty blob, so the paths
+                    # in the tree and .bupm will match up.
+                    (mode, id) = (GIT_MODE_FILE, dstrepo.write_data(b''))
+
+                if id:
+                    if size_augmented or id != item.oid:
+                        wdbc.execute('INSERT INTO %s (src, dst, mode, size) VALUES (?, ?, ?, ?)' % tablename,
+                                     (item.oid, id, mode, item_size_store.size))
+                    stack.append(file, vfs_mode, mode, id, item.meta)
+
+            # pop all parts above the root folder
+            while not stack.parent.nothing:
+                stack, _ = stack.pop()
+
+            # and the root - separately to get the tree
+            stack, tree = stack.pop()
+
+            cat = srcrepo.cat(hexlify(commit.coid))
+            info = next(cat)
+            data = b''.join(cat)
+            ci = git.parse_commit(data)
+            newref = dstrepo.write_commit(tree, oldref,
+                                          ci.author_name + b' <' + ci.author_mail + b'>',
+                                          ci.author_sec, ci.author_offset,
+                                          ci.committer_name + b' <' + ci.committer_mail + b'>',
+                                          ci.committer_sec, ci.committer_offset,
+                                          ci.message)
+
+            dstrepo.update_ref(dstref, newref, oldref)
+            oldref = newref
+finally:
+    # we can always commit since those are the things we did OK
+    workdb_conn.commit()
+    workdb_conn.close()
