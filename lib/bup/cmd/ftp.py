@@ -7,11 +7,11 @@
 from __future__ import absolute_import, print_function
 import os, fnmatch, stat, sys, traceback
 
-from bup import _helpers, options, git, shquote, ls, vfs
+from bup import _helpers, options, shquote, ls, vfs
 from bup.compat import argv_bytes
 from bup.helpers import chunkyreader, log, saved_errors
 from bup.io import byte_stream, path_msg
-from bup.repo import LocalRepo
+from bup.repo import from_opts
 
 
 repo = None
@@ -95,6 +95,8 @@ def enter_completion(text, iteration):
 
 optspec = """
 bup ftp [commands...]
+--
+r,remote=         remote repository path
 """
 
 
@@ -230,11 +232,10 @@ def main(argv):
     o = options.Options(optspec)
     opt, flags, extra = o.parse_bytes(argv[1:])
 
-    git.check_repo_or_die()
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
     stdin = byte_stream(sys.stdin)
-    with LocalRepo() as repo:
+    with from_opts(opt, reverse=False) as repo:
         present_interface(stdin, out, extra, repo)
     if saved_errors:
         log('warning: %d errors encountered\n' % len(saved_errors))
