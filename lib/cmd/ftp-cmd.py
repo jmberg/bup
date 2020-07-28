@@ -59,14 +59,15 @@ def write_to_file(inf, outf):
 def inputiter():
     if os.isatty(stdin.fileno()):
         while 1:
+            prompt = b'bup %s> ' % (b'/'.join(name for name, item in pwd) or b'/', )
             if hasattr(_helpers, 'readline'):
                 try:
-                    yield _helpers.readline(b'bup> ')
+                    yield _helpers.readline(prompt)
                 except EOFError:
                     print()  # Clear the line for the terminal's next prompt
                     break
             else:
-                out.write(b'bup> ')
+                out.write(prompt)
                 out.flush()
                 read_line = stdin.readline()
                 if not read_line:
