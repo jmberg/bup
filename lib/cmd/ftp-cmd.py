@@ -28,7 +28,7 @@ from bup import _helpers, compat, options, git, shquote, ls, vfs
 from bup.compat import argv_bytes, fsdecode
 from bup.helpers import chunkyreader, handle_ctrl_c, log
 from bup.io import byte_stream, path_msg
-from bup.repo import LocalRepo
+from bup.repo import from_opts
 
 handle_ctrl_c()
 
@@ -139,16 +139,17 @@ def enter_completion(text, iteration):
 
 optspec = """
 bup ftp [commands...]
+--
+r,remote=         remote repository path
 """
 o = options.Options(optspec)
 opt, flags, extra = o.parse(compat.argv[1:])
 
-git.check_repo_or_die()
+repo = from_opts(opt, reverse=False)
 
 sys.stdout.flush()
 out = byte_stream(sys.stdout)
 stdin = byte_stream(sys.stdin)
-repo = LocalRepo()
 pwd = vfs.resolve(repo, b'/')
 rv = 0
 
