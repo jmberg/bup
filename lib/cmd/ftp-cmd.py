@@ -38,13 +38,14 @@ class OptionError(Exception):
 
 
 def do_ls(repo, args, out):
+    pwd_str = b'/'.join(name for name, item in pwd) or b'/'
     try:
         opt = ls.opts_from_cmdline([fsdecode(arg) for arg in args],
-                                   onabort=OptionError)
+                                   onabort=OptionError, pwd=pwd_str)
     except OptionError as e:
         log('error: %s' % e)
         return
-    return ls.within_repo(repo, opt, out)
+    return ls.within_repo(repo, opt, out, pwd_str)
 
 
 def write_to_file(inf, outf):
@@ -170,7 +171,6 @@ for line in lines:
     #log('execute: %r %r\n' % (cmd, parm))
     try:
         if cmd == b'ls':
-            # FIXME: respect pwd (perhaps via ls accepting resolve path/parent)
             do_ls(repo, words[1:], out)
             out.flush()
         elif cmd == b'cd':
