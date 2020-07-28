@@ -22,6 +22,11 @@ installed, you can use the \<tab\> key to complete filenames
 while navigating your backup data.  This will save you a
 lot of typing.
 
+# OPTIONS
+
+-r, \--remote=*host*:[*path*]
+:   browse the remote repository specified by this option instead of
+    the default one.
 
 # COMMANDS
 
