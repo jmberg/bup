@@ -6,11 +6,11 @@
 
 import os, fnmatch, stat, sys, traceback
 
-from bup import _helpers, options, git, shquote, ls, vfs
+from bup import _helpers, options, shquote, ls, vfs
 from bup.compat import argv_bytes
 from bup.helpers import chunkyreader, log
 from bup.io import byte_stream, path_msg
-from bup.repo import LocalRepo
+from bup.repo import main_repo_location, repo_for_location
 
 
 _repo = None
@@ -91,7 +91,9 @@ def enter_completion(text, iteration):
 
 
 optspec = """
-bup ftp [commands...]
+bup ftp [-r host:path] [commands...]
+--
+r,remote=   remote repository path
 """
 
 
@@ -224,11 +226,12 @@ def main(argv):
     global _repo
 
     o = options.Options(optspec)
-    extra = o.parse_bytes(argv[1:])[2]
+    opt, flags_, extra = o.parse_bytes(argv[1:])
 
-    git.check_repo_or_die()
+    loc = main_repo_location(argv_bytes(opt.remote) if opt.remote else None,
+                             o.fatal)
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
     stdin = byte_stream(sys.stdin)
-    with LocalRepo() as _repo:
+    with repo_for_location(loc) as _repo:
         present_interface(stdin, out, extra, _repo)

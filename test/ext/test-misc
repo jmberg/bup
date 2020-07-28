@@ -151,6 +151,8 @@ WVPASSEQ "$(bup ls -dR lsrec/latest/a)" "lsrec/latest/a"
 WVPASSEQ "$(bup ls -R -r -:"$PWD/$D/.bup" lsrec/latest/a)" "b
 b/deep
 mid"
+WVPASSEQ "$(echo 'ls lsrec/latest/a' | bup ftp -r -:"$PWD/$D/.bup")" "b
+mid"
 WVPASS force-delete $D
 
 

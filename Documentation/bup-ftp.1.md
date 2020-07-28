@@ -8,7 +8,7 @@ bup-ftp - ftp-like client for navigating bup repositories
 
 # SYNOPSIS
 
-bup ftp
+bup ftp [-r *host*:[*path*]]
 
 # DESCRIPTION
 
@@ -16,6 +16,9 @@ bup ftp
 repositories.  It has commands similar to the Unix `ftp`(1)
 command.  The file hierarchy is the same as that shown by
 `bup-fuse`(1) and `bup-ls`(1).
+
+With `-r`, browse the specified remote repository, by default via
+SSH.  See `bup`(1) REMOTE OPTIONS for further information.
 
 Note: if your system has the python-readline library
 installed, you can use the \<tab\> key to complete filenames
