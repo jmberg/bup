@@ -152,6 +152,11 @@ refsname = ... [optional, default "refs"]
   the same repository with the same name, in different refs files.
   NOTE: With the AWS storage backend, this must be UTF-8.
 
+compressalgo = ... [optional, default "zlib"]
+: This indicates what compression algorithm to use, zlib is the default
+  (inherited from git) and in addition zstd is supported. If zstd is
+  selected, the core.compression/pack.compression options are allowed to
+  take values allowed by zstd (1 - 22).
 
 # BUGS
 
