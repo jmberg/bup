@@ -105,6 +105,7 @@ values are stored in little endian:
 |         |  +
 |         |  | 3      | compression type
 |         |  |        |  1 - zlib
+|         |  |        |  2 - zstd
 |         |  +
 |         |  | 4 - EH | secret key for the remainder of the file
 ...
@@ -143,6 +144,10 @@ from __future__ import absolute_import
 import os
 import struct
 import zlib
+try:
+    import zstandard as zstd
+except ImportError:
+    zstd = None
 import json
 import glob
 import fnmatch
@@ -192,12 +197,24 @@ class EncryptedContainer(object):
     HEADER, OBJ = range(2)
 
     def __init__(self, repo, storage, name, mode, kind, compression=None,
-                 key=None, idxwriter=None, overwrite=None):
+                 key=None, idxwriter=None, overwrite=None, compressor='zlib'):
         self.file = None # for __del__ in case of exceptions
         assert mode in ('r', 'w')
-        assert compression in range(-1, 10) or mode == 'r'
         self.mode = mode
-        self.compression = compression
+        self._make_compressor = None
+        if mode == 'w':
+            if compressor == 'zlib':
+                assert compression in range(-1, 10)
+                self._make_compressor = lambda size: zlib.compressobj(compression)
+                compression_type = 1
+            elif compressor == 'zstd':
+                if zstd is None:
+                    raise Exception("zstd compression requires the zstandard module")
+                assert compression in range(-1, 23)
+                self._make_compressor = lambda size: zstd.ZstdCompressor(compression).compressobj(size=size)
+                compression_type = 2
+            else:
+                raise Exception('Unsupported compression algorithm %s' % compressor)
         self.idxwriter = idxwriter
         self._used_nonces = set()
         self._blobbits_cache = None
@@ -242,7 +259,13 @@ class EncryptedContainer(object):
             assert fmt == 1
             assert alg == 1
             assert tp == self.filetype, "type %d doesn't match %d (%s)" % (tp, self.filetype, name)
-            assert compr == 1
+            assert compr in (1, 2)
+            if compr == 1:
+                self._decompress = zlib.decompress
+            elif compr == 2:
+                if zstd is None:
+                    raise Exception("zstd compression requires the zstandard module")
+                self._decompress = zstd.ZstdDecompressor().decompress
             self.box = libnacl.secret.SecretBox(inner_hdr[4:])
             self._check = None
             self.offset = self.headerlen
@@ -250,7 +273,7 @@ class EncryptedContainer(object):
             assert key is not None
             self.file = storage.get_writer(name, kind, overwrite=overwrite)
             self.box = libnacl.secret.SecretBox()
-            inner_hdr = struct.pack('<BBBB', 1, 1, self.filetype, 1)
+            inner_hdr = struct.pack('<BBBB', 1, 1, self.filetype, compression_type)
             inner_hdr += self.box.sk
             if header_alg == 1:
                 hdrbox = libnacl.sealed.SealedBox(key)
@@ -286,8 +309,8 @@ class EncryptedContainer(object):
     def _write(self, data, dtype, objtype=None):
         assert self.mode == 'w'
         if dtype == self.OBJ:
-            z = zlib.compressobj(self.compression)
             objtypeb = struct.pack('B', objtype)
+            z = self._make_compressor(len(objtypeb) + len(data))
             data = z.compress(objtypeb) + z.compress(data) + z.flush()
             data = self.box.encrypt(data, self.nonce(NONCE_DATA),
                                     pack_nonce=False)[1]
@@ -359,7 +382,7 @@ class EncryptedContainer(object):
         data = self.file.read(sz)
         assert len(data) == sz
         data = self.box.decrypt(data, self.nonce(NONCE_DATA, write=False))
-        data = zlib.decompress(data)
+        data = self._decompress(data)
         objtype = struct.unpack('B', data[:1])[0]
         return objtype, data[1:]
 
@@ -420,6 +443,11 @@ class EncryptedRepo(ConfigRepo):
             assert self.readkey is not None, "at least one of 'readkey' or 'writekey' is required"
             self.writekey = self.readkey.pk
 
+        compressalgo = self.config(b'bup.compressalgo')
+        if compressalgo is None:
+            self.compressor = 'zlib'
+        else:
+            self.compressor = compressalgo.decode('ascii')
         self.compression = self.compression_level
         if self.compression is None:
             self.compression = -1
@@ -459,7 +487,8 @@ class EncryptedRepo(ConfigRepo):
                                            b'pack-%s.encpack' % hexsha, 'w',
                                            kind, self.compression,
                                            key=self.writekey,
-                                           idxwriter=git.PackIdxV2Writer())
+                                           idxwriter=git.PackIdxV2Writer(),
+                                           compressor=self.compressor)
 
     def _ensure_data_writer(self):
         if self.data_writer is not None and self.data_writer.size > self.max_pack_size:
@@ -526,7 +555,8 @@ class EncryptedRepo(ConfigRepo):
         reffile = EncryptedContainer(self, self.storage, self.refsname, 'w',
                                      Kind.CONFIG, self.compression,
                                      key=self.repokey,
-                                     overwrite=readfile)
+                                     overwrite=readfile,
+                                     compressor=self.compressor)
         reffile.write(0, None, json.dumps(refs).encode('utf-8'))
         reffile.finish()
 
@@ -709,7 +739,8 @@ class EncryptedRepo(ConfigRepo):
         encidx = EncryptedContainer(self, self.storage,
                                     b'pack-%s.encidx' % hexsha,
                                     'w', Kind.IDX, self.compression,
-                                    key=self.repokey)
+                                    key=self.repokey,
+                                    compressor=self.compressor)
         encidx.write(0, None, open(idxname, 'rb').read())
         encidx.finish()
 
