@@ -104,6 +104,7 @@ values are stored in little endian:
 |         |  |        |  3 - config
 |         |  +
 |         |  | 3      | compression type
+|         |  |        |  0 - no compression
 |         |  |        |  1 - zlib
 |         |  |        |  2 - zstd
 |         |  +
@@ -193,6 +194,12 @@ class EncryptedVuintReader:
         assert self.offs < len(self.vuint_cs)
         return ret
 
+class NoneCompressor:
+    def compress(self, data):
+        return data
+    def flush(self):
+        return b''
+
 class EncryptedContainer(object):
     HEADER, OBJ = range(2)
 
@@ -213,6 +220,9 @@ class EncryptedContainer(object):
                 assert compression in range(-1, 23)
                 self._make_compressor = lambda size: zstd.ZstdCompressor(compression).compressobj(size=size)
                 compression_type = 2
+            elif compressor == 'none':
+                self._make_compressor = lambda size: NoneCompressor()
+                compression_type = 0
             else:
                 raise Exception('Unsupported compression algorithm %s' % compressor)
         self.idxwriter = idxwriter
@@ -259,8 +269,10 @@ class EncryptedContainer(object):
             assert fmt == 1
             assert alg == 1
             assert tp == self.filetype, "type %d doesn't match %d (%s)" % (tp, self.filetype, name)
-            assert compr in (1, 2)
-            if compr == 1:
+            assert compr in (0, 1, 2)
+            if compr == 0:
+                self._decompress = lambda data: data
+            elif compr == 1:
                 self._decompress = zlib.decompress
             elif compr == 2:
                 if zstd is None:
