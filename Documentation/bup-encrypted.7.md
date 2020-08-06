@@ -157,6 +157,10 @@ compressalgo = ... [optional, default "zlib"]
   (inherited from git) and in addition zstd is supported. If zstd is
   selected, the core.compression/pack.compression options are allowed to
   take values allowed by zstd (1 - 22).
+  Also, none can be used to not compress the data at all, this may be of
+  use for benchmarking or to be faster at the expense of using more space
+  for the data. Note that metadata etc. will always be compressed, this
+  setting isn't really recommended in any scenario.
 
 # BUGS
 
