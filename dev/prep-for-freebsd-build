@@ -18,6 +18,8 @@ pkg install rdiff-backup || true
 
 pkgs='gmake git bash rsync curl par2cmdline readline duplicity'
 pkgs="$pkgs rsnapshot"
+# for sha1sum
+pkgs="$pkgs busybox"
 
 case "$pyver" in
     python2)
@@ -34,3 +36,5 @@ case "$pyver" in
         exit 2
         ;;
 esac
+
+(cd /usr/local/bin && ln -s busybox sha1sum)
