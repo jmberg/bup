@@ -9,6 +9,7 @@ from os import environ
 from subprocess import PIPE, Popen
 import sys, os, pwd, subprocess, errno, socket, select, mmap, stat, re, struct
 import hashlib, heapq, math, operator, time, grp, tempfile
+from math import ceil
 
 from bup import _helpers
 from bup import compat
@@ -156,11 +157,15 @@ def _hard_write(fd, buf):
 
 
 _last_prog = 0
+_active_progressbar = None
 def log(s):
     """Print a log message to stderr."""
     global _last_prog
     sys.stdout.flush()
-    _hard_write(sys.stderr.fileno(), s if isinstance(s, bytes) else s.encode())
+    if _active_progressbar:
+        _active_progressbar.message(s if isinstance(s, bytes) else s.encode())
+    else:
+        _hard_write(sys.stderr.fileno(), s if isinstance(s, bytes) else s.encode())
     _last_prog = 0
 
 
@@ -184,6 +189,107 @@ def progress(s):
         log(s)
         _last_progress = s
 
+
+TIME_ESTIMATE_CUTOFF = 5 # seconds
+
+
+class ProgressBar:
+    def __init__(self, total):
+        self._done = 0
+        self._total = total
+        self._last = 0
+        self._tty_width = tty_width()
+        self._start = time.time()
+        self._msg = ''
+        if self._tty_width < 30 or not istty2:
+            self._log = lambda msg: None
+        else:
+            self._log = lambda s: _hard_write(sys.stderr.fileno(), s if isinstance(s, bytes) else s.encode())
+
+    def _bar(self):
+        n = self._done
+        total = self._total
+        width = self._tty_width - 2
+        _log = self._log
+
+        if n == total:
+            _log(b'|' + b'=' * width + b'|')
+        elif n == 0:
+            _log(b'|' + b' ' * width + b'|')
+        else:
+            partial = (width * n) // total
+            if partial > 0:
+                partial -= 1
+            _log(b'|' + b'=' * partial + b'>' + b' ' * (width - partial - 1) + b'|')
+
+    def _timestr(self, t):
+        t = ceil(t)
+        hours = int(t / 60 / 60)
+        mins = int(t / 60 - hours * 60)
+        if hours:
+            return ' (%dh%dm)' % (hours, mins)
+        secs = int(t - hours * 60 * 60 - mins * 60)
+        return ' (%dm%ds)' % (mins, secs)
+
+    def _update(self):
+        _log = self._log
+
+        _log(b'\n')
+        self._bar()
+        _log(b'\033[F')
+
+        _log(self._msg)
+        now = time.time()
+        _start = self._start
+        elapsed = now - _start
+        if elapsed > TIME_ESTIMATE_CUTOFF:
+            remain = elapsed / self._done * (self._total - self._done)
+            _log(self._timestr(remain))
+
+
+    def __enter__(self):
+        global _active_progressbar
+        self._previous = _active_progressbar
+        _active_progressbar = self
+        return self
+
+    def __exit__(self, type, value, traceback):
+        global _active_progressbar
+        _active_progressbar = self._previous
+        _log = self._log
+        _log(b'\r')
+        _log(self._msg)
+        _log(' Done')
+        now = time.time()
+        start = self._start
+        elapsed = now - start
+        if elapsed > TIME_ESTIMATE_CUTOFF:
+            _log(self._timestr(elapsed))
+        _log('.\n')
+        _log(' ' * self._tty_width)
+        _log(b'\r')
+
+    def update(self, done, msg):
+        _total = self._total
+        if done > _total:
+            self._done = _total
+        else:
+            self._done = done
+        self._msg = msg
+        now = time.time()
+        if now - self._last > 0.1:
+            self._last = now
+            self._update()
+
+    def _blank(self):
+        _log = self._log
+        _log(b'\r' + ' ' * _active_progressbar._tty_width + b'\n')
+        _log(b'\r' + ' ' * _active_progressbar._tty_width + b'\r\033[F')
+
+    def message(self, msg):
+        self._blank()
+        _hard_write(sys.stderr.fileno(), msg)
+        self._update()
 
 def qprogress(s):
     """Calls progress() only if we haven't printed progress in a while.
