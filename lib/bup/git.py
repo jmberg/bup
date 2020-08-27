@@ -34,6 +34,7 @@ from bup.helpers import (EXIT_FAILURE,
                          nullcontext_if_not,
                          progress, qprogress,
                          stopped,
+                         suspend_progress,
                          temp_dir,
                          unlink)
 from bup.io import cmd_msg, enc_shs, path_msg
@@ -210,25 +211,26 @@ def repo_rel(path):
 
 
 def auto_midx(objdir):
-    args = [bup.path.exe(), b'midx', b'--auto', b'--dir', objdir]
-    try:
-        rv = subprocess.call(args, stdout=DEVNULL)
-    except OSError as e:
-        # make sure 'args' gets printed to help with debugging
-        add_error('%r: exception: %s' % (args, e))
-        raise
-    if rv:
-        add_error('%r: returned %d' % (args, rv))
+    with suspend_progress():
+        args = [bup.path.exe(), b'midx', b'--auto', b'--dir', objdir]
+        try:
+            rv = subprocess.call(args, stdout=DEVNULL)
+        except OSError as e:
+            # make sure 'args' gets printed to help with debugging
+            add_error('%r: exception: %s' % (args, e))
+            raise
+        if rv:
+            add_error('%r: returned %d' % (args, rv))
 
-    args = [bup.path.exe(), b'bloom', b'--dir', objdir]
-    try:
-        rv = subprocess.call(args, stdout=DEVNULL)
-    except OSError as e:
-        # make sure 'args' gets printed to help with debugging
-        add_error('%r: exception: %s' % (args, e))
-        raise
-    if rv:
-        add_error('%r: returned %d' % (args, rv))
+        args = [bup.path.exe(), b'bloom', b'--dir', objdir]
+        try:
+            rv = subprocess.call(args, stdout=DEVNULL)
+        except OSError as e:
+            # make sure 'args' gets printed to help with debugging
+            add_error('%r: exception: %s' % (args, e))
+            raise
+        if rv:
+            add_error('%r: returned %d' % (args, rv))
 
 
 def mangle_name(name, mode, gitmode):
