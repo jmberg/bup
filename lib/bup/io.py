@@ -1,9 +1,13 @@
 
+from contextlib import contextmanager
 from errno import EAGAIN
+from math import ceil
 from os import fsdecode
 from stat import S_ISDIR
 import mmap as py_mmap
 import os, select, sys, time
+
+from bup.options import _tty_width as tty_width
 
 
 # Get the umask once, early, so we can avoid further global changes.
@@ -32,14 +36,19 @@ def _hard_write(fd, buf):
 _clear_line_seq = b'\x1b[0K'
 _last_prog = 0
 _last_progress = ''
+_active_progressbar = None
 
 def log(s):
     """Print a log message to stderr."""
     global _last_prog
-    if _last_prog and _last_progress.endswith('\r'):
-        _hard_write(sys.stderr.fileno(), _clear_line_seq)
     sys.stdout.flush()
-    _hard_write(sys.stderr.fileno(), s if isinstance(s, bytes) else s.encode())
+    msg = s if isinstance(s, bytes) else s.encode()
+    if _active_progressbar:
+        _active_progressbar.message(msg)
+    else:
+        if _last_prog and _last_progress.endswith('\r'):
+            _hard_write(sys.stderr.fileno(), _clear_line_seq)
+        _hard_write(sys.stderr.fileno(), msg)
     _last_prog = 0
 
 
@@ -87,6 +96,144 @@ def reprogress():
     """
     if _last_progress and _last_progress.endswith('\r'):
         progress(_last_progress)
+
+
+TIME_ESTIMATE_CUTOFF = 5 # seconds
+_ROUNDTRIP_TIME = 10 # seconds for the moving bar to cross the width
+
+
+@contextmanager
+def suspend_progress():
+    """Temporarily hide the active ProgressBar, if there is one.
+
+    Useful while a subprocess writes to the terminal.
+    """
+    if not _active_progressbar:
+        yield None
+        return
+    _active_progressbar.suspend()
+    try:
+        yield None
+    finally:
+        _active_progressbar.resume()
+
+
+class ProgressBar:
+    """Show a progress bar with an estimated remaining time on stderr.
+
+    Use as a context manager.  While it is active, log() messages are
+    printed above the bar.  With total=None, the bar is a moving
+    indicator showing that progress is being made.
+    """
+
+    def __init__(self, total=None):
+        self._done = 0
+        self._total = total
+        self._last = 0.0
+        self._tty_width = tty_width()
+        self._enabled = self._tty_width >= 30 and istty2
+        self._start = time.time()
+        self._msg = ''
+        self._previous = None
+
+    def _log(self, s):
+        if self._enabled:
+            _hard_write(sys.stderr.fileno(),
+                        s if isinstance(s, bytes) else s.encode())
+
+    def _bar(self):
+        n = self._done
+        total = self._total
+        width = self._tty_width - 2
+
+        if total is not None:
+            if n == total:
+                self._log(b'|' + b'=' * width + b'|')
+            elif n == 0:
+                self._log(b'|' + b' ' * width + b'|')
+            else:
+                partial = int(width * n / total)
+                if partial > 0:
+                    partial -= 1
+                self._log(b'|' + b'=' * partial + b'>'
+                          + b' ' * (width - partial - 1) + b'|')
+        else:
+            width -= 3 # width of the indicator
+            fposition = (time.time() - self._start) % _ROUNDTRIP_TIME
+            position = int(width * fposition / _ROUNDTRIP_TIME * 2)
+            if position > width:
+                position = width - (position - width)
+            self._log(b'|' + b' ' * position + b'<=>'
+                      + b' ' * (width - position) + b'|')
+
+    def _timestr(self, t):
+        t = ceil(t)
+        hours = int(t / 60 / 60)
+        mins = int(t / 60 - hours * 60)
+        if hours:
+            return ' (%dh%dm)' % (hours, mins)
+        secs = int(t - hours * 60 * 60 - mins * 60)
+        return ' (%dm%ds)' % (mins, secs)
+
+    def _update(self):
+        self._log(b'\n')
+        self._bar()
+        self._log(b'\033[F')
+
+        self._log(self._msg)
+        elapsed = time.time() - self._start
+        # The remaining time is only estimated once some progress was made.
+        if self._total and self._done and elapsed > TIME_ESTIMATE_CUTOFF:
+            remain = elapsed / self._done * (self._total - self._done)
+            self._log(self._timestr(remain))
+        self._log(_clear_line_seq)
+
+    def _blank(self):
+        # Clear the message line and the bar line below it, then return
+        # to the message line.
+        self._log(b'\r' + _clear_line_seq + b'\n\r' + _clear_line_seq
+                  + b'\033[F')
+
+    def __enter__(self):
+        global _active_progressbar
+        self._previous = _active_progressbar
+        _active_progressbar = self
+        return self
+
+    def __exit__(self, type, value, traceback):
+        global _active_progressbar
+        # must leave in the right order to un-nest properly
+        assert self is _active_progressbar
+        _active_progressbar = self._previous
+        self._blank()
+        self._log(self._msg)
+        self._log(b' Done.')
+        elapsed = time.time() - self._start
+        if elapsed > TIME_ESTIMATE_CUTOFF:
+            self._log(self._timestr(elapsed))
+        self._log(b'\n')
+
+    def update(self, done, msg):
+        total = self._total
+        if total is not None and done > total:
+            done = total
+        self._done = done
+        self._msg = msg
+        now = time.time()
+        if now - self._last > 0.1:
+            self._last = now
+            self._update()
+
+    def message(self, msg):
+        self._blank()
+        _hard_write(sys.stderr.fileno(), msg)
+        self._update()
+
+    def suspend(self):
+        self._blank()
+
+    def resume(self):
+        self._update()
 
 
 def byte_stream(file):

@@ -16,6 +16,7 @@ from bup.compat import argv_bytes
 from bup.io import byte_stream, debug1, debug2, log, path_msg
 # pylint: disable=unused-import
 from bup.io import istty1, istty2, progress, qprogress, reprogress
+from bup.io import ProgressBar, suspend_progress
 # pylint: enable=unused-import
 # This function should really be in helpers, not in bup.options.  But we
 # want options.py to be standalone so people can include it in other projects.
