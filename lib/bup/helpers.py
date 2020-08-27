@@ -10,6 +10,8 @@ from tempfile import mkdtemp
 from shutil import rmtree
 import sys, os, subprocess, errno, select, mmap, stat, re, struct
 import hashlib, heapq, math, operator, time
+from math import ceil
+from contextlib import contextmanager
 
 from bup import _helpers
 from bup import io
@@ -185,11 +187,15 @@ def _hard_write(fd, buf):
 
 
 _last_prog = 0
+_active_progressbar = None
 def log(s):
     """Print a log message to stderr."""
     global _last_prog
     sys.stdout.flush()
-    _hard_write(sys.stderr.fileno(), s if isinstance(s, bytes) else s.encode())
+    if _active_progressbar:
+        _active_progressbar.message(s if isinstance(s, bytes) else s.encode())
+    else:
+        _hard_write(sys.stderr.fileno(), s if isinstance(s, bytes) else s.encode())
     _last_prog = 0
 
 
@@ -213,6 +219,131 @@ def progress(s):
         log(s)
         _last_progress = s
 
+
+TIME_ESTIMATE_CUTOFF = 5 # seconds
+
+
+@contextmanager
+def suspend_progress():
+    if not _active_progressbar:
+        yield None
+    else:
+        _active_progressbar.suspend()
+        yield None
+        _active_progressbar.resume()
+
+
+class ProgressBar:
+    def __init__(self, total=None):
+        self._done = 0
+        self._total = total
+        self._last = 0.0
+        self._tty_width = tty_width()
+        self._start = time.time()
+        self._msg = ''
+        if self._tty_width < 30 or not istty2:
+            self._log = lambda msg: None
+        else:
+            self._log = lambda s: _hard_write(sys.stderr.fileno(), s if isinstance(s, bytes) else s.encode())
+
+    def _bar(self):
+        n = self._done
+        total = self._total
+        width = self._tty_width - 2
+        _log = self._log
+
+        if total is not None:
+            if n == total:
+                _log(b'|' + b'=' * width + b'|')
+            elif n == 0:
+                _log(b'|' + b' ' * width + b'|')
+            else:
+                partial = int(width * n / total)
+                if partial > 0:
+                    partial -= 1
+                _log(b'|' + b'=' * partial + b'>' + b' ' * (width - partial - 1) + b'|')
+        else:
+            width -= 3 # width of the indicator
+            fposition = (time.time() - self._start)
+            _ROUNDTRIP_TIME = 10
+            while fposition > _ROUNDTRIP_TIME:
+                fposition -= _ROUNDTRIP_TIME
+            position = int(width * fposition / _ROUNDTRIP_TIME * 2)
+            if position > width:
+                position = width - (position - width)
+            _log(b'|' + b' ' * position + b'<=>' + b' ' * (width - position) + b'|')
+
+    def _timestr(self, t):
+        t = ceil(t)
+        hours = int(t / 60 / 60)
+        mins = int(t / 60 - hours * 60)
+        if hours:
+            return ' (%dh%dm)' % (hours, mins)
+        secs = int(t - hours * 60 * 60 - mins * 60)
+        return ' (%dm%ds)' % (mins, secs)
+
+    def _update(self):
+        _log = self._log
+
+        _log(b'\n')
+        self._bar()
+        _log(b'\033[F')
+
+        _log(self._msg)
+        now = time.time()
+        _start = self._start
+        elapsed = now - _start
+        if self._total and elapsed > TIME_ESTIMATE_CUTOFF:
+            remain = elapsed / self._done * (self._total - self._done)
+            _log(self._timestr(remain))
+
+    def __enter__(self):
+        global _active_progressbar
+        self._previous = _active_progressbar
+        _active_progressbar = self
+        return self
+
+    def __exit__(self, type, value, traceback):
+        global _active_progressbar
+        # must leave in the right order to un-nest properly
+        assert self == _active_progressbar
+        _log = self._log
+        _active_progressbar = self._previous
+        self._blank()
+        _log(self._msg)
+        _log(b' Done.')
+        elapsed = time.time() - self._start
+        if elapsed > TIME_ESTIMATE_CUTOFF:
+            _log(self._timestr(elapsed))
+        _log(b'\n')
+
+    def update(self, done, msg):
+        _total = self._total
+        if _total is not None and done > _total:
+            self._done = _total
+        else:
+            self._done = done
+        self._msg = msg
+        now = time.time()
+        if now - self._last > 0.1:
+            self._last = now
+            self._update()
+
+    def _blank(self):
+        _log = self._log
+        _log(b'\r' + b' ' * self._tty_width + b'\r\033[F')
+        _log(b'\r' + b' ' * self._tty_width + b'\r')
+
+    def message(self, msg):
+        self._blank()
+        _hard_write(sys.stderr.fileno(), msg)
+        self._update()
+
+    def suspend(self):
+        self._blank()
+
+    def resume(self):
+        self._update()
 
 def qprogress(s):
     """Calls progress() only if we haven't printed progress in a while.
