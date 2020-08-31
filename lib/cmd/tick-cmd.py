@@ -20,6 +20,7 @@ import os, sys, time
 sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import compat, options
+from bup.helpers import ProgressBar, log
 
 
 optspec = """
@@ -34,3 +35,10 @@ if extra:
 t = time.time()
 tleft = 1 - (t - int(t))
 time.sleep(tleft)
+
+with ProgressBar(1000) as p:
+    for i in range(1001):
+        time.sleep(0.01)
+        if i % 100 == 10:
+            log("i is now %d\n" % i)
+        p.update(i, "Receiving %d/%d." % (i, 1000))
