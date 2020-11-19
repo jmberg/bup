@@ -5,17 +5,17 @@ from bup import vfs
 from bup.compat import pending_raise, bytes_from_byte
 
 
-_next_repo_id = 0
-_repo_ids = {}
+_next_repo_cache_id = 0
+_repo_cache_ids = {}
 
-def _repo_id(key):
-    global _next_repo_id, _repo_ids
-    repo_id = _repo_ids.get(key)
-    if repo_id:
-        return repo_id
-    next_id = _next_repo_id = _next_repo_id + 1
-    _repo_ids[key] = next_id
-    return next_id
+def _repo_cache_id(key):
+    global _next_repo_cache_id, _repo_cache_ids
+    repo_cache_id = _repo_cache_ids.get(key)
+    if repo_cache_id is not None:
+        return repo_cache_id
+    repo_cache_id = _next_repo_cache_id = _next_repo_cache_id + 1
+    _repo_cache_ids[key] = repo_cache_id
+    return repo_cache_id
 
 def notimplemented(fn):
     def newfn(obj, *args, **kwargs):
@@ -26,7 +26,7 @@ class BaseRepo:
     def __init__(self, key, compression_level=None,
                  max_pack_size=None, max_pack_objects=None):
         self.closed = False
-        self._id = _repo_id(key)
+        self.vfs_cache_id = _repo_cache_id(key)
         self.compression_level = compression_level
         self.max_pack_size = max_pack_size
         self.max_pack_objects = max_pack_objects
@@ -46,12 +46,6 @@ class BaseRepo:
     def __exit__(self, type, value, traceback):
         with pending_raise(value, rethrow=False):
             self.close()
-
-    def id(self):
-        """Return an identifier that differs from any other repository that
-        doesn't share the same repository-specific information
-        (e.g. refs, tags, etc.)."""
-        return self._id
 
     def is_remote(self):
         return False
