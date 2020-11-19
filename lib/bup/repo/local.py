@@ -25,12 +25,17 @@ class LocalRepo(BaseRepo):
         self._dumb_server_mode = None
         self.objcache_maker = objcache_maker
 
+    def write_repo_id(self, new_id):
+        git.git_config_write(b'bup.repo-id', new_id, repo_dir=self.repo_dir)
+
     @classmethod
     def create(self, repo_dir=None):
         # FIXME: this is not ideal, we should somehow
         # be able to call the constructor instead?
         git.init_repo(repo_dir)
         git.check_repo_or_die(repo_dir)
+        # ensure it gets a repo-id
+        LocalRepo(repo_dir)
 
     @property
     def dumb_server_mode(self):
