@@ -1,7 +1,7 @@
 
 from binascii import hexlify, unhexlify
 import os, re, struct, sys, time, zlib
-import socket
+import socket, shutil
 
 from bup import git, ssh, vfs, vint, protocol, path
 from bup.compat import pending_raise
@@ -83,12 +83,7 @@ class Client:
         self.sock = self.p = self.pout = self.pin = None
         try:
             (self.protocol, self.host, self.port, self.dir) = parse_remote(remote)
-            # The b'None' here matches python2's behavior of b'%s' % None == 'None',
-            # python3 will (as of version 3.7.5) do the same for str ('%s' % None),
-            # but crashes instead when doing b'%s' % None.
-            cachehost = b'None' if self.host is None else self.host
-            cachedir = b'None' if self.dir is None else self.dir
-            self.cachedir = path.indexcache(b'%s:%s' % (cachehost, cachedir))
+
             if self.protocol == b'bup-rev':
                 self.pout = os.fdopen(3, 'rb')
                 self.pin = os.fdopen(4, 'wb')
@@ -119,6 +114,24 @@ class Client:
                 else:
                     self.conn.write(b'set-dir %s\n' % self.dir)
                 self.check_ok()
+
+            # Set up the index-cache directory, prefer using the repo-id
+            # if the remote repo has one (that can be accessed)
+            repo_id = self.config_get(b'bup.repo-id')
+            # The b'None' here matches python2's behavior of b'%s' % None == 'None',
+            # python3 will (as of version 3.7.5) do the same for str ('%s' % None),
+            # but crashes instead when doing b'%s' % None.
+            cachehost = b'None' if self.host is None else self.host
+            cachedir = b'None' if self.dir is None else self.dir
+            cachedir = path.indexcache(b'%s:%s' % (cachehost, cachedir))
+            if repo_id is not None:
+                self.cachedir = path.indexcache(repo_id)
+                # upgrade path - if we have the old but not the new name, move it
+                if os.path.exists(cachedir) and not os.path.exists(self.cachedir):
+                    shutil.move(cachedir, self.cachedir)
+            else:
+                self.cachedir = cachedir
+
             self.sync_indexes()
         except BaseException as ex:
             with pending_raise(ex):

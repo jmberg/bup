@@ -37,6 +37,9 @@ class LocalRepo(BaseRepo):
         # be able to call the constructor instead?
         git.init_repo(repo_dir)
         git.check_repo_or_die(repo_dir)
+        # ensure it gets a repo-id
+        with LocalRepo(repo_dir):
+            pass
 
     def list_indexes(self):
         yield from os.listdir(git.repo(b'objects/pack', repo_dir=self.repo_dir))

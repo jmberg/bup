@@ -112,6 +112,7 @@ test-split-join()
     WVPASS test "ref: refs/heads/main" = "$(< this-bup/HEAD)" \
            -o "ref: refs/heads/master" = "$(< this-bup/HEAD)"
     WVPASS rm {other,this}-bup/HEAD
+    WVPASS git config --file this-bup/config --unset bup.repo-id
     WVPASS "$top/dev/compare-trees" --no-times other-bup/ this-bup/
 
     WVPASS cd "$orig_dir"
