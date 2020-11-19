@@ -1,6 +1,8 @@
 
+import random
+
 from bup import vfs
-from bup.compat import pending_raise
+from bup.compat import pending_raise, bytes_from_byte
 
 
 _next_repo_id = 0
@@ -29,6 +31,7 @@ class BaseRepo(object):
         self.max_pack_size = max_pack_size
         self.max_pack_objects = max_pack_objects
         self.dumb_server_mode = False
+        self._ensure_repo_id()
 
     def close(self):
         self.closed = True
@@ -60,6 +63,16 @@ class BaseRepo(object):
         ## FIXME: mode_only=?
         return vfs.resolve(self, path, parent=parent,
                            want_meta=want_meta, follow=follow)
+
+    def _ensure_repo_id(self):
+        val = self.config_get(b'bup.repo-id')
+        if val is not None:
+            return
+        # create lots of random bits ...
+        randgen = random.SystemRandom()
+        chars = b'abcdefghijklmnopqrstuvwxyz0123456789'
+        new_id = b''.join(bytes_from_byte(randgen.choice(chars)) for x in range(31))
+        self.config_write(b'bup.repo-id', new_id)
 
     @notimplemented
     def config_get(self, name, opttype=None):
