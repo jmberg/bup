@@ -1,8 +1,10 @@
 
 from __future__ import absolute_import
 
+import random
+
 from bup import vfs
-from bup.compat import pending_raise
+from bup.compat import pending_raise, bytes_from_byte
 
 
 _next_repo_cache_id = 0
@@ -45,6 +47,7 @@ class BaseRepo(object):
         # the local (otherwise unused) repo's config
         self.max_pack_size = max_pack_size
         self.max_pack_objects = max_pack_objects
+        self.ensure_repo_id()
 
     def close(self):
         self.closed = True
@@ -82,12 +85,29 @@ class BaseRepo(object):
         return vfs.resolve(self, path, parent=parent,
                            want_meta=want_meta, follow=follow)
 
+    def ensure_repo_id(self):
+        val = self.config(b'bup.repo-id')
+        if val is not None:
+            return
+        # create lots of random bits ...
+        randgen = random.SystemRandom()
+        chars = b'abcdefghijklmnopqrstuvwxyz0123456789'
+        new_id = b''.join(bytes_from_byte(randgen.choice(chars)) for x in range(31))
+        self.write_repo_id(new_id)
+
     @notimplemented
     def config(self, name, opttype=None):
         """
         Return the configuration value of 'name', returning None if it doesn't
         exist. opttype may be 'int' or 'bool' to return the value per git's
         parsing of --int or --bool.
+        """
+
+    @notimplemented
+    def write_repo_id(self, new_id):
+        """
+        Write the given 'new_id' to the configuration file to be retrieved
+        later with the b'bup.repo-id' key.
         """
 
     @notimplemented

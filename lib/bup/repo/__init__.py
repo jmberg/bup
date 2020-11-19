@@ -23,6 +23,9 @@ class ConfigRepo(base.BaseRepo):
         assert isinstance(k, bytes)
         return git.git_config_get(k, cfg_file=self.cfg_file, opttype=opttype)
 
+    def write_repo_id(self, new_id):
+        git.git_config_write(b'bup.repo-id', new_id, cfg_file=self.cfg_file)
+
 def _make_config_repo(host, port, path, create):
     if not (host is None and port is None and path is not None):
         raise Exception('Must use "config:///path/to/file.conf"!')
