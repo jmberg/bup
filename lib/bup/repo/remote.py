@@ -13,6 +13,8 @@ class RemoteRepo(BaseRepo):
         self.client = None
         self.client = client.Client(address)
         self.config = self.client.config
+        # we pass config through to the client, so don't need our own repo ID
+        self.ensure_repo_id = lambda : None
         # init the superclass only afterwards so it can access self.config()
         super(RemoteRepo, self).__init__(address,
                                          compression_level=compression_level,
