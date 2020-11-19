@@ -264,7 +264,6 @@ def test_read_and_seek(tmpdir):
     environ[b'GIT_DIR'] = bup_dir
     environ[b'BUP_DIR'] = bup_dir
     git.repodir = bup_dir
-    repo = LocalRepo()
     data_path = tmpdir + b'/src'
     os.mkdir(data_path)
     seed = randint(-(1 << 31), (1 << 31) - 1)
@@ -286,6 +285,7 @@ def test_read_and_seek(tmpdir):
     sizes.add(max_size)
     print('test_read src sizes:', sizes, file=sys.stderr)
     print('test_read read sizes:', read_sizes, file=sys.stderr)
+    repo = LocalRepo()
     for size in sizes:
         res = resolve(repo, b'/test/latest/' + str(size).encode('ascii'))
         _, item = res[-1]
