@@ -187,9 +187,10 @@ class StackDir:
         self.items = []
 
 class Stack:
-    def __init__(self, split_trees=False):
+    def __init__(self, repo):
         self.stack = []
-        self.split_trees = split_trees
+        self.repo = repo
+        self.split_trees = repo.config_get(b'bup.split.trees', opttype='bool')
 
     def __len__(self):
         return len(self.stack)
@@ -213,19 +214,19 @@ class Stack:
                 items.append(item)
         return items
 
-    def _write(self, repo, tree):
+    def _write(self, tree):
         items = self._clean(tree)
         if not self.split_trees:
-            return _write_tree(repo, tree.meta, items)
+            return _write_tree(self.repo, tree.meta, items)
         items.sort(key=lambda x: x.name)
-        return _write_split_tree(repo, tree.meta, items)
+        return _write_split_tree(self.repo, tree.meta, items)
 
-    def pop(self, repo, override_tree=None, override_meta=None):
+    def pop(self, override_tree=None, override_meta=None):
         tree = self.stack.pop()
         if override_meta is not None:
             tree.meta = override_meta
         if not override_tree: # caution - False happens, not just None
-            tree_oid = self._write(repo, tree)
+            tree_oid = self._write(tree)
         else:
             tree_oid = override_tree
         if len(self):
