@@ -110,7 +110,6 @@ if name and not valid_save_name(name):
 refname = name and b'refs/heads/%s' % name or None
 
 repo = repo.from_opts(opt)
-use_treesplit = repo.config(b'bup.treesplit', opttype='bool')
 blobbits = repo.config(b'bup.blobbits', opttype='int')
 
 oldref = refname and repo.read_ref(refname) or None
@@ -135,7 +134,7 @@ handle_ctrl_c()
 # Maintain a stack of information representing the current location in
 # the archive being constructed.
 
-stack = Stack(use_treesplit=use_treesplit)
+stack = Stack(repo)
 
 
 lastremain = None
@@ -302,7 +301,7 @@ for (transname,ent) in r.filter(extra, wantrecurse=wantrecurse_during):
 
     # If switching to a new sub-tree, finish the current sub-tree.
     while list(stack.namestack) > [x[0] for x in dirp]:
-        stack, _ = stack.pop(repo)
+        stack, _ = stack.pop()
 
     # If switching to a new sub-tree, start a new sub-tree.
     for path_component in dirp[len(stack):]:
@@ -322,7 +321,7 @@ for (transname,ent) in r.filter(extra, wantrecurse=wantrecurse_during):
             continue # We're at the top level -- keep the current root dir
         # Since there's no filename, this is a subdir -- finish it.
         oldtree = hashvalid # may be None
-        stack, newtree = stack.pop(repo, override_tree=oldtree)
+        stack, newtree = stack.pop(override_tree=oldtree)
         if not oldtree:
             if lastskip_name and lastskip_name.startswith(ent.name):
                 ent.invalidate()
@@ -414,12 +413,12 @@ if opt.progress:
 
 # pop all parts above the root folder
 while not stack.parent.nothing:
-    stack, _ = stack.pop(repo)
+    stack, _ = stack.pop()
 
 # Finish the root directory.
 # When there's a collision, use empty metadata for the root.
 root_meta = metadata.Metadata() if root_collision else None
-stack, tree = stack.pop(repo, override_meta=root_meta)
+stack, tree = stack.pop(override_meta=root_meta)
 
 sys.stdout.flush()
 out = byte_stream(sys.stdout)
