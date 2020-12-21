@@ -159,16 +159,15 @@ def _write_split_tree(repo, dir_meta, items, level=0):
 
 
 class StackDir:
-    __slots__ = 'name', 'items', 'meta', 'parent', 'use_treesplit'
+    __slots__ = 'name', 'items', 'meta', 'parent', 'stack'
 
     def __init__(self, name, meta, parent):
         self.name = name
         self.meta = meta
         self.items = []
         self.parent = parent
-        self.use_treesplit = False
         if parent is not None:
-            self.use_treesplit = parent.use_treesplit
+            self.stack = parent.stack
 
     def push(self, name, meta):
         return StackDir(name, meta, self)
@@ -207,21 +206,21 @@ class StackDir:
                 items.append(item)
         self.items = items
 
-    def _write(self, repo):
+    def _write(self):
         self._clean()
 
         self.items.sort(key=lambda x: x.name)
 
-        if not self.use_treesplit:
-            return _write_tree(repo, self.meta, self.items)
-        return _write_split_tree(repo, self.meta, self.items)
+        if not self.stack.use_treesplit:
+            return _write_tree(self.stack.repo, self.meta, self.items)
+        return _write_split_tree(self.stack.repo, self.meta, self.items)
 
-    def pop(self, repo, override_tree=None, override_meta=None):
+    def pop(self, override_tree=None, override_meta=None):
         assert self.parent is not None
         if override_meta is not None:
             self.meta = override_meta
         if not override_tree: # caution - False happens, not just None
-            tree = self._write(repo)
+            tree = self._write()
         else:
             tree = override_tree
         self.parent.append(self.name, GIT_MODE_TREE, GIT_MODE_TREE, tree, None)
@@ -231,9 +230,11 @@ class StackDir:
         self.items.append(TreeItem(name, mode, gitmode, oid, meta))
 
 class Stack(StackDir):
-    def __init__(self, use_treesplit=False):
+    def __init__(self, repo):
         StackDir.__init__(self, b'', None, None)
-        self.use_treesplit = use_treesplit
+        self.use_treesplit = repo.config(b'bup.treesplit', opttype='bool')
+        self.repo = repo
+        self.stack = self
 
     def pop(self, *args, **kw):
         assert False
