@@ -104,7 +104,7 @@ def opts_from_cmdline(argv):
 
     return opt
 
-def save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits):
+def save_tree(opt, reader, hlink_db, msr, repo, blobbits):
     # Metadata is stored in a file named .bupm in each directory.  The
     # first metadata entry will be the metadata for the current directory.
     # The remaining entries will be for each of the other directory
@@ -121,7 +121,7 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits):
 
     # Maintain a stack of information representing the current location in
 
-    stack = Stack(split_trees=split_trees)
+    stack = Stack(repo)
 
     # Hack around lack of nonlocal vars in python 2
     _nonlocal = {}
@@ -282,7 +282,7 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits):
 
         # If switching to a new sub-tree, finish the current sub-tree.
         while stack.path() > [x[0] for x in dirp]:
-            _ = stack.pop(repo)
+            _ = stack.pop()
 
         # If switching to a new sub-tree, start a new sub-tree.
         for path_component in dirp[len(stack):]:
@@ -302,7 +302,7 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits):
                 continue # We're at the top level -- keep the current root dir
             # Since there's no filename, this is a subdir -- finish it.
             oldtree = hashvalid # may be None
-            newtree = stack.pop(repo, override_tree=oldtree)
+            newtree = stack.pop(override_tree=oldtree)
             if not oldtree:
                 if lastskip_name and lastskip_name.startswith(ent.name):
                     ent.invalidate()
@@ -400,12 +400,12 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits):
 
     # pop all parts above the root folder
     while len(stack) > 1:
-        stack.pop(repo)
+        stack.pop()
 
     # Finish the root directory.
     # When there's a collision, use empty metadata for the root.
     root_meta = metadata.Metadata() if root_collision else None
-    tree = stack.pop(repo, override_meta=root_meta)
+    tree = stack.pop(override_meta=root_meta)
 
     return tree
 
@@ -425,7 +425,6 @@ def main(argv):
     opt = opts_from_cmdline(argv)
 
     with from_opts(opt) as repo:
-        split_trees = repo.config_get(b'bup.split-trees', opttype='bool')
         blobbits = repo.config_get(b'bup.blobbits', opttype='int')
         sys.stdout.flush()
         out = byte_stream(sys.stdout)
@@ -448,7 +447,7 @@ def main(argv):
         with msr, \
              hlinkdb.HLinkDB(indexfile + b'.hlink') as hlink_db, \
              index.Reader(indexfile) as reader:
-            tree = save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits)
+            tree = save_tree(opt, reader, hlink_db, msr, repo, blobbits)
 
         if not tree:
             log('ERROR: nothing saved (%d errors encountered)\n' % len(saved_errors))
