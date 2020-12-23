@@ -41,6 +41,7 @@ def classify_saves(saves, period_start):
         yield True, save
 
     tm_ranges = ((period_start['dailies'], lambda s: localtime(s[0]).tm_yday),
+                 (period_start['weeklies'], lambda s: localtime(s[0]).tm_yday // 7),
                  (period_start['monthlies'], lambda s: localtime(s[0]).tm_mon),
                  (period_start['yearlies'], lambda s: localtime(s[0]).tm_year))
 
@@ -65,6 +66,7 @@ bup prune-older [options...] [BRANCH...]
 --
 keep-all-for=       retain all saves within the PERIOD
 keep-dailies-for=   retain the newest save per day within the PERIOD
+keep-weeklies-for=  retain the newest save per week within the PERIOD
 keep-monthlies-for= retain the newest save per month within the PERIOD
 keep-yearlies-for=  retain the newest save per year within the PERIOD
 wrt=                end all periods at this number of seconds since the epoch
@@ -92,6 +94,7 @@ def main(argv):
     period_start = {}
     for period, extent in (('all', opt.keep_all_for),
                            ('dailies', opt.keep_dailies_for),
+                           ('weeklies', opt.keep_weeklies_for),
                            ('monthlies', opt.keep_monthlies_for),
                            ('yearlies', opt.keep_yearlies_for)):
         if extent:
@@ -107,7 +110,7 @@ def main(argv):
 
     if opt.verbose:
         epoch_ymd = strftime('%Y-%m-%d-%H%M%S', localtime(0))
-        for kind in ['all', 'dailies', 'monthlies', 'yearlies']:
+        for kind in ['all', 'dailies', 'weeklies', 'monthlies', 'yearlies']:
             period_utc = period_start[kind]
             if period_utc != float('inf'):
                 if not (period_utc > float('-inf')):
