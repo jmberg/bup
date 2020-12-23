@@ -45,7 +45,7 @@ def create_older_random_saves(n, start_utc, end_utc):
 # computation method is different here, in part so that the test can
 # provide a more effective cross-check.
 
-period_kinds = [b'all', b'dailies', b'monthlies', b'yearlies']
+period_kinds = [b'all', b'dailies', b'weeklies', b'monthlies', b'yearlies']
 period_scale = {b's': 1,
                 b'min': 60,
                 b'h': 60 * 60,
@@ -97,6 +97,10 @@ def expected_dispositions(utcs, utc_start, spec):
     in_period = list(takewhile(lambda x: x >= period_start[b'dailies'], candidates))
     candidates = candidates[len(in_period):]
     add_period(in_period, lambda x: (localtime(x).tm_year, localtime(x).tm_yday))
+
+    in_period = list(takewhile(lambda x: x >= period_start[b'weeklies'], candidates))
+    candidates = candidates[len(in_period):]
+    add_period(in_period, lambda x: strftime('%G-%V', localtime(x)))
 
     in_period = list(takewhile(lambda x: x >= period_start[b'monthlies'], candidates))
     candidates = candidates[len(in_period):]
@@ -320,6 +324,82 @@ def test_argument_validation(tmpdir):
                b'100000000000000000000000000000000000000y', b'main')
     assert cp.rc == 0
     assert rxs(br'(?m)^keeping all since \d+ seconds before', cp.err)
+
+
+def test_keep_weeklies(tmpdir):
+    environ[b'GIT_AUTHOR_NAME'] = b'bup test'
+    environ[b'GIT_COMMITTER_NAME'] = b'bup test'
+    environ[b'GIT_AUTHOR_EMAIL'] = b'bup@a425bc70a02811e49bdf73ee56450e6f'
+    environ[b'GIT_COMMITTER_EMAIL'] = b'bup@a425bc70a02811e49bdf73ee56450e6f'
+
+    # fix to UTC to have consistent week calculations
+    environ[b'TZ'] = b'UTC'
+
+    bup_cmd = bup.path.exe()
+    bup_dir = tmpdir + b'/bup'
+    environ[b'BUP_DIR'] = bup_dir
+    environ[b'GIT_DIR'] = bup_dir
+    chdir(tmpdir)
+    ex((bup_cmd, b'init'))
+
+    src = tmpdir + b'/src'
+    ex((b'mkdir', src))
+
+    # 2024-01-01 is a Monday, so week 1 is Jan 1-7 and week 2 is Jan 8-14
+    jan1 = 1704067200
+    day = 86400
+    saves = (jan1 + 6 * 3600,        # Jan  1, week 1 (oldest, dropped)
+             jan1 + 4 * day + 43200, # Jan  5, week 1 (newest in week 0)
+             jan1 + 7 * day,         # Jan  8, week 2 (dropped)
+             jan1 + 8 * day + 43200, # Jan  9, week 2 (newest in week 1)
+             jan1 + 14 * day)        # Jan 15, week 3 (kept)
+    for i, when in enumerate(saves):
+        with open(src + b'/file', 'wb') as f:
+            f.write(b'save %d\n' % i)
+        ex((bup_cmd, b'index', src))
+        ex((bup_cmd, b'save', b'-n', b'main', b'--date', b'%d' % when, src))
+
+    wrt = jan1 + 19 * day  # Jan 20, so the 4w period starts Dec 23
+    ex((bup_cmd, b'prune-older', b'--unsafe', b'--no-gc',
+        b'--keep-weeklies-for', b'4w', b'--wrt', b'%d' % wrt, b'main'))
+    kept = [int(x) for x in
+            exo((b'git', b'log', b'--format=%at', b'main')).out.split()]
+    wvpasseq([saves[4], saves[3], saves[1]], kept)
+
+
+def test_keep_weeklies_are_iso8601(tmpdir):
+    environ[b'GIT_AUTHOR_NAME'] = b'bup test'
+    environ[b'GIT_COMMITTER_NAME'] = b'bup test'
+    environ[b'GIT_AUTHOR_EMAIL'] = b'bup@a425bc70a02811e49bdf73ee56450e6f'
+    environ[b'GIT_COMMITTER_EMAIL'] = b'bup@a425bc70a02811e49bdf73ee56450e6f'
+    environ[b'TZ'] = b'UTC'
+
+    bup_cmd = bup.path.exe()
+    bup_dir = tmpdir + b'/bup'
+    environ[b'BUP_DIR'] = bup_dir
+    environ[b'GIT_DIR'] = bup_dir
+    chdir(tmpdir)
+    ex((bup_cmd, b'init'))
+
+    src = tmpdir + b'/src'
+    ex((b'mkdir', src))
+
+    sun_jan4 = 1767528000  # 2026-01-04 - previous week
+    mon_jan5 = 1767614400  # 2026-01-05 - Monday
+    thu_jan8 = 1767873600  # 2026-01-08 - same week
+    saves = (sun_jan4, mon_jan5, thu_jan8)
+    for i, when in enumerate(saves):
+        with open(src + b'/file', 'wb') as f:
+            f.write(b'save %d\n' % i)
+        ex((bup_cmd, b'index', src))
+        ex((bup_cmd, b'save', b'-n', b'main', b'--date', b'%d' % when, src))
+
+    wrt = 1768219200  # Mon 2026-01-12
+    ex((bup_cmd, b'prune-older', b'--unsafe', b'--no-gc',
+        b'--keep-weeklies-for', b'4w', b'--wrt', b'%d' % wrt, b'main'))
+    kept = [int(x) for x in
+            exo((b'git', b'log', b'--format=%at', b'main')).out.split()]
+    wvpasseq([thu_jan8, sun_jan4], kept)
 
 
 def test_keep_across_years(tmpdir):

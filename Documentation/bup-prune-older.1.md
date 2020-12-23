@@ -60,6 +60,11 @@ calendar, so `--keep-dailies-for 5d` means a period starting exactly
 :   when no smaller time scale `--keep` option applies, retain the
     newest save for any day within the given period.
 
+\--keep-weeklies-for PERIOD
+:   when no smaller time scale `--keep` option applies, retain the
+    newest save for any week within the given period.  Note that
+    weeks are ISO 8601 weeks, Monday through Sunday.
+
 \--keep-monthlies-for PERIOD
 :   when no smaller time scale `--keep` option applies, retain the
     newest save for any month within the given period.
