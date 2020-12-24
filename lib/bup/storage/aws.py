@@ -108,11 +108,14 @@ class S3Reader:
         startrange = 'bytes=%d-' % self.offs
         retr_range = '%s%d' % (startrange, self.offs + sz - 1)
         storage = self.storage
-        ret = storage.s3.get_object(
-            Bucket=storage.bucket,
-            Key=self.objname,
-            Range=retr_range,
-        )
+        try:
+            ret = storage.s3.get_object(
+                Bucket=storage.bucket,
+                Key=self.objname,
+                Range=retr_range,
+            )
+        except BotoClientError:
+            raise Exception("cannot access %s (check storage class)" % self.objname)
         assert 'ContentRange' in ret
         startrange = startrange.replace('=', ' ')
         assert ret['ContentRange'].startswith(startrange)
