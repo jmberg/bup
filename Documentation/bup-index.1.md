@@ -8,7 +8,7 @@ bup-index - print and/or update the bup filesystem index
 
 # SYNOPSIS
 
-bup index \<-p|-m|-s|-u|\--clear|\--check\> [-H] [-l] [-x] [\--fake-valid]
+bup index \<-p|-m|-s|-u|\--clear|\--check\> [\--stat] [-H] [-l] [-x] [\--fake-valid]
 [\--no-check-device] [\--fake-invalid] [-f *indexfile*] [\--exclude *path*]
 [\--exclude-from *filename*] [\--exclude-rx *pattern*]
 [\--exclude-rx-from *filename*] [-v] \<paths...\>
@@ -100,6 +100,10 @@ does, due to the accommodations described above.
     given, shows the given entries and their descendants. 
     If no paths are given, shows the entries starting
     at the current working directory (.).
+
+\--stat
+:   print all available information about each file (in
+    stat(1)-like format); implies -p.
     
 -m, \--modified
 :   prints only files which are marked as modified (ie.
