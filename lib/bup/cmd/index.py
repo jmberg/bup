@@ -3,7 +3,7 @@ from __future__ import absolute_import, print_function
 from binascii import hexlify
 import errno, os, stat, sys, time
 
-from bup import metadata, options, index, hlinkdb
+from bup import metadata, options, index, hlinkdb, xstat
 from bup import path as bup_path
 from bup.compat import argv_bytes
 from bup.drecurse import recursive_dirlist
@@ -212,6 +212,7 @@ clear      clear the default index
  Options:
 H,hash     print the hash for each object next to its name
 l,long     print more information about each file
+stat       print all information about each file (stat-like format)
 no-check-device don't invalidate an entry if the containing device changes
 fake-valid mark all index entries as up-to-date even if they aren't
 fake-invalid mark all index entries as invalid
@@ -233,7 +234,8 @@ def main(argv):
             opt.status or \
             opt.update or \
             opt.check or \
-            opt.clear):
+            opt.clear or \
+            opt.stat):
         opt.update = 1
     if (opt.fake_valid or opt.fake_invalid) and not opt.update:
         o.fatal('--fake-{in,}valid are meaningless without -u')
@@ -286,12 +288,58 @@ def main(argv):
                          fake_invalid=opt.fake_invalid,
                          out=out, verbose=opt.verbose)
 
-    if opt['print'] or opt.status or opt.modified:
+    if opt['print'] or opt.status or opt.modified or opt.stat:
         extra = [argv_bytes(x) for x in extra]
         with index.Reader(indexfile) as reader:
             for name, ent in reader.filter(extra or [b'']):
                 if (opt.modified
                     and (ent.is_valid() or ent.is_deleted() or not ent.mode)):
+                    continue
+                if opt.stat:
+                    out.write(b'  File: %s\n' % ent.name)
+                    if ent.is_deleted():
+                        status = b'deleted'
+                    elif not ent.is_valid():
+                        if ent.sha == index.EMPTY_SHA:
+                            status = b'added'
+                        else:
+                            status = b'modified'
+                    else:
+                        status = b'uptodate'
+                    if opt.status:
+                        out.write(b'Status: %s\n' % status)
+                    if opt.hash:
+                        out.write(b'  Hash: %s\n' % hexlify(ent.sha))
+                    if stat.S_ISREG(ent.mode):
+                        tp = b'regular file'
+                    elif stat.S_ISDIR(ent.mode):
+                        tp = b'directory'
+                    elif stat.S_ISCHR(ent.mode):
+                        tp = b'character special file'
+                    elif stat.S_ISBLK(ent.mode):
+                        tp = b'block special file'
+                    elif stat.S_ISFIFO(ent.mode):
+                        tp = b'fifo'
+                    elif stat.S_ISSOCK(ent.mode):
+                        tp = b'socket'
+                    elif stat.S_ISLNK(ent.mode):
+                        tp = b'symbolic link'
+                    else:
+                        tp = b'unknown file type'
+                    out.write(b'  Size: %d %s\n' % (ent.size, tp))
+                    out.write(b'Device: %xh/%dd Inode: %d Links: %d\n' % (
+                              ent.dev, ent.dev, ent.ino, ent.nlink))
+                    out.write(b'Access: (%s/%s)\n' % (
+                              oct(ent.mode).encode('ascii'),
+                              xstat.mode_str(ent.mode).encode('ascii')))
+                    from datetime import datetime
+                    def fmt_ts(ts):
+                        ret = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(ts / 10**9))
+                        return ('%s.%9d' % (ret, ts % 10**9)).encode('ascii')
+                    out.write(b'Access: %s\n' % fmt_ts(ent.atime))
+                    out.write(b'Modify: %s\n' % fmt_ts(ent.mtime))
+                    out.write(b'Change: %s\n' % fmt_ts(ent.ctime))
+                    # suppress the name output below
                     continue
                 line = b''
                 if opt.status:
