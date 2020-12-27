@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+. wvtest.sh
+. wvtest-bup.sh
+. dev/lib.sh
+
+set -o pipefail
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+export BUP_DIR="$tmpdir/bup"
+
+bup() { "$top/bup" "$@"; }
+
+WVPASS bup init
+WVPASS bup index "$top/test/sampledata"
+
+# this will save everything inside sampledata with all paths stripped
+WVPASS bup save -n save --strip "$top" "$top/test/sampledata"
+# save the result
+WVPASS bup ls save/latest/ > "$tmpdir/save-1"
+
+# and do it all again (note - not indexing again, so nothing really saved)
+WVPASS bup save -n save --strip "$top" "$top/test/sampledata"
+WVPASS bup ls save/latest/ > "$tmpdir/save-2"
+
+# now compare, should be identical
+WVPASS diff -u "$tmpdir/save-1" "$tmpdir/save-2"
+
+WVPASS rm -rf "$tmpdir"
