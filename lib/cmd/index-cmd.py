@@ -20,7 +20,7 @@ import errno, os, re, stat, sys, time
 
 sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
-from bup import compat, metadata, options, index, drecurse, hlinkdb
+from bup import compat, metadata, options, index, drecurse, hlinkdb, xstat
 from bup import path as bup_path
 from bup.compat import argv_bytes
 from bup.drecurse import recursive_dirlist
@@ -229,6 +229,7 @@ clear      clear the default index
  Options:
 H,hash     print the hash for each object next to its name
 l,long     print more information about each file
+stat       print all information about each file (stat-like format)
 no-check-device don't invalidate an entry if the containing device changes
 fake-valid mark all index entries as up-to-date even if they aren't
 fake-invalid mark all index entries as invalid
@@ -301,6 +302,52 @@ if opt['print'] or opt.status or opt.modified:
     for name, ent in index.Reader(indexfile).filter(extra or [b'']):
         if (opt.modified 
             and (ent.is_valid() or ent.is_deleted() or not ent.mode)):
+            continue
+        if opt.stat:
+            out.write(b'  File: %s\n' % ent.name)
+            if ent.is_deleted():
+                status = b'deleted'
+            elif not ent.is_valid():
+                if ent.sha == index.EMPTY_SHA:
+                    status = b'added'
+                else:
+                    status = b'modified'
+            else:
+                status = b'uptodate'
+            if opt.status:
+                out.write(b'Status: %s\n' % status)
+            if opt.hash:
+                out.write(b'  Hash: %s\n' % hexlify(ent.sha))
+            if stat.S_ISREG(ent.mode):
+                tp = b'regular file'
+            elif stat.S_ISDIR(ent.mode):
+                tp = b'directory'
+            elif stat.S_ISCHR(ent.mode):
+                tp = b'character special file'
+            elif stat.S_ISBLK(ent.mode):
+                tp = b'block special file'
+            elif stat.S_ISFIFO(ent.mode):
+                tp = b'fifo'
+            elif stat.S_ISSOCK(ent.mode):
+                tp = b'socket'
+            elif stat.S_ISLNK(ent.mode):
+                tp = b'symbolic link'
+            else:
+                tp = b'unknown file type'
+            out.write(b'  Size: %d %s\n' % (ent.size, tp))
+            out.write(b'Device: %xh/%dd Inode: %d Links: %d\n' % (
+                      ent.dev, ent.dev, ent.ino, ent.nlink))
+            out.write(b'Access: (%s/%s)\n' % (
+                      oct(ent.mode).encode('ascii'),
+                      xstat.mode_str(ent.mode).encode('ascii')))
+            from datetime import datetime
+            def fmt_ts(ts):
+                ret = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(ts / 10**9))
+                return ('%s.%9d' % (ret, ts % 10**9)).encode('ascii')
+            out.write(b'Access: %s\n' % fmt_ts(ent.atime))
+            out.write(b'Modify: %s\n' % fmt_ts(ent.mtime))
+            out.write(b'Change: %s\n' % fmt_ts(ent.ctime))
+            # suppress the name output below
             continue
         line = b''
         if opt.status:
