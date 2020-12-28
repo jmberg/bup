@@ -3,25 +3,25 @@ from binascii import hexlify, unhexlify
 
 from bup import git, vfs
 from bup.client import ClientError
-from bup.git import LocalPackStore, PackWriter, get_commit_items
+from bup.git import get_commit_items
 from bup.helpers import add_error, die_if_errors, log, saved_errors
 from bup.io import path_msg
 
-def append_commit(hash, parent, cp, writer):
-    ci = get_commit_items(hash, cp.get)
+def append_commit(repo, hash, parent):
+    ci = get_commit_items(hash, repo.cat)
     tree = unhexlify(ci.tree)
     author = b'%s <%s>' % (ci.author_name, ci.author_mail)
     committer = b'%s <%s>' % (ci.committer_name, ci.committer_mail)
-    c = writer.new_commit(tree, parent,
+    c = repo.write_commit(tree, parent,
                           author, ci.author_sec, ci.author_offset,
                           committer, ci.committer_sec, ci.committer_offset,
                           ci.message)
     return c, tree
 
 
-def filter_branch(tip_commit_hex, exclude, writer):
+def filter_branch(repo, tip_commit_hex, exclude):
     # May return None if everything is excluded.
-    commits = [unhexlify(x) for x in git.rev_list(tip_commit_hex)]
+    commits = [unhexlify(x) for x in repo.rev_list(tip_commit_hex)]
     commits.reverse()
     last_c = None
     # Rather than assert that we always find an exclusion here, we'll
@@ -33,7 +33,7 @@ def filter_branch(tip_commit_hex, exclude, writer):
     for c in commits:
         if exclude(c):
             continue
-        last_c, _ = append_commit(hexlify(c), last_c, git.catpipe(), writer)
+        last_c, _ = append_commit(repo, hexlify(c), last_c)
     return last_c
 
 def commit_oid(item):
@@ -42,16 +42,15 @@ def commit_oid(item):
     assert isinstance(item, vfs.RevList)
     return item.oid
 
-def rm_saves(saves, writer):
+def rm_saves(saves, repo):
     assert(saves)
     first_branch_item = saves[0][1]
     for save, branch in saves: # Be certain they're all on the same branch
         assert(branch == first_branch_item)
     rm_commits = frozenset([commit_oid(save) for save, branch in saves])
     orig_tip = commit_oid(first_branch_item)
-    new_tip = filter_branch(hexlify(orig_tip),
-                            lambda x: x in rm_commits,
-                            writer)
+    new_tip = filter_branch(repo, hexlify(orig_tip),
+                            lambda x: x in rm_commits)
     assert(orig_tip)
     assert(new_tip != orig_tip)
     return orig_tip, new_tip
@@ -95,7 +94,7 @@ def dead_items(repo, paths):
     return dead_branches, dead_saves
 
 
-def bup_rm(repo, paths, compression=6, verbosity=None):
+def bup_rm(repo, paths, verbosity=None):
     dead_branches, dead_saves = dead_items(repo, paths)
     die_if_errors('not proceeding with any removals\n')
 
@@ -107,17 +106,14 @@ def bup_rm(repo, paths, compression=6, verbosity=None):
         updated_refs[ref] = (branchitem.oid, None)
 
     if dead_saves:
-        writer = PackWriter(store=LocalPackStore(),
-                            compression_level=compression)
         try:
             for branch, saves in dead_saves.items():
                 assert(saves)
-                updated_refs[b'refs/heads/' + branch] = rm_saves(saves, writer)
-        except BaseException as ex:
-            writer.abort()
-            raise ex
-        finally:
-            writer.close()
+                updated_refs[b'refs/heads/' + branch] = rm_saves(saves, repo)
+        except BaseException:
+            repo.abort_writing()
+            raise
+        repo.finish_writing()
 
     # Only update the refs here, at the very end, so that if something
     # goes wrong above, the old refs will be undisturbed.  Make an attempt
@@ -126,9 +122,9 @@ def bup_rm(repo, paths, compression=6, verbosity=None):
         orig_ref, new_ref = info
         try:
             if not new_ref:
-                git.delete_ref(ref_name, hexlify(orig_ref))
+                repo.delete_ref(ref_name, orig_ref)
             else:
-                git.update_ref(ref_name, new_ref, orig_ref)
+                repo.update_ref(ref_name, new_ref, orig_ref)
                 if verbosity:
                     log('updated %s (%s%s)\n'
                         % (path_msg(ref_name),
