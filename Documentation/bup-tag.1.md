@@ -8,11 +8,11 @@ bup-tag - tag a commit in the bup repository
 
 # SYNOPSIS
 
-bup tag
+bup tag [-r host:path]
 
-bup tag [-f] \<tag name\> \<committish\>
+bup tag [-r host:path] [-f] \<tag name\> \<committish\>
 
-bup tag -d [-f] \<tag name\>
+bup tag [-r host:path] -d [-f] \<tag name\>
 
 # DESCRIPTION
 
@@ -39,6 +39,10 @@ example, the 'ftp' command will show the tag named 'tag1' under /.tag/tag1.
 -f, \--force
 :  Overwrite the named tag even if it already exists. With -f, don't
    report a missing tag as an error.
+
+-r, \--remote=[*user*@]*host*:[*path*], \--remote=URL
+:   operate on the specified remote repository, by default via SSH.
+    See `bup`(1) REMOTE OPTIONS for further information.
 
 # EXAMPLES
 

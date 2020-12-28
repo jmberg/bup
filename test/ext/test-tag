@@ -41,5 +41,28 @@ WVPASSEQ "$(git tag)" tag-1
 WVPASS bup tag -d tag-1
 WVPASSEQ "$(git tag)" ''
 
+WVFAIL err-to log env BUP_DIR="$tmpdir/missing" "$top/bup" tag
+WVPASS test -n "$(cat log)"
+
+WVSTART "tag -r"
+WVPASS mkdir second
+WVPASS echo second > second/file
+WVPASS bup index second
+WVPASS bup save -n second --strip second
+WVPASSEQ "$(bup tag -r -:"$BUP_DIR")" ''
+WVPASS bup tag -r -:"$BUP_DIR" tag-r main
+WVPASSEQ "$(git tag)" tag-r
+WVPASSEQ "$(bup tag -r -:"$BUP_DIR")" tag-r
+WVFAIL err-to log bup tag -r -:"$BUP_DIR" tag-r second
+WVPASS grep -E "tag tag-r already exists" log
+WVPASSEQ "$(git rev-parse refs/tags/tag-r)" "$(git rev-parse main)"
+WVPASS bup tag -r -:"$BUP_DIR" -f tag-r second
+WVPASSEQ "$(git rev-parse refs/tags/tag-r)" "$(git rev-parse second)"
+WVFAIL err-to log bup tag -r -:"$BUP_DIR" tag-x nope
+WVPASS grep "error: commit nope not found" log
+WVPASS bup tag -r -:"$BUP_DIR" -d tag-r
+WVPASSEQ "$(git tag)" ''
+WVPASSEQ "$(bup tag -r -:"$BUP_DIR")" ''
+
 WVPASS cd "$top"
 WVPASS rm -rf "$tmpdir"
