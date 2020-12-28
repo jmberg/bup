@@ -314,6 +314,13 @@ class Server:
         self.conn.ok()
 
     @_command
+    def delete_ref(self, refname):
+        self.init_session()
+        oldval = unhexlify(self.conn.readline().strip()) or None
+        self.repo.delete_ref(refname, oldval)
+        self.conn.ok()
+
+    @_command
     def join(self, id):
         self.init_session()
         try:
