@@ -83,6 +83,9 @@ calendar, so `--keep-dailies-for 5d` means a period starting exactly
 \--gc
 :   garbage collect the repository after removing the relevant saves.
     This is the default behavior, but it can be avoided with `--no-gc`.
+    Garbage collection isn't supported for remote repositories, so if
+    `--remote` is used, `--no-gc` must also be specified (except for
+    `--pretend`).
 
 \--gc-threshold N
 :   only rewrite a packfile if it's over N percent garbage; otherwise
@@ -92,6 +95,10 @@ calendar, so `--keep-dailies-for 5d` means a period starting exactly
 :   set the compression level when rewriting archive data to # (a
     value from 0-9, where 9 is the highest and 0 is no compression).
     The default is 1 (fast, loose compression).
+
+-r, \--remote=[*user*@]*host*:[*path*], \--remote=URL
+:   operate on the specified remote repository, by default via SSH.
+    See `bup`(1) REMOTE OPTIONS for further information.
 
 -v, \--verbose
 :   increase verbosity (can be specified more than once).
