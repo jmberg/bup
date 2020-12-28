@@ -363,6 +363,13 @@ class Client:
                            hexlify(oldval) if oldval else b''))
         self.check_ok()
 
+    def delete_ref(self, refname, oldval):
+        self._require_command(b'delete-ref')
+        self.check_busy()
+        self.conn.write(b'delete-ref %s\n%s\n' % (
+                            refname, hexlify(oldval) if oldval else b''))
+        self.check_ok()
+
     def join(self, id):
         self._require_command(b'join')
         self.check_busy()
