@@ -1,4 +1,6 @@
 
+from binascii import unhexlify
+
 from bup.compat import dataclass
 from bup.helpers import notimplemented
 
@@ -73,6 +75,29 @@ class RepoProtocol:
         Delete the ref called 'refname'. If oldval is not None, atomically
         check and delete it only if it currently matches that value.
         """
+
+    def rev_parse(self, committish):
+        """Return the binary oid for 'committish' (a ref name or a
+        full hex oid), returning None if it doesn't exist.
+
+        Roughly equivalent to 'git rev-parse'.
+        """
+        head = self.read_ref(committish)
+        if head:
+            return head
+
+        if len(committish) == 40:
+            try:
+                oid = unhexlify(committish)
+            except TypeError:
+                return None
+            # Use cat() because exists() uses the local cache only.
+            oidx, _, _, data = self.cat(committish)
+            if oidx:
+                for _ in data: pass
+                return oid
+
+        return None
 
     @notimplemented
     def cat(self, ref):
