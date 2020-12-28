@@ -160,9 +160,8 @@ def main(argv):
 
     if not opt.pretend:
         die_if_errors()
-        with LocalRepo() as repo:
-            bup_rm(repo, removals, compression=opt.compress,
-                   verbosity=opt.verbose)
+        with LocalRepo(compression_level=opt.compress) as repo:
+            bup_rm(repo, removals, verbosity=opt.verbose)
         if opt.gc:
             die_if_errors()
             bup_gc(threshold=opt.gc_threshold,
