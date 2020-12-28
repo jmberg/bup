@@ -195,9 +195,6 @@ def get_cat_data(cat_iterator, expected_type):
         raise Exception('expected %r, saw %r' % (expected_type, kind))
     return b''.join(cat_iterator)
 
-def get_commit_items(id, cp):
-    return parse_commit(get_cat_data(cp.get(id), b'commit'))
-
 def _local_git_date_str(epoch_sec):
     return b'%d %s' % (epoch_sec, utc_offset_str(epoch_sec))
 

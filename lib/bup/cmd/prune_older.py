@@ -7,19 +7,19 @@ from sys import stderr
 from time import localtime, strftime, time
 import sys
 
-from bup import git, options
+from bup import options
 from bup.compat import argv_bytes, int_types
 from bup.gc import bup_gc
 from bup.helpers import die_if_errors, log, partition, period_as_secs
 from bup.io import byte_stream
-from bup.repo import LocalRepo
+from bup.repo import from_opts
 from bup.rm import bup_rm
 
 
-def branches(refnames=tuple()):
+def branches(r, refnames=tuple()):
     return ((name[11:], hexlify(sha)) for (name,sha)
-            in git.list_refs(patterns=(b'refs/heads/' + n for n in refnames),
-                             limit_to_heads=True))
+            in r.refs(patterns=(b'refs/heads/' + n for n in refnames),
+                                limit_to_heads=True))
 
 def save_name(branch, utc):
     return branch + b'/' \
@@ -72,6 +72,7 @@ wrt=                end all periods at this number of seconds since the epoch
 pretend       don't prune, just report intended actions to standard output
 gc            collect garbage after removals [1]
 gc-threshold= only rewrite a packfile if it's over this percent garbage [10]
+r,remote=     hostname:/path/to/repo of remote repository
 #,compress=   set compression level to # (0-9, 9 is highest) [1]
 v,verbose     increase log output (can be used more than once)
 unsafe        use the command even though it may be DANGEROUS
@@ -126,8 +127,6 @@ def main(argv):
                         else:
                             log('keeping %s since %s\n' % (kind, epoch_ymd))
 
-    git.check_repo_or_die()
-
     # This could be more efficient, but for now just build the whole list
     # in memory and let bup_rm() do some redundant work.
 
@@ -138,11 +137,13 @@ def main(argv):
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
 
+    repo = from_opts(opt)
+
     removals = []
-    for branch, branch_id in branches(roots):
+    for branch, branch_id in branches(repo, roots):
         die_if_errors()
         saves = ((utc, unhexlify(oidx)) for (oidx, utc) in
-                 git.rev_list(branch_id, format=b'%at', parse=parse_info))
+                 repo.rev_list(branch_id, format=b'%at', parse=parse_info))
         for keep_save, (utc, id) in classify_saves(saves, period_start):
             assert(keep_save in (False, True))
             # FIXME: base removals on hashes
@@ -154,8 +155,7 @@ def main(argv):
 
     if not opt.pretend:
         die_if_errors()
-        repo = LocalRepo()
-        bup_rm(repo, removals, compression=opt.compress, verbosity=opt.verbose)
+        bup_rm(repo, removals, verbosity=opt.verbose)
         if opt.gc:
             die_if_errors()
             bup_gc(threshold=opt.gc_threshold,

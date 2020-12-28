@@ -17,6 +17,10 @@ from bup.helpers import localtime, log, mkdirp, readpipe, ObjectExists
 bup_exe = path.exe()
 
 
+def get_commit_items(id, cp):
+    return git.parse_commit(git.get_cat_data(cp.get(id), b'commit'))
+
+
 def exc(*cmd):
     print(repr(cmd), file=sys.stderr)
     check_call(cmd)
@@ -280,7 +284,7 @@ def test_commit_parsing(tmpdir):
         coff = (int(coffs[-4:-2]) * 60 * 60) + (int(coffs[-2:]) * 60)
         if bytes_from_byte(coffs[-5]) == b'-':
             coff = - coff
-        commit_items = git.get_commit_items(commit, git.cp())
+        commit_items = get_commit_items(commit, git.cp())
         WVPASSEQ(commit_items.parents, [])
         WVPASSEQ(commit_items.tree, tree)
         WVPASSEQ(commit_items.author_name, b'Someone')
@@ -298,7 +302,7 @@ def test_commit_parsing(tmpdir):
         readpipe([b'git', b'commit', b'-am', b'Do something else'])
         child = readpipe([b'git', b'show-ref', b'-s', b'master']).strip()
         parents = showval(child, b'%P')
-        commit_items = git.get_commit_items(child, git.cp())
+        commit_items = get_commit_items(child, git.cp())
         WVPASSEQ(commit_items.parents, [commit])
     finally:
         os.chdir(orig_cwd)
@@ -339,7 +343,7 @@ def test_new_commit(tmpdir):
                               b'There is a small mailbox here')
     w.close()
 
-    commit_items = git.get_commit_items(hexlify(commit), git.cp())
+    commit_items = get_commit_items(hexlify(commit), git.cp())
     local_author_offset = localtime(adate_sec).tm_gmtoff
     local_committer_offset = localtime(cdate_sec).tm_gmtoff
     WVPASSEQ(tree, unhexlify(commit_items.tree))
@@ -354,7 +358,7 @@ def test_new_commit(tmpdir):
     WVPASSEQ(cdate_sec, commit_items.committer_sec)
     WVPASSEQ(local_committer_offset, commit_items.committer_offset)
 
-    commit_items = git.get_commit_items(hexlify(commit_off), git.cp())
+    commit_items = get_commit_items(hexlify(commit_off), git.cp())
     WVPASSEQ(tree, unhexlify(commit_items.tree))
     WVPASSEQ(1, len(commit_items.parents))
     WVPASSEQ(parent, unhexlify(commit_items.parents[0]))
