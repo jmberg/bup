@@ -36,6 +36,9 @@ class RemoteRepo(BaseRepo):
         self.finish_writing()
         return self.client.update_ref(refname, newval, oldval)
 
+    def delete_ref(self, refname, oldval=None):
+        self.client.delete_ref(refname, oldval)
+
     def _ensure_packwriter(self):
         if not self._packwriter:
             self._packwriter = self.client.new_packwriter(
