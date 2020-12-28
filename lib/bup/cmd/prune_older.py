@@ -5,19 +5,23 @@ from itertools import groupby
 from time import localtime, strftime, time
 import sys
 
-from bup import git, options
+from bup import options
 from bup.compat import argv_bytes
 from bup.gc import bup_gc
+from bup.git import check_repo_or_die
 from bup.helpers import die_if_errors, log, partition, period_as_secs
 from bup.io import byte_stream, path_msg
-from bup.repo import LocalRepo
+from bup.repo import main_repo_location, repo_for_location
 from bup.rm import bup_rm
+from bup.url import URL
 from bup.vfs import save_names_for_commit_utcs
 
 
-def branches(refnames=tuple()):
-    return ((name[11:], hexlify(sha)) for (name,sha)
-            in git.list_refs(patterns=(b'refs/heads/' + n for n in refnames),
+def branches(repo, refnames=tuple()):
+    # read the full list from the remote refs() call so it finishes
+    # and we can do rev_list() during the iteration
+    return list((name[11:], hexlify(sha)) for (name,sha)
+                in repo.refs(patterns=(b'refs/heads/' + n for n in refnames),
                              limit_to_heads=True))
 
 def classify_saves(saves, period_start):
@@ -70,6 +74,7 @@ pretend       don't prune, just report intended actions to standard output
 gc            collect garbage after removals [1]
 gc-threshold= only rewrite a packfile if it's over this percent garbage [10]
 #,compress=   set compression level to # (0-9, 9 is highest) [1]
+r,remote=     remote repository path
 v,verbose     increase log output (can be used more than once)
 unsafe        use the command even though it may be DANGEROUS
 """
@@ -128,7 +133,14 @@ def main(argv):
                 when = strftime('%Y-%m-%d-%H%M%S', period_local)
                 log(f'keeping {kind} since {when}\n')
 
-    git.check_repo_or_die()
+    loc = main_repo_location(argv_bytes(opt.remote) if opt.remote else None,
+                             o.fatal)
+    is_local = isinstance(loc, URL) and loc.scheme == b'file'
+    if is_local:
+        check_repo_or_die(loc.path)
+    elif opt.gc and not opt.pretend:
+        o.fatal('--gc must run on the repository host; use --no-gc and run '
+                'bup gc on the server')
 
     # This could be more efficient, but for now just build the whole list
     # in memory and let bup_rm() do some redundant work.
@@ -140,30 +152,31 @@ def main(argv):
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
 
-    removals = []
-    for branch, branch_id in branches(roots):
-        die_if_errors()
-        # At the moment, oids are irrelevant; the save name is crucial
-        revs = list(git.rev_list(branch_id, format=b'%at', parse=parse_info))
-        saves = ((utc, unhexlify(oidx), save_name) \
-                 for ((oidx, utc), save_name) \
-                 in zip(revs, save_names_for_commit_utcs(x[1] for x in revs)))
-        for keep_save, (utc, oid_, save_name) \
-                in classify_saves(saves, period_start):
-            assert(keep_save in (False, True))
-            # FIXME: base removals on hashes
-            if opt.pretend:
-                out.write(b'%s %s/%s\n' % (b'+' if keep_save else b'-',
-                                           branch, save_name))
-            elif not keep_save:
-                removals.append(b'%s/%s' % (branch, save_name))
-
-    if not opt.pretend:
-        die_if_errors()
-        with LocalRepo(compression_level=opt.compress) as repo:
-            bup_rm(repo, removals, verbosity=opt.verbose)
-        if opt.gc:
+    with repo_for_location(loc, compression_level=opt.compress) as repo:
+        removals = []
+        for branch, branch_id in branches(repo, roots):
             die_if_errors()
-            bup_gc(threshold=opt.gc_threshold,
-                   compression=opt.compress,
-                   verbosity=opt.verbose)
+            # At the moment, oids are irrelevant; the save name is crucial
+            revs = list(repo.rev_list(branch_id, format=b'%at', parse=parse_info))
+            saves = ((utc, unhexlify(oidx), save_name) \
+                     for ((oidx, utc), save_name) \
+                     in zip(revs, save_names_for_commit_utcs(x[1] for x in revs)))
+            for keep_save, (utc, oid_, save_name) \
+                    in classify_saves(saves, period_start):
+                assert(keep_save in (False, True))
+                # FIXME: base removals on hashes
+                if opt.pretend:
+                    out.write(b'%s %s/%s\n' % (b'+' if keep_save else b'-',
+                                               branch, save_name))
+                elif not keep_save:
+                    removals.append(b'%s/%s' % (branch, save_name))
+
+        if not opt.pretend:
+            die_if_errors()
+            bup_rm(repo, removals, verbosity=opt.verbose)
+
+    if not opt.pretend and opt.gc:
+        die_if_errors()
+        bup_gc(threshold=opt.gc_threshold,
+               compression=opt.compress,
+               verbosity=opt.verbose)

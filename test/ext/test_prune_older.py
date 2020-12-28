@@ -370,3 +370,50 @@ def test_keep_across_years(tmpdir, monkeypatch):
         b'--keep-monthlies-for', b'2y',
         b'--wrt', b'%d' % 1709251200, b'monthly'))  # 2024-03-01
     wvpasseq(list(reversed(same_mon)), kept_on(b'monthly'))
+
+
+def test_remote_prune(tmpdir):
+    environ[b'GIT_AUTHOR_NAME'] = b'bup test'
+    environ[b'GIT_COMMITTER_NAME'] = b'bup test'
+    environ[b'GIT_AUTHOR_EMAIL'] = b'bup@a425bc70a02811e49bdf73ee56450e6f'
+    environ[b'GIT_COMMITTER_EMAIL'] = b'bup@a425bc70a02811e49bdf73ee56450e6f'
+
+    bup_cmd = bup.path.exe()
+    bup_dir = tmpdir + b'/remote-bup'
+    environ[b'BUP_DIR'] = bup_dir
+    environ[b'GIT_DIR'] = bup_dir
+    chdir(tmpdir)
+    ex((bup_cmd, b'init'))
+
+    src = tmpdir + b'/src'
+    ex((b'mkdir', src))
+
+    # Two saves on the same local day, so the dailies policy keeps
+    # only the newer one.
+    base = 1797721200
+    for i, when in enumerate((base, base + 60)):
+        with open(src + b'/file', 'wb') as f:
+            f.write(b'save %d\n' % i)
+        ex((bup_cmd, b'index', src))
+        ex((bup_cmd, b'save', b'-n', b'main', b'--date', b'%d' % when, src))
+
+    def save_count():
+        return len(exo((b'git', b'rev-list', b'main')).out.splitlines())
+
+    wvpasseq(2, save_count())
+
+    def prune(*opts):
+        return (bup_cmd, b'prune-older', b'--unsafe', *opts,
+                b'-r', b'-:' + bup_dir,
+                b'--keep-dailies-for', b'1y',
+                b'--wrt', b'%d' % (base + 3600), b'main')
+
+    wvstart('remote prune refuses --gc')
+    cp = ex(prune(), check=False, stderr=PIPE)
+    assert cp.rc
+    assert b'--gc must run on the repository host' in cp.err
+    wvpasseq(2, save_count())
+
+    wvstart('remote prune with --no-gc removes older saves')
+    ex(prune(b'--no-gc'))
+    wvpasseq(1, save_count())
