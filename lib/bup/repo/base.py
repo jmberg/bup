@@ -1,8 +1,10 @@
 
 import random
+from binascii import hexlify, unhexlify
 
 from bup import vfs
 from bup.compat import pending_raise, bytes_from_byte
+from bup.helpers import debug2
 from bup import git
 
 
@@ -90,6 +92,30 @@ class BaseRepo:
         new_id = b''.join(bytes_from_byte(randgen.choice(chars)) for x in range(31))
         self.config_write(b'bup.repo-id', new_id)
 
+    def rev_parse(self, committish):
+        """Resolve the full hash for 'committish', if it exists.
+
+        Should be roughly equivalent to 'git rev-parse'.
+
+        Returns the hex value of the hash if it is found, None if 'committish' does
+        not correspond to anything.
+        """
+        head = self.read_ref(committish)
+        if head:
+            debug2("resolved from ref: commit = %s\n" % hexlify(head).decode('ascii'))
+            return head
+
+        if len(committish) == 40:
+            try:
+                hash = unhexlify(committish)
+            except TypeError:
+                return None
+
+            if self.exists(hash):
+                return hash
+
+        return None
+
     @notimplemented
     def config_get(self, name, opttype=None):
         """
@@ -154,6 +180,14 @@ class BaseRepo:
         (hex-encoded oid).
         Must also finish_writing() internally, so that all objects are
         committed before the ref is updated.
+        """
+
+    @notimplemented
+    def delete_ref(self, refname, oldval=None):
+        """
+        Delete the ref called 'refname', if 'oldval' is not None then it's
+        the current value of the ref and the implementation shall atomically
+        check against it while deleting.
         """
 
     @notimplemented
