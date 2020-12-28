@@ -1,15 +1,15 @@
 
 
 from bup.compat import argv_bytes
-from bup.git import check_repo_or_die
 from bup.options import Options
 from bup.helpers import die_if_errors
-from bup.repo import LocalRepo
+from bup.repo import from_opts
 from bup.rm import bup_rm
 
 optspec = """
 bup rm <branch|save...>
 --
+r,remote=    hostname:/path/to/repo of remote repository
 #,compress=  set compression level to # (0-9, 9 is highest) [6]
 v,verbose    increase verbosity (can be specified multiple times)
 unsafe       use the command even though it may be DANGEROUS
@@ -25,8 +25,7 @@ def main(argv):
     if len(extra) < 1:
         o.fatal('no paths specified')
 
-    check_repo_or_die()
-    with LocalRepo() as repo:
+    with from_opts(opt) as repo:
         bup_rm(repo, [argv_bytes(x) for x in extra],
-               compression=opt.compress, verbosity=opt.verbose)
+               verbosity=opt.verbose)
     die_if_errors()
