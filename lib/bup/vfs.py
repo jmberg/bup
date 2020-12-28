@@ -58,7 +58,7 @@ import re, sys
 
 from bup import git, metadata, vint
 from bup.compat import hexstr, range, int_types
-from bup.git import BUP_CHUNKED, cp, get_commit_items, parse_commit, tree_decode
+from bup.git import BUP_CHUNKED, cp, parse_commit, tree_decode
 from bup.helpers import debug2, last
 from bup.io import path_msg
 from bup.metadata import Metadata
