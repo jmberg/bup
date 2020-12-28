@@ -6,25 +6,28 @@ import sys
 from bup import compat, git, vfs
 from bup.client import ClientError
 from bup.compat import add_ex_ctx, add_ex_tb, hexstr, pending_raise
-from bup.git import get_commit_items
 from bup.helpers import add_error, die_if_errors, log, saved_errors
 from bup.io import path_msg
 
-def append_commit(hash, parent, cp, writer):
-    ci = get_commit_items(hash, cp)
+def get_commit_items(repo, hash):
+    data = git.get_cat_data(repo.cat(hash), b'commit')
+    return git.parse_commit(data)
+
+def append_commit(repo, hash, parent):
+    ci = get_commit_items(repo, hash)
     tree = unhexlify(ci.tree)
     author = b'%s <%s>' % (ci.author_name, ci.author_mail)
     committer = b'%s <%s>' % (ci.committer_name, ci.committer_mail)
-    c = writer.new_commit(tree, parent,
+    c = repo.write_commit(tree, parent,
                           author, ci.author_sec, ci.author_offset,
                           committer, ci.committer_sec, ci.committer_offset,
                           ci.message)
     return c, tree
 
 
-def filter_branch(tip_commit_hex, exclude, writer):
+def filter_branch(repo, tip_commit_hex, exclude):
     # May return None if everything is excluded.
-    commits = [unhexlify(x) for x in git.rev_list(tip_commit_hex)]
+    commits = [unhexlify(x) for x in repo.rev_list(tip_commit_hex)]
     commits.reverse()
     last_c, tree = None, None
     # Rather than assert that we always find an exclusion here, we'll
@@ -32,12 +35,12 @@ def filter_branch(tip_commit_hex, exclude, writer):
     first_exclusion = next(i for i, c in enumerate(commits) if exclude(c))
     if first_exclusion != 0:
         last_c = commits[first_exclusion - 1]
-        tree = unhexlify(get_commit_items(hexlify(last_c), git.cp()).tree)
+        tree = unhexlify(get_commit_items(repo, hexlify(last_c)).tree)
         commits = commits[first_exclusion:]
     for c in commits:
         if exclude(c):
             continue
-        last_c, tree = append_commit(hexlify(c), last_c, git.cp(), writer)
+        last_c, tree = append_commit(repo, hexlify(c), last_c)
     return last_c
 
 def commit_oid(item):
@@ -46,16 +49,15 @@ def commit_oid(item):
     assert isinstance(item, vfs.RevList)
     return item.oid
 
-def rm_saves(saves, writer):
+def rm_saves(repo, saves):
     assert(saves)
     first_branch_item = saves[0][1]
     for save, branch in saves: # Be certain they're all on the same branch
         assert(branch == first_branch_item)
     rm_commits = frozenset([commit_oid(save) for save, branch in saves])
     orig_tip = commit_oid(first_branch_item)
-    new_tip = filter_branch(hexlify(orig_tip),
-                            lambda x: x in rm_commits,
-                            writer)
+    new_tip = filter_branch(repo, hexlify(orig_tip),
+                            lambda x: x in rm_commits)
     assert(orig_tip)
     assert(new_tip != orig_tip)
     return orig_tip, new_tip
@@ -99,7 +101,7 @@ def dead_items(repo, paths):
     return dead_branches, dead_saves
 
 
-def bup_rm(repo, paths, compression=6, verbosity=None):
+def bup_rm(repo, paths, verbosity=None):
     dead_branches, dead_saves = dead_items(repo, paths)
     die_if_errors('not proceeding with any removals\n')
 
@@ -111,18 +113,13 @@ def bup_rm(repo, paths, compression=6, verbosity=None):
         updated_refs[ref] = (branchitem.oid, None)
 
     if dead_saves:
-        writer = git.PackWriter(compression_level=compression)
         try:
             for branch, saves in compat.items(dead_saves):
                 assert(saves)
-                updated_refs[b'refs/heads/' + branch] = rm_saves(saves, writer)
+                updated_refs[b'refs/heads/' + branch] = rm_saves(repo, saves)
         except BaseException as ex:
-            if writer:
-                with pending_raise(ex):
-                    writer.abort()
-        if writer:
-            # Must close before we can update the ref(s) below.
-            writer.close()
+            with pending_raise(ex):
+                repo.abort_writing()
 
     # Only update the refs here, at the very end, so that if something
     # goes wrong above, the old refs will be undisturbed.  Make an attempt
@@ -131,9 +128,9 @@ def bup_rm(repo, paths, compression=6, verbosity=None):
         orig_ref, new_ref = info
         try:
             if not new_ref:
-                git.delete_ref(ref_name, hexlify(orig_ref))
+                repo.delete_ref(ref_name, orig_ref)
             else:
-                git.update_ref(ref_name, new_ref, orig_ref)
+                repo.update_ref(ref_name, new_ref, orig_ref)
                 if verbosity:
                     log('updated %s (%s%s)\n'
                         % (path_msg(ref_name),

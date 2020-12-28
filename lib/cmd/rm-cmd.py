@@ -21,15 +21,15 @@ sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
 from bup import compat
 from bup.compat import argv_bytes
-from bup.git import check_repo_or_die
 from bup.options import Options
 from bup.helpers import die_if_errors, handle_ctrl_c, log
-from bup.repo import LocalRepo
+from bup.repo import from_opts
 from bup.rm import bup_rm
 
 optspec = """
 bup rm <branch|save...>
 --
+r,remote=    hostname:/path/to/repo of remote repository
 #,compress=  set compression level to # (0-9, 9 is highest) [6]
 v,verbose    increase verbosity (can be specified multiple times)
 unsafe       use the command even though it may be DANGEROUS
@@ -46,8 +46,6 @@ if not opt.unsafe:
 if len(extra) < 1:
     o.fatal('no paths specified')
 
-check_repo_or_die()
-repo = LocalRepo()
-bup_rm(repo, [argv_bytes(x) for x in extra],
-       compression=opt.compress, verbosity=opt.verbose)
+repo = from_opts(opt)
+bup_rm(repo, [argv_bytes(x) for x in extra], verbosity=opt.verbose)
 die_if_errors()
