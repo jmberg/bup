@@ -19,7 +19,7 @@ from bup.compat import (buffer,
                         pending_raise,
                         reraise)
 from bup.io import path_msg
-from bup.helpers import (Sha1, add_error, chunkyreader, debug1, debug2,
+from bup.helpers import (Sha1, add_error, chunkyreader, debug1,
                          exo,
                          fdatasync,
                          finalized,
@@ -1192,32 +1192,6 @@ def rev_list(ref_or_refs, parse=None, format=None, repo_dir=None):
         raise GitError('git rev-list returned error %d' % rv)
 
 
-def rev_parse(committish, repo_dir=None):
-    """Resolve the full hash for 'committish', if it exists.
-
-    Should be roughly equivalent to 'git rev-parse'.
-
-    Returns the hex value of the hash if it is found, None if 'committish' does
-    not correspond to anything.
-    """
-    head = read_ref(committish, repo_dir=repo_dir)
-    if head:
-        debug2("resolved from ref: commit = %s\n" % hexlify(head))
-        return head
-
-    if len(committish) == 40:
-        try:
-            hash = unhexlify(committish)
-        except TypeError:
-            return None
-
-        with PackIdxList(repo(b'objects/pack', repo_dir=repo_dir)) as pL:
-            if pL.exists(hash):
-                return hash
-
-    return None
-
-
 def update_ref(refname, newval, oldval, repo_dir=None, force=False):
     """Update a repository reference.
 
@@ -1455,18 +1429,6 @@ def close_catpipes():
     while _cp:
         _, cp = _cp.popitem()
         cp.close(wait=True)
-
-
-def tags(repo_dir = None):
-    """Return a dictionary of all tags in the form {hash: [tag_names, ...]}."""
-    tags = {}
-    for n, c in list_refs(repo_dir = repo_dir, limit_to_tags=True):
-        assert n.startswith(b'refs/tags/')
-        name = n[10:]
-        if not c in tags:
-            tags[c] = []
-        tags[c].append(name)  # more than one tag can point at 'c'
-    return tags
 
 
 class MissingObject(KeyError):

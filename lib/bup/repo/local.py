@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import os, subprocess
 from os.path import realpath
 from functools import partial
+from binascii import hexlify
 
 from bup import git
 from bup.repo.base import BaseRepo
@@ -64,6 +65,9 @@ class LocalRepo(BaseRepo):
     def update_ref(self, refname, newval, oldval):
         self.finish_writing()
         return git.update_ref(refname, newval, oldval, repo_dir=self.repo_dir)
+
+    def delete_ref(self, refname, oldval=None):
+        git.delete_ref(refname, hexlify(oldval) if oldval else None)
 
     def cat(self, ref):
         it = self._cp.get(ref)
