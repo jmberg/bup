@@ -140,6 +140,7 @@ class Server:
         self._commands = self._get_commands(mode or 'unrestricted')
         self.suspended = False
         self.repo = None
+        self.dumb_server_mode = True
 
     def _get_commands(self, mode):
         # always allow these - even if set-dir may actually be
@@ -193,10 +194,11 @@ class Server:
         if not self.repo:
             self.repo = self._backend(repo_dir, server=True)
             msgdir = path_msg(self.repo.repo_dir)
-            if self.repo.dumb_server_mode:
-                debug1('bup server: (%s mode) serving %s\n'
-                       % (self.repo.dumb_server_mode and 'dumb' or 'smart',
-                          path_msg(self.repo.repo_dir)))
+            self.dumb_server_mode = self.repo.config_get(b'bup.dumb-server',
+                                                         opttype='bool')
+            debug1('bup server: (%s mode) serving %s\n'
+                   % (self.dumb_server_mode and 'dumb' or 'smart',
+                      path_msg(self.repo.repo_dir)))
 
     @_command
     def init_dir(self, arg):
@@ -212,7 +214,7 @@ class Server:
     @_command
     def list_indexes(self, junk):
         self.init_session()
-        suffix = b' load' if self.repo.dumb_server_mode else b''
+        suffix = b' load' if self.dumb_server_mode else b''
         for f in self.repo.list_indexes():
             # must end with .idx to not confuse everything
             assert f.endswith(b'.idx')
@@ -274,7 +276,7 @@ class Server:
             buf = self.conn.read(n)  # object sizes in bup are reasonably small
             #debug2('read %d bytes\n' % n)
             self._check(n, len(buf), 'object read: expected %d bytes, got %d\n')
-            if not self.repo.dumb_server_mode:
+            if not self.dumb_server_mode:
                 result = self.repo.exists(shar, want_source=True)
                 if result:
                     oldpack = result.pack

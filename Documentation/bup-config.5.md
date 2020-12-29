@@ -68,6 +68,9 @@ bup.split.files
     bup.split.trees this is a performance, not correctness, issue, however,
     it's something to avoid.
 
+bup.dumb-server
+:   This setting determines the "dumb server mode", see `bup-server`(1).
+
 pack.packSizeLimit
 :   Respected when writing pack files (e.g. via `bup save ...`).
     Note that bup will honor this value from the repository written to

@@ -13,19 +13,15 @@ class LocalRepo(BaseRepo):
                  server=False):
         self._packwriter = None
         self.repo_dir = realpath(repo_dir or git.guess_repo())
-        self.config_get = partial(git.git_config_get, repo_dir=self.repo_dir)
         self.config_write = partial(git.git_config_write, repo_dir=self.repo_dir)
         self.config_list = partial(git.git_config_list, repo_dir=self.repo_dir)
-        # init the superclass only afterwards so it can access self.config_get()
         super(LocalRepo, self).__init__(self.repo_dir,
                                         compression_level=compression_level,
                                         max_pack_size=max_pack_size,
                                         max_pack_objects=max_pack_objects)
         self._cp = git.cp(self.repo_dir)
         self.rev_list = partial(git.rev_list, repo_dir=self.repo_dir)
-        self.dumb_server_mode = os.path.exists(git.repo(b'bup-dumb-server',
-                                                        repo_dir=self.repo_dir))
-        if server and self.dumb_server_mode:
+        if server and self.config_get(b'bup.dumb-server', opttype='bool'):
             # don't make midx files in dumb server mode
             self.objcache_maker = lambda : None
             self.run_midx = False
@@ -42,6 +38,13 @@ class LocalRepo(BaseRepo):
         # ensure it gets a repo-id
         with LocalRepo(repo_dir):
             pass
+
+    def config_get(self, name, opttype=None):
+        val = git.git_config_get(name, opttype=opttype, repo_dir=self.repo_dir)
+        if val is None and name == b'bup.dumb-server':
+            return os.path.exists(git.repo(b'bup-dumb-server',
+                                           repo_dir=self.repo_dir))
+        return val
 
     def list_indexes(self):
         for f in os.listdir(git.repo(b'objects/pack',
