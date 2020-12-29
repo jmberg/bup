@@ -14,8 +14,8 @@ bup() { "$top/bup" "$@"; }
 
 WVPASS mkdir "$tmpdir/foo"
 
-bup index "$tmpdir/foo" &> /dev/null
-index_rc=$?
-WVPASSEQ "$index_rc" "15"
+bup save "$tmpdir/foo" -t &> /dev/null
+rc=$?
+WVPASSEQ "$rc" "15"
 
 WVPASS rm -rf "$tmpdir"
