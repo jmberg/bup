@@ -34,6 +34,9 @@ pack.packSizeLimit
   be addressed by a 31-bit offset, and thus need no large offset in the
   idx file.
 
+bup.dumb-server
+: This setting determines the "dumb server mode", see `bup-server`(1).
+
 bup.blobbits
 : This setting determines the number of fixed bits in the hash-split
   algorithm that lead to a chunk boundary, and thus the average size of

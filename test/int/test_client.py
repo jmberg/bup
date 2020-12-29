@@ -97,10 +97,17 @@ def test_multiple_suggestions(tmpdir):
     assert len(glob.glob(c.cachedir+IDX_PAT)) == 3
 
 
-def test_dumb_client_server(tmpdir):
+@pytest.mark.parametrize("dumb_mode", ('file', 'config'))
+def test_dumb_client_server(dumb_mode, tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
     git.init_repo(bupdir)
-    open(git.repo(b'bup-dumb-server'), 'w').close()
+    if dumb_mode == 'file':
+        open(git.repo(b'bup-dumb-server'), 'w').close()
+    elif dumb_mode == 'config':
+        git.git_config_write(b'bup.dumb-server', b'true',
+                             repo_dir=bupdir)
+    else:
+        assert False
 
     lw = git.PackWriter()
     lw.new_blob(s1)
