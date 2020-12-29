@@ -21,7 +21,7 @@ import math, os, stat, sys, time
 
 sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
-from bup import compat, hashsplit, git, options, index, client, repo, metadata
+from bup import compat, hashsplit, options, index, client, repo, metadata, path
 from bup import hlinkdb
 from bup.compat import argv_bytes, environ
 from bup.hashsplit import GIT_MODE_TREE, GIT_MODE_FILE, GIT_MODE_SYMLINK
@@ -63,7 +63,6 @@ if opt.name:
 if opt.strip_path:
     opt.strip_path = argv_bytes(opt.strip_path)
 
-git.check_repo_or_die()
 if not (opt.tree or opt.commit or opt.name):
     o.fatal("use one or more of -t, -c, -n")
 if not extra:
@@ -176,7 +175,7 @@ def progress_report(file, n):
                  remainstr, kpsstr))
 
 
-indexfile = opt.indexfile or git.repo(b'bupindex')
+indexfile = opt.indexfile or path.index()
 r = index.Reader(indexfile)
 try:
     msr = index.MetaStoreReader(indexfile + b'.meta')

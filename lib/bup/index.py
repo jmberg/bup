@@ -5,7 +5,7 @@ import errno, os, stat, struct, tempfile
 from bup import compat, metadata, xstat
 from bup._helpers import UINT_MAX, bytescmp
 from bup.compat import range
-from bup.helpers import (add_error, log, merge_iter, mmap_readwrite,
+from bup.helpers import (add_error, log, merge_iter, mmap_readwrite, mkdirp,
                          progress, qprogress, resolve_parent, slashappend)
 
 EMPTY_SHA = b'\0' * 20
@@ -75,6 +75,9 @@ class MetaStoreWriter:
         self._offsets = {}
         self._filename = filename
         self._file = None
+        dirname = os.path.dirname(filename)
+        if dirname:
+            mkdirp(dirname)
         # FIXME: see how slow this is; does it matter?
         m_file = open(filename, 'ab+')
         try:
