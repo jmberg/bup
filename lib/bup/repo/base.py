@@ -72,10 +72,6 @@ class BaseRepo(object):
         (e.g. refs, tags, etc.)."""
         return self._cache_id
 
-    @property
-    def dumb_server_mode(self):
-        return False
-
     def is_remote(self):
         return False
 

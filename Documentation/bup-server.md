@@ -69,11 +69,12 @@ dumb
 
 $BUP_DIR/bup-dumb-server
 :   Activate dumb server mode, as discussed above.  This file is not created by
-    default in new repositories.
+    default in new repositories. Alternatively, set bup.dumb-server in the
+    config, see `bup-config`(1) and `bup-settings`(7).
 
 # SEE ALSO
 
-`bup-save`(1), `bup-split`(1)
+`bup-save`(1), `bup-split`(1), `bup-config`(1), `bup-settings`(7)
 
 # BUP
 
