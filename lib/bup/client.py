@@ -3,7 +3,7 @@ from binascii import hexlify, unhexlify
 import os, re, struct, sys, time, zlib
 import socket
 
-from bup import git, ssh, vfs, vint, protocol
+from bup import git, ssh, vfs, vint, protocol, path
 from bup.compat import pending_raise
 from bup.helpers import (Conn, atomically_replaced_file, chunkyreader, debug1,
                          debug2, linereader, lines_until_sentinel,
@@ -88,10 +88,9 @@ class Client:
             # but crashes instead when doing b'%s' % None.
             cachehost = b'None' if self.host is None else self.host
             cachedir = b'None' if self.dir is None else self.dir
-            self.cachedir = git.repo(b'index-cache/%s'
-                                     % re.sub(br'[^@\w]',
-                                              b'_',
-                                              b'%s:%s' % (cachehost, cachedir)))
+            self.cachedir = path.cachedir(re.sub(br'[^@\w]',
+                                                 b'_',
+                                                 b'%s:%s' % (cachehost, cachedir)))
             if self.protocol == b'bup-rev':
                 self.pout = os.fdopen(3, 'rb')
                 self.pin = os.fdopen(4, 'wb')
