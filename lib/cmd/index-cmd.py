@@ -20,7 +20,8 @@ import errno, os, re, stat, sys, time
 
 sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 
-from bup import compat, metadata, options, git, index, drecurse, hlinkdb
+from bup import compat, metadata, options, index, drecurse, hlinkdb
+from bup import path as bup_path
 from bup.compat import argv_bytes
 from bup.drecurse import recursive_dirlist
 from bup.hashsplit import GIT_MODE_TREE, GIT_MODE_FILE
@@ -99,7 +100,7 @@ def update_index(top, excluded_paths, exclude_rxs, xdev_exceptions, out=None):
             return (GIT_MODE_FILE, index.FAKE_SHA)
 
     total = 0
-    bup_dir = os.path.abspath(git.repo())
+    bup_dir = os.path.abspath(bup_path.defaultrepo())
     index_start = time.time()
     for path, pst in recursive_dirlist([top],
                                        xdev=opt.xdev,
@@ -263,8 +264,6 @@ if opt.clear and opt.indexfile:
 tick_start = time.time()
 time.sleep(1 - (tick_start - int(tick_start)))
 
-git.check_repo_or_die()
-
 handle_ctrl_c()
 
 if opt.verbose is None:
@@ -273,7 +272,7 @@ if opt.verbose is None:
 if opt.indexfile:
     indexfile = argv_bytes(opt.indexfile)
 else:
-    indexfile = git.repo(b'bupindex')
+    indexfile = bup_path.index()
 
 if opt.check:
     log('check: starting initial check.\n')
