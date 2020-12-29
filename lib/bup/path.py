@@ -40,3 +40,6 @@ def cachedir(forwhat):
 def indexcache(forwhat):
     forwhat = re.sub(br'[^@\w]', b'_', forwhat)
     return os.path.join(cachedir(b'index-cache'), forwhat)
+
+def index():
+    return os.path.join(defaultrepo(), b'bupindex')
