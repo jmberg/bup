@@ -130,6 +130,7 @@ class BupProtocolServer:
         self._commands = self._get_commands(mode or 'unrestricted')
         self.suspended = False
         self.repo = None
+        self.dumb_server_mode = True
 
     def _get_commands(self, mode):
         # always allow these - even if set-dir may actually be
@@ -182,9 +183,11 @@ class BupProtocolServer:
             self.suspended = False
         if not self.repo:
             self.repo = self._backend(repo_dir)
+            self.dumb_server_mode = self.repo.config(b'bup.dumb-server',
+                                                     opttype='bool')
             debug1('bup server: bupdir is %r\n' % self.repo.repo_dir)
             debug1('bup server: serving in %s mode\n'
-                   % (self.repo.dumb_server_mode and 'dumb' or 'smart'))
+                   % (self.dumb_server_mode and 'dumb' or 'smart'))
 
     @_command
     def init_dir(self, arg):
@@ -200,7 +203,7 @@ class BupProtocolServer:
     @_command
     def list_indexes(self, junk):
         self.init_session()
-        suffix = b' load' if self.repo.dumb_server_mode else b''
+        suffix = b' load' if self.dumb_server_mode else b''
         for f in self.repo.list_indexes():
             # must end with .idx to not confuse everything
             assert f.endswith(b'.idx')
@@ -229,7 +232,7 @@ class BupProtocolServer:
         if self.suspended:
             self.suspended = False
         else:
-            if self.repo.dumb_server_mode:
+            if self.dumb_server_mode:
                 objcache_maker = lambda : None
             else:
                 objcache_maker = None
@@ -249,7 +252,7 @@ class BupProtocolServer:
                 debug1('bup server: received %d object%s.\n'
                     % (self.repo._packwriter.count,
                        self.repo._packwriter.count != 1 and "s" or ''))
-                fullpath = self.repo.finish_writing(run_midx=not self.repo.dumb_server_mode)
+                fullpath = self.repo.finish_writing(run_midx=not self.dumb_server_mode)
                 if fullpath:
                     dir, name = os.path.split(fullpath)
                     self.conn.write(b'%s.idx\n' % name)
@@ -267,7 +270,7 @@ class BupProtocolServer:
             buf = self.conn.read(n)  # object sizes in bup are reasonably small
             #debug2('read %d bytes\n' % n)
             self._check(n, len(buf), 'object read: expected %d bytes, got %d\n')
-            if not self.repo.dumb_server_mode:
+            if not self.dumb_server_mode:
                 result = self.repo.exists(shar, want_source=True)
                 if result:
                     oldpack = result.pack

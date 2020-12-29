@@ -15,7 +15,6 @@ class LocalRepo(BaseRepo):
                  objcache_maker=None):
         self._packwriter = None
         self.repo_dir = realpath(repo_dir or git.guess_repo())
-        self.config = partial(git.git_config_get, repo_dir=self.repo_dir)
         # init the superclass only afterwards so it can access self.config()
         super(LocalRepo, self).__init__(self.repo_dir,
                                         compression_level=compression_level,
@@ -39,12 +38,12 @@ class LocalRepo(BaseRepo):
         with LocalRepo(repo_dir):
             pass
 
-    @property
-    def dumb_server_mode(self):
-        if self._dumb_server_mode is None:
-            self._dumb_server_mode = os.path.exists(git.repo(b'bup-dumb-server',
-                                                             repo_dir=self.repo_dir))
-        return self._dumb_server_mode
+    def config(self, name, opttype=None):
+        val = git.git_config_get(name, opttype=opttype, repo_dir=self.repo_dir)
+        if val is None and name == b'bup.dumb-server':
+            return os.path.exists(git.repo(b'bup-dumb-server',
+                                           repo_dir=self.repo_dir))
+        return val
 
     def list_indexes(self):
         for f in os.listdir(git.repo(b'objects/pack',
