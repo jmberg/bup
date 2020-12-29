@@ -49,7 +49,8 @@ class LocalRepo(BaseRepo):
     def list_indexes(self):
         for f in os.listdir(git.repo(b'objects/pack',
                                      repo_dir=self.repo_dir)):
-            yield f
+            if f.endswith(b'.idx'):
+                yield f
 
     def read_ref(self, refname):
         return git.read_ref(refname, repo_dir=self.repo_dir)
