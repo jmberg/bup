@@ -3,7 +3,7 @@ from binascii import hexlify
 from errno import ENOENT
 import math, os, stat, sys, time
 
-from bup import hashsplit, git, options, index, client, metadata
+from bup import hashsplit, options, index, client, metadata, path
 from bup.repo import from_opts
 from bup import hlinkdb
 from bup.compat import argv_bytes, environ
@@ -426,7 +426,6 @@ def main(argv):
     handle_ctrl_c()
     opt = opts_from_cmdline(argv)
     client.bwlimit = opt.bwlimit
-    git.check_repo_or_die()
 
     with from_opts(opt) as repo:
         split_trees = repo.config_get(b'bup.split.trees', opttype='bool')
@@ -440,7 +439,7 @@ def main(argv):
         else:
             refname = parent = None
 
-        indexfile = opt.indexfile or git.repo(b'bupindex')
+        indexfile = opt.indexfile or path.index()
         try:
             msr = index.MetaStoreReader(indexfile + b'.meta')
         except IOError as ex:
