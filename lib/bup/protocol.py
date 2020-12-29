@@ -204,11 +204,9 @@ class BupProtocolServer:
         self.init_session()
         suffix = b' load' if self.repo.dumb_server_mode else b''
         for f in self.repo.list_indexes():
-            # must end with .idx to not confuse everything, so filter
-            # here ... even if the subclass might not yield anything
-            # else to start with
-            if f.endswith(b'.idx'):
-                self.conn.write(b'%s%s\n' % (f, suffix))
+            # must end with .idx to not confuse everything
+            assert f.endswith(b'.idx')
+            self.conn.write(b'%s%s\n' % (f, suffix))
         self.conn.ok()
 
     def _send_size(self, size):
