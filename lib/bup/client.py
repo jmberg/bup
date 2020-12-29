@@ -6,7 +6,7 @@ from binascii import hexlify, unhexlify
 import errno, os, re, struct, sys, time, zlib
 import socket
 
-from bup import git, ssh, vfs, protocol
+from bup import git, ssh, vfs, protocol, path
 from bup.compat import environ, range, reraise
 from bup.helpers import (Conn, atomically_replaced_file, chunkyreader, debug1,
                          debug2, linereader, lines_until_sentinel,
@@ -118,17 +118,16 @@ class Client:
         # if the remote repo has one (that can be accessed)
         repo_id = self.config(b'bup.repo-id')
         if repo_id is not None:
-            self.cachedir = git.repo(b'index-cache/%s' % repo_id)
+            self.cachedir = path.cachedir(repo_id)
         else:
             # The b'None' here matches python2's behavior of b'%s' % None == 'None',
             # python3 will (as of version 3.7.5) do the same for str ('%s' % None),
             # but crashes instead when doing b'%s' % None.
             cachehost = b'None' if self.host is None else self.host
             cachedir = b'None' if self.dir is None else self.dir
-            self.cachedir = git.repo(b'index-cache/%s'
-                                     % re.sub(br'[^@\w]',
-                                              b'_',
-                                              b'%s:%s' % (cachehost, cachedir)))
+            self.cachedir = path.cachedir(re.sub(br'[^@\w]',
+                                                 b'_',
+                                                 b'%s:%s' % (cachehost, cachedir)))
 
         self.sync_indexes()
 

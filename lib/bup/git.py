@@ -1157,22 +1157,19 @@ def delete_ref(refname, oldvalue=None):
     _git_wait('git update-ref', p)
 
 
-def guess_repo(path=None):
+def guess_repo(repo_dir=None):
     """Set the path value in the global variable "repodir".
     This makes bup look for an existing bup repository, but not fail if a
     repository doesn't exist. Usually, if you are interacting with a bup
     repository, you would not be calling this function but using
     check_repo_or_die().
     """
-    if path:
-        return path
+    if repo_dir:
+        return repo_dir
     # previously set?
     if repodir:
         return repodir
-    repo = environ.get(b'BUP_DIR')
-    if not repo:
-        repo = os.path.expanduser(b'~/.bup')
-    return repo
+    return path.defaultrepo()
 
 
 def init_repo(path=None):
