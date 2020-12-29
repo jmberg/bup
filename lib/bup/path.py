@@ -43,3 +43,6 @@ def index_cache(identifier):
     if os.path.exists(repo_cache):
         return os.path.join(repo_cache, identifier)
     return os.path.join(xdg_cache(), b'bup', b'remote', identifier)
+
+def default_fsindex():
+    return os.path.join(defaultrepo(), b'bupindex')
