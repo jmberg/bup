@@ -570,6 +570,25 @@ class EncryptedRepo(ConfigRepo):
             self.ec_cache[self.refsname].close()
             del self.ec_cache[self.refsname]
 
+    def delete_ref(self, refname, oldval=None):
+        self.finish_writing()
+        readfile, refs = self._json_refs()
+        if oldval:
+            assert refs[refname] == hexlify(oldval)
+        del refs[refname]
+        refs = self._encode_refs(refs)
+        reffile = EncryptedContainer(self, self.storage, self.refsname, 'w',
+                                     Kind.CONFIG, self.compression,
+                                     key=self.repokey,
+                                     overwrite=readfile,
+                                     compressor=self.compressor)
+        reffile.write(0, None, json.dumps(refs).encode('utf-8'))
+        reffile.finish()
+        # now invalidate our read cache
+        if self.refsname in self.ec_cache:
+            self.ec_cache[self.refsname].close()
+            del self.ec_cache[self.refsname]
+
     def _open_read(self, name, kind, cache=False):
         if not name in self.ec_cache:
             if kind in (Kind.IDX, Kind.CONFIG):
