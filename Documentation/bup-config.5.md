@@ -54,6 +54,9 @@ bup.blobbits
     the repository again, rather than deduplicating. Consider the disk
     usage of this to be mostly equivalent to starting a new repository.
 
+bup.dumb-server
+:   This setting determines the "dumb server mode", see `bup-server`(1).
+
 pack.packSizeLimit
 :   Respected when writing pack files (e.g. via `bup save ...`).
     Note that bup will honor this value from the repository written to
