@@ -3,7 +3,8 @@ from __future__ import absolute_import, print_function
 from binascii import hexlify
 import errno, os, stat, sys, time
 
-from bup import compat, metadata, options, git, index, drecurse, hlinkdb
+from bup import compat, metadata, options, index, drecurse, hlinkdb
+from bup import path as bup_path
 from bup.compat import argv_bytes
 from bup.drecurse import recursive_dirlist
 from bup.hashsplit import GIT_MODE_TREE, GIT_MODE_FILE
@@ -86,7 +87,7 @@ def update_index(top, excluded_paths, exclude_rxs, indexfile,
             return (GIT_MODE_FILE, index.FAKE_SHA)
 
     total = 0
-    bup_dir = os.path.abspath(git.repo())
+    bup_dir = os.path.abspath(bup_path.defaultrepo())
     index_start = time.time()
     for path, pst in recursive_dirlist([top],
                                        xdev=xdev,
@@ -252,8 +253,6 @@ def main(argv):
     tick_start = time.time()
     time.sleep(1 - (tick_start - int(tick_start)))
 
-    git.check_repo_or_die()
-
     handle_ctrl_c()
 
     if opt.verbose is None:
@@ -262,7 +261,7 @@ def main(argv):
     if opt.indexfile:
         indexfile = argv_bytes(opt.indexfile)
     else:
-        indexfile = git.repo(b'bupindex')
+        indexfile = bup_path.index()
 
     if opt.check:
         log('check: starting initial check.\n')

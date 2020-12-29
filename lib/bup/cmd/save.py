@@ -4,7 +4,7 @@ from binascii import hexlify
 from errno import EACCES
 import math, os, stat, sys, time
 
-from bup import compat, hashsplit, git, options, index, client, metadata
+from bup import compat, hashsplit, git, options, index, client, metadata, path
 from bup.repo import from_opts
 from bup import hlinkdb
 from bup.compat import argv_bytes, environ
@@ -53,7 +53,6 @@ def main(argv):
     if opt.strip_path:
         opt.strip_path = argv_bytes(opt.strip_path)
 
-    git.check_repo_or_die()
     if not (opt.tree or opt.commit or opt.name):
         o.fatal("use one or more of -t, -c, -n")
     if not extra:
@@ -168,7 +167,7 @@ def main(argv):
                      remainstr, kpsstr))
 
 
-    indexfile = opt.indexfile or git.repo(b'bupindex')
+    indexfile = opt.indexfile or path.index()
     r = index.Reader(indexfile)
     try:
         msr = index.MetaStoreReader(indexfile + b'.meta')
