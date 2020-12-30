@@ -257,7 +257,6 @@ handle_ctrl_c()
 
 o = options.Options(optspec)
 opt, flags, extra = o.parse(compat.argv[1:])
-opt.dir = argv_bytes(opt.dir) if opt.dir else None
 opt.output = argv_bytes(opt.output) if opt.output else None
 
 if extra and (opt.auto or opt.force):
@@ -271,6 +270,8 @@ if opt.max_files < 0:
     opt.max_files = max_files()
 assert(opt.max_files >= 5)
 
+path = opt.dir and argv_bytes(opt.dir) or git.repo(b'objects/pack')
+
 extra = [argv_bytes(x) for x in extra]
 
 if opt.check:
@@ -278,7 +279,6 @@ if opt.check:
     if extra:
         midxes = extra
     else:
-        path = opt.dir or git.repo(b'objects/pack')
         debug1('midx: scanning %s\n' % path)
         midxes = glob.glob(os.path.join(path, b'*.midx'))
     for name in midxes:
@@ -288,7 +288,7 @@ if opt.check:
 else:
     if extra:
         sys.stdout.flush()
-        do_midx(git.repo(b'objects/pack'), opt.output, extra, b'',
+        do_midx(path, opt.output, extra, b'',
                 byte_stream(sys.stdout))
     elif opt.auto or opt.force:
         sys.stdout.flush()
