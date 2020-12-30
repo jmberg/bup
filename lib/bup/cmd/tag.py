@@ -1,5 +1,4 @@
 
-from __future__ import absolute_import
 import sys
 
 from bup import git, options
@@ -12,58 +11,65 @@ from bup.repo import from_opts
 # FIXME: review for safe writes.
 
 optspec = """
-bup tag
-bup tag [-f] <tag name> <commit>
-bup tag [-f] -d <tag name>
+bup %(cmd)s
+bup %(cmd)s [-f] <%(cmd)s name> <commit>
+bup %(cmd)s [-f] -d <%(cmd)s name>
 --
 r,remote=   hostname:/path/to/repo of remote repository
-d,delete=   Delete a tag
-f,force     Overwrite existing tag, or ignore missing tag when deleting
+d,delete=   Delete a %(cmd)s
+f,force     Overwrite existing %(cmd)s, or ignore missing %(cmd)s when deleting
 """
 
-def main(argv):
-    o = options.Options(optspec)
+def main(argv, branch=False):
+    if branch:
+        refpfx = b'refs/heads/'
+        desc = 'branch'
+    else:
+        refpfx = b'refs/tags/'
+        desc = 'tag'
+
+    o = options.Options(optspec % { 'cmd': desc })
     opt, flags, extra = o.parse_bytes(argv[1:])
 
     with from_opts(opt) as repo:
-        refs = { r[0]: r[1] for r in repo.refs() if r[0].startswith(b'refs/tags/') }
+        refs = { r[0]: r[1] for r in repo.refs() if r[0].startswith(refpfx) }
 
         if opt.delete:
             # git.delete_ref() doesn't complain if a ref doesn't exist.  We
             # could implement this verification but we'd need to read in the
-            # contents of the tag file and pass the hash, and we already know
-            # about the tag's existance via "tags".
-            tag_name = argv_bytes(opt.delete)
-            refname = b'refs/tags/' + tag_name
+            # contents of the ref file and pass the hash, and we already know
+            # about the ref's existance via "refs".
+            ref_name = argv_bytes(opt.delete)
+            refname = refpfx + ref_name
             if not opt.force and refname not in refs:
-                log("error: tag '%s' doesn't exist\n" % path_msg(tag_name))
+                log("error: %s '%s' doesn't exist\n" % (desc, path_msg(ref_name)))
                 sys.exit(1)
-            repo.delete_ref(b'refs/tags/%s' % tag_name)
+            repo.delete_ref(refpfx + ref_name)
             sys.exit(0)
 
         if not extra:
             for t in refs:
                 sys.stdout.flush()
                 out = byte_stream(sys.stdout)
-                out.write(t[len(b'refs/tags/'):])
+                out.write(t[len(refpfx):])
                 out.write(b'\n')
             sys.exit(0)
         elif len(extra) != 2:
             o.fatal('expected commit ref and hash')
 
-        tag_name, commit = map(argv_bytes, extra[:2])
-        if not tag_name:
-            o.fatal("tag name must not be empty.")
-        debug1("args: tag name = %s; commit = %s\n"
-               % (path_msg(tag_name), commit.decode('ascii')))
-        refname = b'refs/tags/' + tag_name
+        ref_name, commit = map(argv_bytes, extra[:2])
+        if not ref_name:
+            o.fatal("%s name must not be empty." % desc)
+        debug1("args: %s name = %s; commit = %s\n"
+               % (desc, path_msg(ref_name), commit.decode('ascii')))
+        refname = refpfx + ref_name
 
         if refname in refs and not opt.force:
-            log("bup: error: tag '%s' already exists\n" % path_msg(tag_name))
+            log("bup: error: %s '%s' already exists\n" % (desc, path_msg(ref_name)))
             sys.exit(1)
 
-        if tag_name.startswith(b'.'):
-            o.fatal("'%s' is not a valid tag name." % path_msg(tag_name))
+        if ref_name.startswith(b'.'):
+            o.fatal("'%s' is not a valid %s name." % (path_msg(ref_name), desc))
 
         try:
             hash = repo.rev_parse(commit)
@@ -79,5 +85,5 @@ def main(argv):
             oldref = refs.get(refname, None)
             repo.update_ref(refname, hash, oldref)
         except git.GitError as e:
-            log("bup: error: could not create tag '%s': %s" % (path_msg(tag_name), e))
+            log("bup: error: could not create %s '%s': %s" % (desc, path_msg(ref_name), e))
             sys.exit(3)
