@@ -360,8 +360,6 @@ else:
             o.fatal('port must be an integer, not %r' % port)
         address = InetAddress(host=host, port=port)
 
-git.check_repo_or_die()
-
 settings = dict(
     debug = 1,
     template_path = resource_path(b'web').decode('utf-8'),
