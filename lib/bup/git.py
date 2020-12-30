@@ -780,7 +780,10 @@ class PackWriter:
     def __init__(self, objcache_maker=None, compression_level=None,
                  run_midx=True, on_pack_finish=None,
                  max_pack_size=None, max_pack_objects=None, repo_dir=None):
-        self.repo_dir = repo_dir or repo()
+        # In the case of a PackWriter_Remote instance we shouldn't _require_ a
+        # local repo (hence guess_repo()), but for backward compatibility reasons
+        # have to look up the packSizeLimit in a local repo (if it exists)...
+        self.repo_dir = repo_dir or guess_repo()
         self.file = None
         self.parentfd = None
         self.count = 0
