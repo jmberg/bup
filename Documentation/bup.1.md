@@ -128,6 +128,9 @@ Subcommands are described in separate man pages.  For example
 `bup-server`(1)
 :   The server side of the bup client-server relationship
 
+`bup-show`(1)
+:   Show a commit, tree, or blob in the bup repository
+
 `bup-split`(1)
 :   Split a single file into its own backup set
 
