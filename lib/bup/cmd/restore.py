@@ -224,8 +224,6 @@ def main(argv):
     if opt.outdir:
         opt.outdir = argv_bytes(opt.outdir)
     
-    git.check_repo_or_die()
-
     if not extra:
         o.fatal('must specify at least one filename to restore')
 

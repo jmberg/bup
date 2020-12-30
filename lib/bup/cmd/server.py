@@ -28,7 +28,6 @@ def main(argv):
         def __init__(self, repo_dir):
             if opt.force_repo:
                 repo_dir = None
-            git.check_repo_or_die(repo_dir)
             LocalRepo.__init__(self, repo_dir)
 
     def _restrict(server, commands):

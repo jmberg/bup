@@ -151,10 +151,14 @@ def main(argv):
     if opt.check:
         opt.check = argv_bytes(opt.check)
 
-    git.check_repo_or_die()
-
     output = argv_bytes(opt.output) if opt.output else None
-    path = opt.dir and argv_bytes(opt.dir) or git.repo(b'objects/pack')
+
+    if opt.dir:
+        path = argv_bytes(opt.dir)
+    else:
+        git.check_repo_or_die()
+        path = git.repo(b'objects/pack')
+
     debug1('bloom: scanning %s\n' % path_msg(path))
     outfilename = output or os.path.join(path, b'bup.bloom')
     if opt.check:
