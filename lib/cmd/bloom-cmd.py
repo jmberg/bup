@@ -171,16 +171,15 @@ if opt.check:
 git.check_repo_or_die()
 
 output = argv_bytes(opt.output) if opt.output else None
-paths = opt.dir and [argv_bytes(opt.dir)] or git.all_packdirs()
-for path in paths:
-    debug1('bloom: scanning %s\n' % path_msg(path))
-    outfilename = output or os.path.join(path, b'bup.bloom')
-    if opt.check:
-        check_bloom(path, outfilename, opt.check)
-    elif opt.ruin:
-        ruin_bloom(outfilename)
-    else:
-        do_bloom(path, outfilename, opt.k)
+path = opt.dir and argv_bytes(opt.dir) or git.repo(b'objects/pack')
+debug1('bloom: scanning %s\n' % path_msg(path))
+outfilename = output or os.path.join(path, b'bup.bloom')
+if opt.check:
+    check_bloom(path, outfilename, opt.check)
+elif opt.ruin:
+    ruin_bloom(outfilename)
+else:
+    do_bloom(path, outfilename, opt.k)
 
 if saved_errors:
     log('WARNING: %d errors encountered during bloom.\n' % len(saved_errors))
