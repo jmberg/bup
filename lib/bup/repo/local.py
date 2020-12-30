@@ -12,8 +12,10 @@ class LocalRepo(BaseRepo):
     def __init__(self, repo_dir=None, compression_level=None,
                  max_pack_size=None, max_pack_objects=None,
                  server=False):
+        self.closed = True # until super().__init__()
         self._packwriter = None
         self.repo_dir = realpath(repo_dir or git.guess_repo())
+        git.check_repo_or_die(repo_dir)
         self.config_write = partial(git.git_config_write, repo_dir=self.repo_dir)
         self.config_list = partial(git.git_config_list, repo_dir=self.repo_dir)
         super(LocalRepo, self).__init__(self.repo_dir,

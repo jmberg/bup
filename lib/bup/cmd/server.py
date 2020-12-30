@@ -1,7 +1,7 @@
 
 import sys
 
-from bup import options, protocol, git
+from bup import options, protocol
 from bup.io import byte_stream
 from bup.repo import LocalRepo
 from bup.helpers import Conn, debug2
@@ -28,7 +28,6 @@ def main(argv):
             self.closed = True
             if opt.force_repo:
                 repo_dir = None
-            git.check_repo_or_die(repo_dir)
             LocalRepo.__init__(self, repo_dir, server=server)
 
     def _restrict(server, commands):
