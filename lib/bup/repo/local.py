@@ -16,6 +16,7 @@ class LocalRepo(BaseRepo):
         self._packwriter = None
         self.repo_dir = realpath(repo_dir or git.guess_repo())
         # init the superclass only afterwards so it can access self.config()
+        git.check_repo_or_die(repo_dir)
         super(LocalRepo, self).__init__(self.repo_dir,
                                         compression_level=compression_level,
                                         max_pack_size=max_pack_size,

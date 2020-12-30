@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from stat import S_ISDIR
 import copy, errno, os, re, stat, sys
 
-from bup import options, git, vfs
+from bup import options, vfs
 from bup._helpers import write_sparsely
 from bup.compat import argv_bytes, fsencode
 from bup.helpers import (add_error, chunkyreader, die_if_errors,
@@ -224,8 +224,6 @@ def main(argv):
     verbosity = (opt.verbose or 0) if not opt.quiet else -1
     if opt.outdir:
         opt.outdir = argv_bytes(opt.outdir)
-
-    git.check_repo_or_die()
 
     if not extra:
         o.fatal('must specify at least one filename to restore')
