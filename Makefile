@@ -74,7 +74,7 @@ endif
 config/bin/python: config/config.vars
 
 bup_cmds := \
-  $(patsubst cmd/%-cmd.py,cmd/bup-%,$(wildcard cmd/*-cmd.py)) \
+  $(patsubst cmd/%-cmd.py,cmd/bup-%,$(wildcard cmd/*-cmd.py)) cmd/bup-branch \
   $(patsubst cmd/%-cmd.sh,cmd/bup-%,$(wildcard cmd/*-cmd.sh))
 
 bup_deps := lib/bup/_helpers$(SOEXT) $(bup_cmds)
@@ -199,6 +199,10 @@ check-both:
 cmd/bup-%: cmd/%-cmd.py
 	rm -f $@
 	ln -s $*-cmd.py $@
+
+cmd/bup-branch: cmd/tag-cmd.py
+	rm -f $@
+	ln -s tag-cmd.py $@
 
 cmd/bup-%: cmd/%-cmd.sh
 	rm -f $@
