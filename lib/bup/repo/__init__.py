@@ -77,7 +77,6 @@ def from_opts(opt, reverse=True):
        - remote
      * the BUP_SERVER_REVERSE environment variable
     """
-    git.check_repo_or_die()
     if reverse:
         is_reverse = environ.get(b'BUP_SERVER_REVERSE')
         if is_reverse and opt.remote:

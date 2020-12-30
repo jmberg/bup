@@ -23,8 +23,6 @@ from bup import compat, git, ls
 from bup.io import byte_stream
 
 
-git.check_repo_or_die()
-
 sys.stdout.flush()
 out = byte_stream(sys.stdout)
 # Check out lib/bup/ls.py for the opt spec

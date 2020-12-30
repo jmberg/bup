@@ -161,7 +161,6 @@ sys.stderr = os.fdopen(errfd, 'w', 1)
 if len(extra) != 1:
     o.fatal('only one mount point argument expected')
 
-git.check_repo_or_die()
 repo = LocalRepo()
 f = BupFs(repo=repo, verbose=opt.verbose, fake_metadata=(not opt.meta))
 
