@@ -35,13 +35,11 @@ opt, flags, extra = o.parse(compat.argv[1:])
 if extra:
     o.fatal("no arguments expected")
 
-
-try:
-    repo.LocalRepo.create()
-except git.GitError as e:
-    log("bup: error: could not init repository: %s" % e)
-    sys.exit(1)
-
 if opt.remote:
-    git.check_repo_or_die()
     repo.make_repo(argv_bytes(opt.remote), create=True)
+else:
+    try:
+        repo.LocalRepo.create()
+    except git.GitError as e:
+        log("bup: error: could not init repository: %s" % e)
+        sys.exit(1)
