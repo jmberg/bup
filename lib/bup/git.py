@@ -298,7 +298,9 @@ def shorten_hash(s):
 
 def repo_rel(path):
     full = os.path.abspath(path)
-    fullrepo = os.path.abspath(repo(b''))
+    # this is only used for printing, so we don't mind if there's
+    # no real repo and we might be guessing wrong...
+    fullrepo = os.path.abspath(repo(b'', repo_dir=guess_repo()))
     if not fullrepo.endswith(b'/'):
         fullrepo += b'/'
     if full.startswith(fullrepo):
