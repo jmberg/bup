@@ -28,7 +28,7 @@ def notimplemented(fn):
 class BaseRepo:
     def __init__(self, key, compression_level=None,
                  max_pack_size=None, max_pack_objects=None):
-        self.closed = False
+        self.closed = True
         self._required_config_types = {
             b'pack.compression': 'int',
             b'pack.packsizelimit': 'int',
@@ -56,6 +56,7 @@ class BaseRepo:
         self.max_pack_objects = max_pack_objects
         self.dumb_server_mode = False
         self._ensure_repo_id()
+        self.closed = False
 
     def close(self):
         self.closed = True
