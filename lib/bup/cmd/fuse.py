@@ -26,7 +26,7 @@ if sys.version_info[0] > 2:
               file=sys.stderr)
         sys.exit(2)
 
-from bup import options, git, vfs, xstat
+from bup import options, vfs, xstat
 from bup.compat import argv_bytes, fsdecode
 from bup.helpers import log
 from bup.repo import LocalRepo
@@ -146,7 +146,6 @@ def main(argv):
     if len(extra) != 1:
         o.fatal('only one mount point argument expected')
 
-    git.check_repo_or_die()
     with LocalRepo() as repo:
         f = BupFs(repo=repo, verbose=opt.verbose, fake_metadata=(not opt.meta))
 

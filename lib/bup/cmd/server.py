@@ -1,7 +1,7 @@
 
 from __future__ import absolute_import
 import sys
-from bup import options, git
+from bup import options
 from bup.io import byte_stream
 from bup.protocol import BupProtocolServer
 from bup.repo import LocalRepo
@@ -27,7 +27,6 @@ def main(argv):
         def __init__(self, repo_dir):
             if opt.force_repo:
                 repo_dir = None
-            git.check_repo_or_die(repo_dir)
             LocalRepo.__init__(self, repo_dir)
 
     def _restrict(server, commands):
