@@ -104,6 +104,9 @@ Subcommands are described in separate man pages.  For example
 
 # OTHER COMMANDS
 
+`bup-branch`(1)
+:   List, create or delete a branch in the bup repository
+
 `bup-cat-file`(1)
 :   Extract archive content
 
