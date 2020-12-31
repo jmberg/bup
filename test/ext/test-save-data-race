@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+. wvtest.sh
+. wvtest-bup.sh
+. dev/lib.sh
+
+set -o pipefail
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+export BUP_DIR="$tmpdir/bup"
+
+bup() { "$top/bup" "$@"; }
+
+WVPASS cd "$tmpdir"
+
+WVPASS bup init
+WVPASS mkdir "$tmpdir/save"
+
+WVSTART "file content size vs. metadata size race"
+trap "touch \"$tmpdir/stop\"" EXIT
+(
+while test -d "$tmpdir" && ! test -f "$tmpdir/stop" ; do
+    # keep making the file go to 1k and then back to 0
+    echo -n '' > "$tmpdir/save/data"
+    for l in $(seq 1024) ; do
+        echo -n 'a' >> "$tmpdir/save/data"
+    done
+done
+) &
+
+for i in $(seq 20) ; do
+    # this might reasonably fail due to temporary files
+    # being created and disappearing
+    bup index "$tmpdir/save"
+    WVPASS bup save -n test "$tmpdir/save"
+    meta_size=$(WVPASS bup ls -nl "test/latest/$tmpdir/save/data" |
+                sed 's/[^ ]* [^ ]* *\([^ ]*\).*/\1/')
+    data_size=$(git -C "$BUP_DIR" show $(WVPASS bup ls -ls "test/latest/$tmpdir/save/data" |
+                                         sed 's/ .*//') | wc -c)
+    WVPASSEQ $meta_size $data_size
+done
+
+# stop the writer subshell
+touch "$tmpdir/stop"
+wait
+trap - EXIT
+
+WVPASS rm -rf "$tmpdir"
