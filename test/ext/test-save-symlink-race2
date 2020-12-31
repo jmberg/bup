@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+. wvtest.sh
+. wvtest-bup.sh
+. dev/lib.sh
+
+set -o pipefail
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+export BUP_DIR="$tmpdir/bup"
+
+bup() { "$top/bup" "$@"; }
+
+WVPASS cd "$tmpdir"
+
+WVPASS bup init
+WVPASS mkdir "$tmpdir/save"
+
+WVSTART "symlink metadata vs. content race"
+# in case we crash/fail, install exit handler to stop the symlink subshell
+trap "touch \"$tmpdir/stop\"" EXIT
+(
+while test -d "$tmpdir" && ! test -f "$tmpdir/stop" ; do
+    ln -sf a "$tmpdir/save/link"
+    ln -sf abc "$tmpdir/save/link"
+done
+) &
+
+for i in $(seq 20) ; do
+    # this might reasonably fail due to temporary files
+    # being created and disappearing
+    bup index "$tmpdir/save"
+    bup save -n test "$tmpdir/save" || continue
+    meta_tgt=$(WVPASS bup ls -ls "test/latest/$tmpdir/save/link" |
+               sed 's/.* -> //')
+    data_tgt=$(git -C "$BUP_DIR" show $(WVPASS bup ls -ls "test/latest/$tmpdir/save/link" |
+                                        sed 's/ .*//'))
+    WVPASSEQ $meta_tgt $data_tgt
+done
+
+# stop the symlinker subshell
+touch "$tmpdir/stop"
+wait
+trap - EXIT
+
+WVPASS rm -rf "$tmpdir"
