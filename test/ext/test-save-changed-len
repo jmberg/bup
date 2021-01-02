@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+. wvtest.sh
+. wvtest-bup.sh
+. dev/lib.sh
+
+set -o pipefail
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+export BUP_DIR="$tmpdir/bup"
+export BUP_DIR2="$tmpdir/bup2"
+
+bup() { "$top/bup" "$@"; }
+
+WVSTART "index vs. save file size change"
+
+WVPASS bup init
+WVPASS bup -d "$BUP_DIR2" init
+
+WVPASS mkdir "$tmpdir/save"
+
+# create a test file with 20 bytes at first
+WVPASS echo -n 01234567890123456789 > "$tmpdir/save/test"
+
+# index it
+WVPASS bup index "$tmpdir/save"
+
+# now double it
+WVPASS echo -n 01234567890123456789 >> "$tmpdir/save/test"
+
+# save it and check that it's recorded correctly with 40 bytes
+# (in both data and metadata)
+WVPASS bup save -n test "$tmpdir/save"
+WVPASS bup ls -ls "test/latest/$tmpdir/save/"
+WVPASS bup cat-file "test/latest/$tmpdir/save/test" |
+    WVPASS grep '^0123456789012345678901234567890123456789$'
+WVPASS bup ls -ls "test/latest/$tmpdir/save/" | WVPASS grep ' 40 '
+
+# Split the file *contents* into the second repo to have
+# the object already pre-populated. This means that the
+# index will indicate "file is valid" because it's got the
+# correct sha1 (and we have it in the repo), but the index
+# actually isn't quite valid because the metadata changed.
+#
+# NOTE: we need to use the repo as a remote repo here as
+# well, even if we mostly want to prepopulate - otherwise,
+# the index won't be transferred (smart remote repo) until
+# the first object is hit, and thus the 'save' won't *know*
+# that the object is already in the repo ...
+WVPASS bup split -r ":$BUP_DIR2" -b "$tmpdir/save/test"
+
+# now save the test tree into the second repo, but using the
+# original index (that had the wrong size recorded) - using
+# the repo as a remote so that the index can be used
+WVPASS bup save -r ":$BUP_DIR2" -n test "$tmpdir/save"
+
+# and check that it was recorded correctly (data & size)
+WVPASS bup -d "$BUP_DIR2" cat-file "test/latest/$tmpdir/save/test" |
+    WVPASS grep '^0123456789012345678901234567890123456789$'
+WVPASS bup -d "$BUP_DIR2" ls -ls "test/latest/$tmpdir/save/" | WVPASS grep ' 40 '
+
+WVPASS rm -rf "$tmpdir"
