@@ -6,6 +6,7 @@ from bup import git, bloom, midx, options, _helpers
 from bup.compat import range
 from bup.helpers import handle_ctrl_c
 from bup.io import byte_stream
+from bup.repo import LocalRepo
 
 
 _linux_warned = 0
@@ -78,8 +79,7 @@ def main(argv):
     if extra:
         o.fatal('no arguments expected')
 
-    git.check_repo_or_die()
-    m = git.PackIdxList(git.repo(b'objects/pack'), ignore_midx=opt.ignore_midx)
+    m = git.PackIdxList(LocalRepo().packdir(), ignore_midx=opt.ignore_midx)
 
     sys.stdout.flush()
     out = byte_stream(sys.stdout)

@@ -4,6 +4,7 @@ from __future__ import absolute_import
 from bup import git, options
 from bup.gc import bup_gc
 from bup.helpers import die_if_errors, handle_ctrl_c, log
+from bup.repo import LocalRepo
 
 
 optspec = """
@@ -36,9 +37,8 @@ def main(argv):
         if opt.threshold < 0 or opt.threshold > 100:
             o.fatal('threshold must be an integer percentage value')
 
-    git.check_repo_or_die()
-
-    bup_gc(threshold=opt.threshold,
+    bup_gc(LocalRepo(),
+           threshold=opt.threshold,
            compression=opt.compress,
            verbosity=opt.verbose)
 
