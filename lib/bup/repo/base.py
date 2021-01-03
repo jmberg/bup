@@ -259,3 +259,10 @@ class BaseRepo(object):
         None if not, True if it exists, or the idx name if want_source
         is True and it exists.
         """
+
+    def packdir(self):
+        """
+        Implemented only by the LocalRepo(), returns the local pack dir
+        where the git packs are stored.
+        """
+        raise Exception("Direct pack file access is not supported on this repository.")
