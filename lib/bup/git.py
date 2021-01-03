@@ -1380,11 +1380,9 @@ class CatPipe:
 
 _cp = {}
 
-def cp(repo_dir=None):
+def cp(repo_dir):
     """Create a CatPipe object or reuse the already existing one."""
-    global _cp, repodir
-    if not repo_dir:
-        repo_dir = repodir or repo()
+    global _cp
     repo_dir = os.path.abspath(repo_dir)
     cp = _cp.get(repo_dir)
     if not cp:
