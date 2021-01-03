@@ -223,7 +223,11 @@ def sweep(repo, live_objects, existing_count, cat_pipe, threshold, compression,
 
 
 def bup_gc(repo, threshold=10, compression=1, verbosity=0):
-    cat_pipe = git.cp()
+    # Yes - this is a hack. We should use repo.cat() instead of cat_pipe.get(),
+    # but the repo abstraction right now can't properly deal with the fact that
+    # we modify the repository underneath.
+    repodir = os.path.join(repo.packdir(), b'..', b'..')
+    cat_pipe = git.cp(repodir)
     existing_count = count_objects(repo.packdir(), verbosity)
     if verbosity:
         log('found %d objects\n' % existing_count)
