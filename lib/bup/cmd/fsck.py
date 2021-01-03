@@ -6,12 +6,13 @@ from subprocess import DEVNULL, PIPE, run
 from tempfile import mkdtemp
 import errno, glob, os, re, sys
 
-from bup import options, git
+from bup import options
 from bup.compat import argv_bytes
 from bup.helpers \
     import (EXIT_FAILURE, EXIT_FALSE, EXIT_TRUE, EXIT_SUCCESS,
             Sha1, chunkyreader, istty2, log, progress, temp_dir)
 from bup.io import byte_stream, path_msg
+from bup.repo import LocalRepo
 
 
 opt = None
@@ -354,9 +355,9 @@ def main(argv):
         pack_stems = [x[:-5] for x in pack_stems]
     else:
         debug('fsck: No filenames given: checking all packs.\n')
-        git.check_repo_or_die()
-        pack_files = glob.glob(git.repo(b'objects/pack/*.pack'))
-        report_stray_pack_related_files(git.repo(), pack_files)
+        with LocalRepo() as repo:
+            pack_files = glob.glob(os.path.join(repo.packdir(), b'*.pack'))
+            report_stray_pack_related_files(repo.repo_dir, pack_files)
         pack_stems = [x[:-5] for x in pack_files]
 
     sys.stdout.flush()

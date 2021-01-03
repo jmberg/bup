@@ -126,17 +126,17 @@ def main(argv):
 
         # Wanted all refs, or at least some specified weren't missing
         if not extra or (extra and ref_info):
-            existing_count = count_objects(git.repo(b'objects/pack'), verbosity)
+            existing_count = count_objects(repo.packdir(), verbosity)
             if verbosity:
                 log(f'found {existing_count} objects\n')
             if existing_count:
                 with ExitStack() as maybe_close_idxl:
                     idxl = None
                     if opt.links:
-                        idxl = git.PackIdxList(git.repo(b'objects/pack'))
+                        idxl = git.PackIdxList(repo.packdir())
                         maybe_close_idxl.enter_context(idxl)
                     live_objs, live_trees_ = \
-                        find_live_objects(existing_count, cat_pipe,
+                        find_live_objects(repo, existing_count, cat_pipe,
                                           refs=ref_info,
                                           idx_list=idxl,
                                           for_item=for_item,
