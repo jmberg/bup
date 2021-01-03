@@ -200,3 +200,6 @@ class LocalRepo(RepoProtocol):
     def abort_writing(self):
         if self._packwriter:
             self._packwriter.abort()
+
+    def packdir(self):
+        return git.repo(b'objects/pack', repo_dir=self.repo_dir)
