@@ -931,6 +931,15 @@ class Metadata:
             and self._same_linux_attr(other) \
             and self._same_linux_xattr(other)
 
+    @property
+    def mode_str(self):
+        return xstat.mode_str(self.mode)
+
+    @property
+    def mtime_str(self):
+        if self.mtime is None:
+            return None
+        return xstat.local_time_str(self.mtime)
 
 class MetadataRO(Metadata):
     __slots__ = '_frozen',
@@ -1051,10 +1060,10 @@ def summary_bytes(meta, numeric_ids = False, classification = None,
     classification_str = b'?'
     if meta:
         name = meta.path
-        mode_str = xstat.mode_str(meta.mode).encode('ascii')
+        mode_str = meta.mode_str.encode('ascii')
         symlink_target = meta.symlink_target
         if meta.mtime is not None:
-            mtime_str = xstat.local_time_str(meta.mtime).encode('ascii')
+            mtime_str = meta.mtime_str.encode('ascii')
         if meta.user and not numeric_ids:
             user_str = meta.user
         elif meta.uid != None:
