@@ -35,6 +35,7 @@ from bup.helpers import (handle_ctrl_c,
                          saved_errors,
                          unlink)
 import bup.path
+from bup.repo import LocalRepo
 
 optspec = """
 bup import-duplicity [-n] <duplicity-source-url> <bup-save-name>
@@ -82,7 +83,7 @@ source_url = argv_bytes(source_url)
 save_name = argv_bytes(save_name)
 bup = bup.path.exe()
 
-git.check_repo_or_die()
+LocalRepo()
 
 tmpdir = tempfile.mkdtemp(prefix=b'bup-import-dup-')
 try:
