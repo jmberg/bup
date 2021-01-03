@@ -913,6 +913,16 @@ class Metadata:
             and self._same_linux_attr(other) \
             and self._same_linux_xattr(other)
 
+    @property
+    def mode_str(self):
+        return xstat.mode_str(self.mode)
+
+    @property
+    def mtime_str(self):
+        if self.mtime is None:
+            return None
+        mtime_secs = xstat.fstime_floor_secs(self.mtime)
+        return strftime('%Y-%m-%d %H:%M', time.localtime(mtime_secs))
 
 def from_path(path, statinfo=None, archive_path=None,
               save_symlinks=True, hardlink_target=None,
@@ -1021,12 +1031,10 @@ def summary_bytes(meta, numeric_ids = False, classification = None,
     classification_str = b'?'
     if meta:
         name = meta.path
-        mode_str = xstat.mode_str(meta.mode).encode('ascii')
+        mode_str = meta.mode_str.encode('ascii')
         symlink_target = meta.symlink_target
         if meta.mtime is not None:
-            mtime_secs = xstat.fstime_floor_secs(meta.mtime)
-            mtime_str = strftime('%Y-%m-%d %H:%M',
-                                 time.localtime(mtime_secs)).encode('ascii')
+            mtime_str = meta.mtime_str.encode('ascii')
         if meta.user and not numeric_ids:
             user_str = meta.user
         elif meta.uid != None:
