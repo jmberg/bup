@@ -6,12 +6,13 @@ from tempfile import mkdtemp
 from os.path import join
 import glob, os, sys
 
-from bup import options, git
+from bup import options
 from bup.compat import argv_bytes
 from bup.helpers \
     import (EXIT_FAILURE, EXIT_FALSE, EXIT_TRUE, EXIT_SUCCESS,
             Sha1, chunkyreader, istty2, log, progress, temp_dir)
 from bup.io import byte_stream, path_msg
+from bup.repo import LocalRepo
 
 
 par2_ok = 0
@@ -290,15 +291,15 @@ def main(argv):
     if not par2_ok and (opt.generate or opt.repair):
         log(f'error: cannot --generate or --repair without par2\n')
 
-    if extra:
-        pack_stems = [argv_bytes(x) for x in extra]
-        for stem in pack_stems:
-            if not stem.endswith(b'.pack'):
-                o.fatal(f'packfile argument {path_msg(stem)} must end with .pack')
-    else:
-        debug('fsck: No filenames given: checking all packs.\n')
-        git.check_repo_or_die()
-        pack_stems = glob.glob(git.repo(b'objects/pack/*.pack'))
+    with LocalRepo() as repo:
+        if extra:
+            pack_stems = [argv_bytes(x) for x in extra]
+            for stem in pack_stems:
+                if not stem.endswith(b'.pack'):
+                    o.fatal(f'packfile argument {path_msg(stem)} must end with .pack')
+        else:
+            debug('fsck: No filenames given: checking all packs.\n')
+            pack_stems = glob.glob(os.path.join(repo.packdir(), b'*.pack'))
 
     pack_stems = [x[:-5] for x in pack_stems]
 

@@ -4,6 +4,8 @@ import math, struct, sys
 from bup import options, git, _helpers
 from bup.helpers import log
 from bup.io import byte_stream
+from bup.repo import LocalRepo
+
 
 POPULATION_OF_EARTH=6.7e9  # as of September, 2010
 
@@ -21,9 +23,8 @@ def main(argv):
     if extra:
         o.fatal("no arguments expected")
 
-    git.check_repo_or_die()
-
-    with git.PackIdxList(git.repo(b'objects/pack'),
+    with LocalRepo() as repo, \
+         git.PackIdxList(repo.packdir(),
                          ignore_midx=opt.ignore_midx) as mi:
 
         def do_predict(ix, out):

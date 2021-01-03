@@ -4,6 +4,7 @@ import re, resource, sys, time
 from bup import git, bloom, midx, options, _helpers
 from bup.io import byte_stream
 from bup.helpers import log
+from bup.repo import LocalRepo
 
 
 _linux_warned = 0
@@ -76,7 +77,6 @@ def main(argv):
     if extra:
         o.fatal('no arguments expected')
 
-    git.check_repo_or_die()
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
 
@@ -84,7 +84,8 @@ def main(argv):
     _helpers.random_sha()
     report(0, out)
 
-    with git.PackIdxList(git.repo(b'objects/pack'),
+    with LocalRepo() as repo, \
+         git.PackIdxList(repo.packdir(),
                          ignore_midx=opt.ignore_midx) as m:
 
         if opt.existing:

@@ -120,9 +120,9 @@ def report_live_item(n, total, ref_name, ref_id, item, verbosity):
         log('%s %s:%s%s\n' % (status, path_msg(ref_name), path_msg(ps), path_msg(dirslash)))
 
 
-def find_live_objects(existing_count, cat_pipe, idx_list, refs=None,
+def find_live_objects(repo, existing_count, cat_pipe, idx_list, refs=None,
                       verbosity=0, count_missing=False):
-    pack_dir = git.repo(b'objects/pack')
+    pack_dir = repo.packdir()
     ffd, bloom_filename = tempfile.mkstemp(b'.bloom', b'tmp-gc-', pack_dir)
     os.close(ffd)
     # FIXME: allow selection of k?
@@ -167,7 +167,7 @@ def find_live_objects(existing_count, cat_pipe, idx_list, refs=None,
 
 _pack_stem_rx = re.compile(br'pack-[0-9a-fA-F]{40}')
 
-def sweep(live_objects, live_trees, existing_count, cat_pipe, threshold,
+def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
           compression, verbosity):
     """Traverse all the packs, saving the (probably) live data."""
 
@@ -199,7 +199,7 @@ def sweep(live_objects, live_trees, existing_count, cat_pipe, threshold,
     try:
         # FIXME: sanity check .idx names vs .pack names?
         collect_count = 0
-        for idx_name in glob.glob(os.path.join(git.repo(b'objects/pack'), b'*.idx')):
+        for idx_name in glob.glob(os.path.join(repo.packdir(), b'*.idx')):
             if verbosity:
                 qprogress('preserving live data (%d%% complete)\r'
                           % ((float(collect_count) / existing_count) * 100))
@@ -255,7 +255,7 @@ def sweep(live_objects, live_trees, existing_count, cat_pipe, threshold,
                      % ((float(collect_count) / existing_count) * 100))
 
         # Nothing should have recreated midx/bloom yet.
-        pack_dir = git.repo(b'objects/pack')
+        pack_dir = repo.packdir()
         assert(not os.path.exists(os.path.join(pack_dir, b'bup.bloom')))
         assert(not glob.glob(os.path.join(pack_dir, b'*.midx')))
 
@@ -274,9 +274,9 @@ def sweep(live_objects, live_trees, existing_count, cat_pipe, threshold,
                / float(existing_count) * 100))
 
 
-def bup_gc(threshold=10, compression=1, verbosity=0, ignore_missing=False):
+def bup_gc(repo, threshold=10, compression=1, verbosity=0, ignore_missing=False):
     cat_pipe = git.cp()
-    existing_count = count_objects(git.repo(b'objects/pack'), verbosity)
+    existing_count = count_objects(repo.packdir(), verbosity)
     if verbosity:
         log('found %d objects\n' % existing_count)
         reprogress()
@@ -288,9 +288,9 @@ def bup_gc(threshold=10, compression=1, verbosity=0, ignore_missing=False):
             with ExitStack() as maybe_close_idxl:
                 idxl = None
                 if ignore_missing:
-                    idxl = git.PackIdxList(git.repo(b'objects/pack'))
+                    idxl = git.PackIdxList(repo.packdir())
                     maybe_close_idxl.enter_context(idxl)
-                found = find_live_objects(existing_count, cat_pipe, idxl,
+                found = find_live_objects(repo, existing_count, cat_pipe, idxl,
                                           verbosity=verbosity,
                                           count_missing=ignore_missing)
             live_objects, live_trees = found[:2]
@@ -305,7 +305,7 @@ def bup_gc(threshold=10, compression=1, verbosity=0, ignore_missing=False):
             try:
                 # FIXME: just rename midxes and bloom, and restore them at the end if
                 # we didn't change any packs?
-                packdir = git.repo(b'objects/pack')
+                packdir = repo.packdir()
                 if verbosity: log('clearing midx files\n')
                 midx.clear_midxes(packdir)
                 if verbosity: log('clearing bloom filter\n')
@@ -315,7 +315,7 @@ def bup_gc(threshold=10, compression=1, verbosity=0, ignore_missing=False):
                 expirelog = subprocess.Popen(expirelog_cmd, env=git._gitenv())
                 git._git_wait(b' '.join(expirelog_cmd), expirelog)
                 if verbosity: log('removing unreachable data\n')
-                sweep(live_objects, live_trees, existing_count, cat_pipe,
+                sweep(repo, live_objects, live_trees, existing_count, cat_pipe,
                       threshold, compression,
                       verbosity)
             except BaseException as ex:
