@@ -65,8 +65,8 @@ def run_server(on_srv, config):
          protocol.Server(conn, ServerRepo, **config) as server:
         server.handle()
 
-def restricted_repo_config():
-    repo = git.repo()
+def restricted_repo_config(repo_dir):
+    repo = git.repo(repo_dir=repo_dir)
     def init_dir(repo_, path):
         if not os.path.samefile(path, repo):
             raise CommandDenied(f'disallowing unexpected init-dir {pm(path)}')
@@ -75,7 +75,7 @@ def restricted_repo_config():
             raise CommandDenied(f'disallowing unexpected set-dir {pm(path)}')
     return {'vet_init_dir': init_dir, 'vet_set_dir': set_dir}
 
-def save_or_split_server_config(argv, opt_parser):
+def save_or_split_server_config(argv, opt_parser, repo_dir):
     cmd = pm(argv[0])
     opt = opt_parser(argv)[0]
     def vet_update_ref(repo, ref, new_oid, prev_oid):
@@ -102,7 +102,7 @@ def save_or_split_server_config(argv, opt_parser):
                          b'receive-objects-v2',
                          b'update-ref'),
             'vet_update_ref': vet_update_ref,
-            **restricted_repo_config()}
+            **restricted_repo_config(repo_dir)}
 
 def main(argv):
     o = options.Options(optspec, optfunc=getopt.getopt)
@@ -120,17 +120,20 @@ def main(argv):
     if cmd in (b'features', b'help', b'index', b'version'):
         srv_config = None
     else:
-        check_repo_or_die()
+        repo_dir = git.guess_repo()
+        check_repo_or_die(repo_dir)
         if cmd == b'restore':
             srv_config = {'commands': (b'cat-batch', b'config-get',
                                        b'list-indexes', b'resolve'),
-                          **restricted_repo_config()}
+                          **restricted_repo_config(repo_dir)}
         elif cmd == b'get':
-            srv_config = {'commands': 'all', **restricted_repo_config()}
+            srv_config = {'commands': 'all', **restricted_repo_config(repo_dir)}
         elif cmd == b'save':
-            srv_config = save_or_split_server_config(argv, parse_save_args)
+            srv_config = save_or_split_server_config(argv, parse_save_args,
+                                                     repo_dir)
         elif cmd == b'split':
-            srv_config = save_or_split_server_config(argv, parse_split_args)
+            srv_config = save_or_split_server_config(argv, parse_split_args,
+                                                     repo_dir)
         else:
             o.fatal(f'{pm(cmd)} is not currently supported')
             assert False # (so pylint won't think srv_config might be unset)
