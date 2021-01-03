@@ -8,6 +8,7 @@ from bup.compat import pairwise
 from bup.git import tree_iter
 from bup.helpers import EXIT_FALSE, EXIT_TRUE, log, qprogress, reprogress
 from bup.io import byte_stream, path_msg
+from bup.repo import LocalRepo
 
 
 optspec = """
@@ -85,8 +86,8 @@ def main(argv):
     out = byte_stream(sys.stdout)
     cp = git.catpipe()
     ret = EXIT_TRUE
-    with git.PackIdxList(git.repo(b'objects/pack')) as mi:
-        idxlist = glob.glob(path.join(git.repo(b'objects/pack'), b'*.idx'))
+    with LocalRepo() as repo, git.PackIdxList(repo.packdir()) as mi:
+        idxlist = glob.glob(path.join(repo.packdir(), b'*.idx'))
         obj_n = 0
         for idxname in idxlist:
             with git.open_idx(idxname) as idx:

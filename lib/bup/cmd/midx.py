@@ -17,6 +17,7 @@ from bup.helpers import \
      unlink)
 from bup.io import byte_stream, path_msg
 from bup.midx import MissingIdxs, open_midx
+from bup.repo import LocalRepo
 
 
 PAGE_SIZE=4096
@@ -295,8 +296,8 @@ def main(argv):
     if opt.dir:
         path = argv_bytes(opt.dir)
     else:
-        git.check_repo_or_die()
-        path = git.repo(b'objects/pack')
+        with LocalRepo() as repo:
+            path = repo.packdir()
 
     extra = [argv_bytes(x) for x in extra]
 
