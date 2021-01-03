@@ -47,7 +47,8 @@ def test_multiple_suggestions(tmpdir):
     lw = git.PackWriter()
     lw.new_blob(s2)
     lw.close()
-    assert len(glob.glob(git.repo(b'objects/pack'+IDX_PAT))) == 2
+    assert len(glob.glob(git.repo(b'objects/pack' + IDX_PAT,
+                                  repo_dir=bupdir))) == 2
 
     c = client.Client(bupdir, create=True)
     assert len(glob.glob(c.cachedir+IDX_PAT)) == 0
@@ -102,7 +103,7 @@ def test_dumb_client_server(dumb_mode, tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
     git.init_repo(bupdir)
     if dumb_mode == 'file':
-        open(git.repo(b'bup-dumb-server'), 'w').close()
+        open(git.repo(b'bup-dumb-server', repo_dir=bupdir), 'w').close()
     elif dumb_mode == 'config':
         git.git_config_write(b'bup.dumb-server', b'true',
                              repo_dir=bupdir)
