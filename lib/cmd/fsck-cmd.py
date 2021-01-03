@@ -27,6 +27,7 @@ from bup import compat, options, git
 from bup.compat import argv_bytes
 from bup.helpers import Sha1, chunkyreader, istty2, log, progress
 from bup.io import byte_stream
+from bup.repo import LocalRepo
 
 
 par2_ok = 0
@@ -207,13 +208,13 @@ if opt.par2_ok:
 if opt.disable_par2:
     par2_ok = 0
 
-git.check_repo_or_die()
+repo = LocalRepo()
 
 if extra:
     extra = [argv_bytes(x) for x in extra]
 else:
     debug('fsck: No filenames given: checking all packs.\n')
-    extra = glob.glob(git.repo(b'objects/pack/*.pack'))
+    extra = glob.glob(os.path.join(repo.packdir(), b'*.pack'))
 
 sys.stdout.flush()
 out = byte_stream(sys.stdout)

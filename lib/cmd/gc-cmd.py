@@ -22,6 +22,7 @@ sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 from bup import compat, git, options
 from bup.gc import bup_gc
 from bup.helpers import die_if_errors, handle_ctrl_c, log
+from bup.repo import LocalRepo
 
 
 optspec = """
@@ -55,9 +56,8 @@ if opt.threshold:
     if opt.threshold < 0 or opt.threshold > 100:
         o.fatal('threshold must be an integer percentage value')
 
-git.check_repo_or_die()
-
-bup_gc(threshold=opt.threshold,
+bup_gc(LocalRepo(),
+       threshold=opt.threshold,
        compression=opt.compress,
        verbosity=opt.verbose)
 
