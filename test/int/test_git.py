@@ -166,7 +166,7 @@ def test_pack_name_lookup(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
     git.init_repo(bupdir)
     git.verbose = 1
-    packdir = git.repo(b'objects/pack')
+    packdir = git.repo(b'objects/pack', repo_dir=bupdir)
 
     idxnames = []
     hashes = []
