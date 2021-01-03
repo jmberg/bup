@@ -286,7 +286,7 @@ def test_commit_parsing(tmpdir):
         coff = (int(coffs[-4:-2]) * 60 * 60) + (int(coffs[-2:]) * 60)
         if bytes_from_byte(coffs[-5]) == b'-':
             coff = - coff
-        commit_items = get_commit_items(commit, git.cp())
+        commit_items = get_commit_items(commit, git.cp(repodir))
         WVPASSEQ(commit_items.parents, [])
         WVPASSEQ(commit_items.tree, tree)
         WVPASSEQ(commit_items.author_name, b'Someone')
@@ -304,7 +304,7 @@ def test_commit_parsing(tmpdir):
         readpipe([b'git', b'commit', b'-am', b'Do something else'])
         child = readpipe([b'git', b'show-ref', b'-s', b'main']).strip()
         parents = showval(child, b'%P')
-        commit_items = get_commit_items(child, git.cp())
+        commit_items = get_commit_items(child, git.cp(repodir))
         WVPASSEQ(commit_items.parents, [commit])
     finally:
         os.chdir(orig_cwd)
@@ -380,7 +380,7 @@ def test_new_commit(tmpdir):
                                   cdate_sec, cdate_tz_sec,
                                   b'There is a small mailbox here')
 
-    commit_items = get_commit_items(hexlify(commit), git.cp())
+    commit_items = get_commit_items(hexlify(commit), git.cp(bupdir))
     local_author_offset = localtime(adate_sec).tm_gmtoff
     local_committer_offset = localtime(cdate_sec).tm_gmtoff
     WVPASSEQ(tree, unhexlify(commit_items.tree))
@@ -395,7 +395,7 @@ def test_new_commit(tmpdir):
     WVPASSEQ(cdate_sec, commit_items.committer_sec)
     WVPASSEQ(local_committer_offset, commit_items.committer_offset)
 
-    commit_items = get_commit_items(hexlify(commit_off), git.cp())
+    commit_items = get_commit_items(hexlify(commit_off), git.cp(bupdir))
     WVPASSEQ(tree, unhexlify(commit_items.tree))
     WVPASSEQ(1, len(commit_items.parents))
     WVPASSEQ(parent, unhexlify(commit_items.parents[0]))
@@ -480,7 +480,7 @@ def test_cat_pipe(tmpdir):
               b'cat-file', b'-t', b'src').strip()
     size = int(exo(b'git', b'--git-dir', bupdir,
                        b'cat-file', b'-s', b'src'))
-    it = git.cp().get(b'src')
+    it = git.cp(bupdir).get(b'src')
     get_info = next(it)
     for buf in next(it):
         pass
