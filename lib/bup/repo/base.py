@@ -246,3 +246,10 @@ class RepoProtocol:
         None if not, True if it exists, or the idx name if want_source
         is True and it exists.
         """
+
+    @notimplemented
+    def packdir(self):
+        """
+        Return the local pack directory where the git packs are stored.
+        Only supported by LocalRepo.
+        """

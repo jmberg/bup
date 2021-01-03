@@ -157,3 +157,9 @@ def test_remote_config_read_mode(tmpdir):
             # config-write is not allowed in read mode
             with raises(client.ClientError):
                 c.config_write(b'pack.compression', b'3')
+
+
+def test_local_packdir(tmpdir):
+    repo_dir = make_repo(tmpdir, b'repo')
+    with LocalRepo(repo_dir=repo_dir) as repo:
+        assert repo.packdir() == os.path.join(repo_dir, b'objects', b'pack')
