@@ -249,7 +249,7 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
 
 def bup_gc(repo, threshold=10, compression=1, verbosity=0,
            ignore_missing=False):
-    cat_pipe = git.catpipe()
+    cat_pipe = git.catpipe(repo.repo_dir)
     existing_count = count_objects(repo.packdir(), verbosity)
     if verbosity:
         log('found %d objects\n' % existing_count)

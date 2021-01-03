@@ -1409,9 +1409,9 @@ def require_suitable_git(ver_str=None):
     assert False
 
 
-class CatPipe:
+class _CatPipe:
     """Link to 'git cat-file' that is used to retrieve blob data."""
-    def __init__(self, repo_dir = None):
+    def __init__(self, repo_dir):
         require_suitable_git()
         self.repo_dir = repo_dir
         self.p = self.pcheck = self.inprogress = None
@@ -1531,15 +1531,12 @@ class CatPipe:
 
 _catpipe_for = {}
 
-def catpipe(repo_dir=None):
-    """Create a CatPipe object or reuse the already existing one."""
-    global repodir
-    if not repo_dir:
-        repo_dir = repodir or repo()
+def catpipe(repo_dir):
+    """Create a _CatPipe object or reuse the already existing one."""
     repo_dir = os.path.abspath(repo_dir)
     cp = _catpipe_for.get(repo_dir)
     if not cp:
-        cp = CatPipe(repo_dir)
+        cp = _CatPipe(repo_dir)
         _catpipe_for[repo_dir] = cp
     return cp
 
@@ -1581,7 +1578,7 @@ class WalkItem:
 def walk_object(get_ref, oidx, *, stop_at=None, include_data=None,
                 oid_exists=None, result='path'):
     """Yield everything reachable from oidx via get_ref (which must
-    behave like CatPipe get) as a path, which is a list of WalkItems,
+    behave like _CatPipe get) as a path, which is a list of WalkItems,
     stopping whenever stop_at(oidx) returns logically true.  Set the
     data field to False when the object is missing, or None if the
     object exists but include_data is logically false.  Missing blobs
