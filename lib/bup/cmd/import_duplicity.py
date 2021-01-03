@@ -15,6 +15,7 @@ from bup.helpers import (handle_ctrl_c,
                          saved_errors,
                          unlink)
 import bup.path
+from bup.repo import LocalRepo
 
 
 optspec = """
@@ -65,7 +66,7 @@ def main(argv):
     save_name = argv_bytes(save_name)
     bup_path = bup.path.exe()
 
-    git.check_repo_or_die()
+    LocalRepo()
 
     tmpdir = tempfile.mkdtemp(prefix=b'bup-import-dup-')
     try:
