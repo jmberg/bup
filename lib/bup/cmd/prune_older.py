@@ -156,7 +156,7 @@ def main(argv):
             bup_rm(repo, removals, verbosity=opt.verbose)
         if opt.gc:
             die_if_errors()
-            bup_gc(threshold=opt.gc_threshold,
+            bup_gc(repo, threshold=opt.gc_threshold,
                    compression=opt.compress,
                    verbosity=opt.verbose)
 
