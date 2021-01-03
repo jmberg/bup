@@ -51,7 +51,8 @@ def test_multiple_suggestions(tmpdir):
         lw.new_blob(s1)
     with local_writer(bupdir) as lw:
         lw.new_blob(s2)
-    assert len(glob.glob(git.repo(b'objects/pack'+IDX_PAT))) == 2
+    assert len(glob.glob(git.repo(b'objects/pack'+IDX_PAT,
+                                  repo_dir=bupdir))) == 2
 
     with subproc_client(bupdir, create=True) as c, \
          c.new_packwriter() as rw:
@@ -105,7 +106,7 @@ def test_dumb_client_server_conflict(tmpdir):
     environ[b'GIT_DIR'] = bupdir = tmpdir
     environ[b'BUP_DIR'] = bupdir = tmpdir
     git.init_repo(bupdir)
-    with open(git.repo(b'bup-dumb-server'), 'wb'): pass
+    with open(git.repo(b'bup-dumb-server', repo_dir=bupdir), 'wb'): pass
     ex((b'git', b'config', b'bup.server.deduplicate-writes', b'true'))
     # FIXME: propagate server ConfigError to Client()
     with raises(ConfigError) as ex_info, \
@@ -121,7 +122,7 @@ def test_server_deduplicate_writes(deduplicate_mode, tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
     git.init_repo(bupdir)
     if deduplicate_mode == 'file':
-        with open(git.repo(b'bup-dumb-server'), 'wb'): pass
+        with open(git.repo(b'bup-dumb-server', repo_dir=bupdir), 'wb'): pass
     elif deduplicate_mode == 'config':
         ex((b'git', b'config', b'bup.server.deduplicate-writes', b'false'))
     else:
