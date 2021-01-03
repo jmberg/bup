@@ -26,6 +26,7 @@ from bup.helpers import (Sha1, add_error, atomically_replaced_file, debug1, fdat
                          handle_ctrl_c, log, mmap_readwrite, qprogress,
                          saved_errors, unlink)
 from bup.io import byte_stream, path_msg
+from bup.repo import LocalRepo
 
 
 PAGE_SIZE=4096
@@ -271,8 +272,7 @@ assert(opt.max_files >= 5)
 if opt.dir:
     path = argv_bytes(opt.dir)
 else:
-    git.check_repo_or_die()
-    path = git.repo(b'objects/pack')
+    path = LocalRepo().packdir()
 
 extra = [argv_bytes(x) for x in extra]
 

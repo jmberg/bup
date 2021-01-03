@@ -23,6 +23,7 @@ from bup import compat, git, bloom, midx, options, _helpers
 from bup.compat import range
 from bup.helpers import handle_ctrl_c
 from bup.io import byte_stream
+from bup.repo import LocalRepo
 
 
 handle_ctrl_c()
@@ -96,8 +97,7 @@ opt, flags, extra = o.parse(compat.argv[1:])
 if extra:
     o.fatal('no arguments expected')
 
-git.check_repo_or_die()
-m = git.PackIdxList(git.repo(b'objects/pack'), ignore_midx=opt.ignore_midx)
+m = git.PackIdxList(LocalRepo().packdir(), ignore_midx=opt.ignore_midx)
 
 sys.stdout.flush()
 out = byte_stream(sys.stdout)

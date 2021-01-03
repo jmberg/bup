@@ -22,6 +22,7 @@ sys.path[:0] = [os.path.dirname(os.path.realpath(__file__)) + '/..']
 from bup import compat, options, git, _helpers
 from bup.helpers import log
 from bup.io import byte_stream
+from bup.repo import LocalRepo
 
 POPULATION_OF_EARTH=6.7e9  # as of September, 2010
 
@@ -37,9 +38,9 @@ opt, flags, extra = o.parse(compat.argv[1:])
 if extra:
     o.fatal("no arguments expected")
 
-git.check_repo_or_die()
+repo = LocalRepo()
 
-mi = git.PackIdxList(git.repo(b'objects/pack'), ignore_midx=opt.ignore_midx)
+mi = git.PackIdxList(LocalRepo().packdir(), ignore_midx=opt.ignore_midx)
 
 def do_predict(ix, out):
     total = len(ix)
