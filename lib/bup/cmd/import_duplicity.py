@@ -5,12 +5,13 @@ from subprocess import check_call
 from time import strptime
 import os, sys, tempfile
 
-from bup import git, helpers, options
+from bup import helpers, options
 from bup.compat import argv_bytes
 from bup.helpers import (log,
                          shstr,
                          saved_errors)
 import bup.path
+from bup.repo import LocalRepo
 
 
 optspec = """
@@ -62,7 +63,8 @@ def main(argv):
     save_name = argv_bytes(save_name)
     bup_path = bup.path.exe()
 
-    git.check_repo_or_die()
+    with LocalRepo():
+        pass
 
     tmpdir = tempfile.mkdtemp(prefix=b'bup-import-dup-')
     try:
