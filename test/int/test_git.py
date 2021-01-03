@@ -304,7 +304,7 @@ def test_new_commit(tmpdir):
                                   cdate_sec, cdate_tz_sec,
                                   b'There is a small mailbox here')
 
-    commit_items = git.get_commit_items(hexlify(commit), git.catpipe().get)
+    commit_items = git.get_commit_items(hexlify(commit), git.catpipe(bupdir).get)
     local_author_offset = localtime(adate_sec).tm_gmtoff
     local_committer_offset = localtime(cdate_sec).tm_gmtoff
     WVPASSEQ(tree, unhexlify(commit_items.tree))
@@ -319,7 +319,7 @@ def test_new_commit(tmpdir):
     WVPASSEQ(cdate_sec, commit_items.committer_sec)
     WVPASSEQ(local_committer_offset, commit_items.committer_offset)
 
-    commit_items = git.get_commit_items(hexlify(commit_off), git.catpipe().get)
+    commit_items = git.get_commit_items(hexlify(commit_off), git.catpipe(bupdir).get)
     WVPASSEQ(tree, unhexlify(commit_items.tree))
     WVPASSEQ(1, len(commit_items.parents))
     WVPASSEQ(parent, unhexlify(commit_items.parents[0]))
@@ -399,14 +399,14 @@ def test_cat_pipe(tmpdir):
     size = int(exo(b'git', b'--git-dir', bupdir,
                        b'cat-file', b'-s', b'src'))
 
-    info = git.catpipe().get(b'src')
+    info = git.catpipe(bupdir).get(b'src')
     assert (oidx, typ, size) == info[:-1]
     data = b''.join(info[3])
     assert data.startswith(b'tree ')
     assert b'\nauthor ' in  data
     assert b'\ncommitter ' in  data
 
-    info = git.catpipe().get(b'src', include_data=False)
+    info = git.catpipe(bupdir).get(b'src', include_data=False)
     assert (oidx, typ, size) == info[:-1]
     assert info[3] is None
 
