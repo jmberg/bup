@@ -8,6 +8,7 @@ from bup.compat import argv_bytes, hexstr
 from bup.helpers import (add_error, debug1, log, progress, qprogress,
                          saved_errors)
 from bup.io import path_msg
+from bup.repo import LocalRepo
 
 
 optspec = """
@@ -166,8 +167,8 @@ def main(argv):
     if opt.dir:
         path = argv_bytes(opt.dir)
     else:
-        git.check_repo_or_die()
-        path = git.repo(b'objects/pack')
+        with LocalRepo() as repo:
+            path = repo.packdir()
 
     debug1('bloom: scanning %s\n' % path_msg(path))
     outfilename = output or os.path.join(path, b'bup.bloom')

@@ -6,10 +6,11 @@ from tempfile import mkdtemp
 from binascii import hexlify
 import glob, os, subprocess, sys
 
-from bup import options, git
+from bup import options
 from bup.compat import argv_bytes
 from bup.helpers import Sha1, chunkyreader, istty2, log, progress
 from bup.io import byte_stream
+from bup.repo import LocalRepo
 
 
 par2_ok = 0
@@ -195,13 +196,12 @@ def main(argv):
     if opt.disable_par2:
         par2_ok = 0
 
-    git.check_repo_or_die()
-
-    if extra:
-        extra = [argv_bytes(x) for x in extra]
-    else:
-        debug('fsck: No filenames given: checking all packs.\n')
-        extra = glob.glob(git.repo(b'objects/pack/*.pack'))
+    with LocalRepo() as repo:
+        if extra:
+            extra = [argv_bytes(x) for x in extra]
+        else:
+            debug('fsck: No filenames given: checking all packs.\n')
+            extra = glob.glob(os.path.join(repo.packdir(), b'*.pack'))
 
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
