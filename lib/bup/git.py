@@ -177,11 +177,9 @@ def get_commit_items(ref, get_ref):
     return parse_commit(b''.join(it))
 
 
-def repo(sub = b'', repo_dir=None):
+def repo(sub=b'', repo_dir=None):
     """Get the path to the git repository or one of its subdirectories."""
-    repo_dir = repo_dir or repodir
-    if not repo_dir:
-        raise GitError('You should call check_repo_or_die()')
+    assert repo_dir
 
     # If there's a .git subdirectory, then the actual repo is in there.
     gd = os.path.join(repo_dir, b'.git')
@@ -1281,7 +1279,7 @@ def init_repo(path=None):
     """Create the Git bare repository for bup in a given path."""
     global repodir
     repodir = path or guess_repo()
-    d = repo()  # appends a / to the path
+    d = repo(repo_dir=repodir)  # appends a / to the path
     parent = os.path.dirname(os.path.dirname(d))
     if parent and not os.path.exists(parent):
         raise GitError('parent directory "%s" does not exist\n'
@@ -1331,7 +1329,7 @@ def establish_default_repo(path=None, *, must_exist=False):
             sys.exit(status)
         return False
     repodir = path or guess_repo()
-    top = repo()
+    top = repo(repo_dir=repodir)
     try:
         if stat.S_ISDIR(os.stat(top + b'/objects/pack').st_mode):
             return True
