@@ -37,7 +37,6 @@ from bup.midx import open_midx
 
 
 verbose = 0
-repodir = None  # The default repository, once initialized
 
 _typemap =  {b'blob': 3, b'tree': 2, b'commit': 1, b'tag': 4}
 _typermap = {v: k for k, v in _typemap.items()}
@@ -1262,15 +1261,11 @@ def guess_repo():
     not be calling this function but using check_repo_or_die().
 
     """
-    # previously set?
-    if repodir:
-        return repodir
     return path.defaultrepo()
 
 
 def init_repo(path=None):
     """Create the Git bare repository for bup in a given path."""
-    global repodir
     repodir = path or guess_repo()
     d = repo(repo_dir=repodir)  # appends a / to the path
     parent = os.path.dirname(os.path.dirname(d))
@@ -1297,9 +1292,8 @@ def init_repo(path=None):
     _git_wait('git config', p)
 
 
-def check_repo_or_die(path=None):
+def check_repo_or_die(path):
     """Check to see if a bup repository probably exists, and abort if not."""
-    global repodir
     repodir = path or guess_repo()
     top = repo(repo_dir=repodir)
     pst = stat_if_exists(top + b'/objects/pack')
