@@ -68,7 +68,8 @@ class LocalRepo(BaseRepo):
         return git.update_ref(refname, newval, oldval, repo_dir=self.repo_dir)
 
     def delete_ref(self, refname, oldval=None):
-        git.delete_ref(refname, hexlify(oldval) if oldval else None)
+        git.delete_ref(refname, hexlify(oldval) if oldval else None,
+                       repo_dir=self.repo_dir)
 
     def cat(self, ref):
         it = self._cp.get(ref)
