@@ -964,7 +964,7 @@ def get_everything(opt):
 
 def main(argv):
     opt = parse_args(argv)
-    git.check_repo_or_die()
+    git.check_repo_or_die(git.guess_repo())
     if opt.bwlimit:
         client.bwlimit = opt.bwlimit
     return get_everything(opt)

@@ -192,7 +192,7 @@ def main(argv):
     def ensure_repo_checked():
         nonlocal repo_checked
         if not repo_checked:
-            git.check_repo_or_die()
+            git.check_repo_or_die(git.guess_repo())
             repo_checked = True
 
     with ExitStack() as ctx:

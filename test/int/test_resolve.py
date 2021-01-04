@@ -10,7 +10,7 @@ from buptest import exc as ex, exo
 from buptest.vfs import tree_dict
 from wvpytest import *
 
-from bup import git, vfs
+from bup import vfs
 from bup.compat import environ
 from bup.repo import LocalRepo, repo_for_url
 from bup.url import URL
@@ -30,7 +30,6 @@ def prep_and_test_repo(tmpdir, create_repo, test_repo):
     environ[b'GIT_DIR'] = bup_dir
     environ[b'BUP_DIR'] = bup_dir
     ex((bup_path, b'init'))
-    git.repodir = bup_dir
     with create_repo(bup_dir) as repo:
         test_repo(repo, tmpdir)
 

@@ -8,7 +8,7 @@ from buptest import exc
 from wvpytest import *
 import buptest
 
-from bup import git, helpers, metadata
+from bup import helpers, metadata
 from bup import vfs
 from bup.compat import fsencode
 from bup.helpers import \
@@ -185,8 +185,7 @@ def test_metadata_method(tmpdir):
     ex(bup_path, b'-d', bup_dir, b'init')
     ex(bup_path, b'-d', bup_dir, b'index', b'-v', data_path)
     ex(bup_path, b'-d', bup_dir, b'save', b'-tvvn', b'test', data_path)
-    git.check_repo_or_die(bup_dir)
-    with  LocalRepo() as repo:
+    with LocalRepo(bup_dir) as repo:
         resolved = vfs.resolve(repo,
                                b'/test/latest' + resolve_parent(data_path),
                                follow=False)
