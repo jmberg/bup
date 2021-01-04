@@ -100,7 +100,7 @@ def find_live_objects(repo, existing_count, cat_pipe, refs=None, *,
         def stop_at(x): return unhexlify(x) in live_trees
         oid_exists = idx_list.exists if idx_list else None
         approx_live_count = 0
-        scan_refs = refs if refs else list(git.list_refs())
+        scan_refs = refs if refs else list(repo.refs())
         ref_n = len(scan_refs)
         def progress_msg(ref_name, ref_i):
             ref_m = path_msg(ref_name)
