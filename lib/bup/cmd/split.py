@@ -189,11 +189,10 @@ def main(argv):
         # and split.
         #
         # This is a bit messy, but basically it converts from a series of
-        # CatPipe.get() iterators into a series of file-type objects.
-        # It would be less ugly if either CatPipe.get() returned a file-like object
+        # repo.cat() iterators into a series of file-type objects.
+        # It would be less ugly if either repo.cat() returned a file-like object
         # (not very efficient), or split_to_shalist() expected an iterator instead
         # of a file.
-        cp = git.CatPipe()
         class IterToFile:
             def __init__(self, it):
                 self.it = iter(it)
@@ -208,7 +207,7 @@ def main(argv):
                 if line:
                     line = line.strip()
                 try:
-                    it = cp.get(line.strip())
+                    it = repo.cat(line.strip())
                     next(it, None)  # skip the file info
                 except KeyError as e:
                     add_error('error: %s' % e)
