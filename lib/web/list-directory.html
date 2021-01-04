@@ -72,6 +72,9 @@
                     {% end %}
                     <td class="dir-name">
                       <a href="{% raw link %}">{{ display }}</a>
+                      {% if args.meta %}
+                        {% if meta is not None and meta.symlink_target %} &#8594; {{ meta.symlink_target }}{% end %}
+                      {% end %}
                     </td>
                 </tr>
                 {% end %}
