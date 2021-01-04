@@ -137,8 +137,7 @@ def test_metadata_method(tmpdir):
     ex(bup_path, b'-d', bup_dir, b'init')
     ex(bup_path, b'-d', bup_dir, b'index', b'-v', data_path)
     ex(bup_path, b'-d', bup_dir, b'save', b'-tvvn', b'test', data_path)
-    git.check_repo_or_die(bup_dir)
-    repo = LocalRepo()
+    repo = LocalRepo(bup_dir)
     resolved = vfs.resolve(repo,
                            b'/test/latest' + resolve_parent(data_path),
                            follow=False)
