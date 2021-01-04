@@ -56,10 +56,8 @@ class GitError(Exception):
     pass
 
 
-def _gitenv(repo_dir=None):
+def _gitenv(repo_dir):
     # This is not always used, i.e. sometimes we just use --git-dir
-    if not repo_dir:
-        repo_dir = repo()
     return {**environ, **{b'GIT_DIR': os.path.abspath(repo_dir)}}
 
 def _raise_git_cmd_error(cmd, status):
@@ -1295,7 +1293,7 @@ def init_repo(path=None):
     cmd = (b'git', b'--bare',
            # arbitrary default branch name to suppress git msg.
            b'-c', b'init.defaultBranch=main', b'init')
-    cp = subprocess.run(cmd, stdout=sys.stderr, env=_gitenv())
+    cp = subprocess.run(cmd, stdout=sys.stderr, env=_gitenv(repodir))
     if cp.returncode != 0:
         _raise_git_cmd_error(cmd, cp.returncode)
 
@@ -1303,7 +1301,7 @@ def init_repo(path=None):
     def get_config(*arg, **kwargs):
         return git_config_get(cfg, *arg, **kwargs)
     def set_config(opt, val):
-        cp = run([b'git', b'config', opt, val], stdout=stderr, env=_gitenv())
+        cp = run([b'git', b'config', opt, val], stdout=stderr, env=_gitenv(repodir))
         if cp.returncode:
             raise GitError(f'git config {opt} {val} exited with {cp.returncode}')
 

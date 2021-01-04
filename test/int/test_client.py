@@ -245,7 +245,7 @@ def test_refs_with_patterns(tmpdir):
         f.write(b'one\n')
     ex((bup_exe, b'index', src))
     ex((bup_exe, b'save', b'-n', b'refs-src', b'--strip', src))
-    oid = git.read_ref(b'refs/heads/refs-src')
+    oid = git.read_ref(b'refs/heads/refs-src', repo_dir=bupdir)
     with subproc_client(bupdir, create=True) as c:
         c.update_ref(b'refs/tags/v1', oid, None)
         c.update_ref(b'refs/tags/v2', oid, None)
@@ -268,7 +268,7 @@ def test_delete_ref(tmpdir):
             f.write(content)
         ex((bup_exe, b'index', src))
         ex((bup_exe, b'save', b'-n', b'delete-me', b'--strip', src))
-        return git.read_ref(refname)
+        return git.read_ref(refname, repo_dir=bupdir)
     oid1 = save(b'one\n')
     oid2 = save(b'two\n')
     assert oid1 != oid2
