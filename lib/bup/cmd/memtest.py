@@ -78,7 +78,7 @@ def main(argv):
     if extra:
         o.fatal('no arguments expected')
 
-    git.check_repo_or_die()
+    git.check_repo_or_die(git.guess_repo())
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
 
