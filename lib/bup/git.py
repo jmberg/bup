@@ -36,7 +36,6 @@ from bup.helpers import (Sha1, add_error, chunkyreader, debug1,
 
 
 verbose = 0
-repodir = None  # The default repository, once initialized
 
 _typemap =  {b'blob': 3, b'tree': 2, b'commit': 1, b'tag': 4}
 _typermap = {v: k for k, v in items(_typemap)}
@@ -1220,7 +1219,7 @@ def delete_ref(refname, oldvalue=None, repo_dir=None):
 
 
 def guess_repo(repo_dir=None):
-    """Set the path value in the global variable "repodir".
+    """
     This makes bup look for an existing bup repository, but not fail if a
     repository doesn't exist. Usually, if you are interacting with a bup
     repository, you would not be calling this function but using
@@ -1228,15 +1227,11 @@ def guess_repo(repo_dir=None):
     """
     if repo_dir:
         return repo_dir
-    # previously set?
-    if repodir:
-        return repodir
     return path.defaultrepo()
 
 
 def init_repo(path=None):
     """Create the Git bare repository for bup in a given path."""
-    global repodir
     repodir = guess_repo(path)
     d = repo(repo_dir=repodir)  # appends a / to the path
     parent = os.path.dirname(os.path.dirname(d))
@@ -1260,9 +1255,8 @@ def init_repo(path=None):
     _git_wait('git config', p)
 
 
-def check_repo_or_die(path=None):
+def check_repo_or_die(path):
     """Check to see if a bup repository probably exists, and abort if not."""
-    global repodir
     repodir = guess_repo(path)
     top = repo(repo_dir=repodir)
     pst = stat_if_exists(top + b'/objects/pack')
