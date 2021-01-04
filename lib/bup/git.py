@@ -51,10 +51,8 @@ class GitError(Exception):
     pass
 
 
-def _gitenv(repo_dir=None):
+def _gitenv(repo_dir):
     # This is not always used, i.e. sometimes we just use --git-dir
-    if not repo_dir:
-        repo_dir = repo()
     return merge_dict(environ, {b'GIT_DIR': os.path.abspath(repo_dir)})
 
 def _git_wait(cmd, p):
@@ -1288,17 +1286,17 @@ def init_repo(path=None):
                            # arbitrary default branch name to suppress git msg.
                            b'-c', b'init.defaultBranch=main', b'init'],
                          stdout=sys.stderr,
-                         env=_gitenv(),
+                         env=_gitenv(repodir),
                          close_fds=True)
     _git_wait('git init', p)
     # Force the index version configuration in order to ensure bup works
     # regardless of the version of the installed Git binary.
     p = subprocess.Popen([b'git', b'config', b'pack.indexVersion', '2'],
-                         stdout=sys.stderr, env=_gitenv(), close_fds=True)
+                         stdout=sys.stderr, env=_gitenv(repodir), close_fds=True)
     _git_wait('git config', p)
     # Enable the reflog
     p = subprocess.Popen([b'git', b'config', b'core.logAllRefUpdates', b'true'],
-                         stdout=sys.stderr, env=_gitenv(), close_fds=True)
+                         stdout=sys.stderr, env=_gitenv(repodir), close_fds=True)
     _git_wait('git config', p)
 
 
