@@ -187,20 +187,18 @@ def main(argv):
 
     writing = not (opt.noop or opt.copy)
     remote_dest = opt.remote or opt.is_reverse
-
-    if writing or opt.git_ids:
-        git.check_repo_or_die()
+    srcrepo = None
 
     if opt.git_ids:
+        srcrepo = from_opts(opt)
         # the input is actually a series of git object ids that we should retrieve
         # and split.
         #
         # This is a bit messy, but basically it converts from a series of
-        # CatPipe.get() iterators into a series of file-type objects.
-        # It would be less ugly if either CatPipe.get() returned a file-like object
+        # repo.cat() iterators into a series of file-type objects.
+        # It would be less ugly if either repo.cat() returned a file-like object
         # (not very efficient), or split_to_shalist() expected an iterator instead
         # of a file.
-        cp = git.CatPipe()
         class IterToFile:
             def __init__(self, it):
                 self.it = iter(it)
@@ -215,7 +213,7 @@ def main(argv):
                 if line:
                     line = line.strip()
                 try:
-                    it = cp.get(line.strip())
+                    it = srcrepo.cat(line.strip())
                     next(it, None)  # skip the file info
                 except KeyError as e:
                     add_error('error: %s' % e)
@@ -230,7 +228,10 @@ def main(argv):
             files = [stdin]
 
     if writing:
-        repo = from_opts(opt)
+        if srcrepo is not None:
+            repo = srcrepo
+        else:
+            repo = from_opts(opt)
         repobits = repo.config_get(b'bup.split.files', opttype='int') or hashsplit.BUP_BLOBBITS
         if not opt.blobbits:
             opt.blobbits = repobits
