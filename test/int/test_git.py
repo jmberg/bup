@@ -213,7 +213,7 @@ def test_check_repo_or_die(tmpdir):
     try:
         os.chdir(tmpdir)
         git.init_repo(bupdir)
-        git.check_repo_or_die()
+        git.check_repo_or_die(bupdir)
         # if we reach this point the call above passed
         WVPASS('check_repo_or_die')
 
@@ -221,7 +221,7 @@ def test_check_repo_or_die(tmpdir):
                   bupdir + b'/objects/pack.tmp')
         open(bupdir + b'/objects/pack', 'w').close()
         try:
-            git.check_repo_or_die()
+            git.check_repo_or_die(bupdir)
         except SystemExit as e:
             WVPASSEQ(e.code, 14)
         else:
