@@ -1215,12 +1215,12 @@ def update_ref(refname, newval, oldval, repo_dir=None, force=False):
     _git_wait(b' '.join(quote(x) for x in cmd), p)
 
 
-def delete_ref(refname, oldvalue=None):
+def delete_ref(refname, oldvalue=None, repo_dir=None):
     """Delete a repository reference (see git update-ref(1))."""
     assert refname.startswith(b'refs/')
     oldvalue = [] if not oldvalue else [oldvalue]
     cmd = [b'git', b'update-ref', b'-d', refname] + oldvalue
-    p = subprocess.Popen(cmd, env=_gitenv(), close_fds=True)
+    p = subprocess.Popen(cmd, env=_gitenv(repo_dir), close_fds=True)
     _git_wait(b' '.join(quote(x) for x in cmd), p)
 
 
