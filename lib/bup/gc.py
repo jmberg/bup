@@ -137,7 +137,7 @@ def find_live_objects(repo, existing_count, cat_pipe, idx_list, refs=None,
         oid_exists = (lambda oid: idx_list.exists(oid)) if idx_list else None
         approx_live_count = 0
         missing = 0
-        for ref_name, ref_id in refs if refs else git.list_refs():
+        for ref_name, ref_id in refs if refs else repo.refs():
             for item in walk_object(cat_pipe.get, hexlify(ref_id),
                                     stop_at=stop_at, include_data=None,
                                     oid_exists=oid_exists):
