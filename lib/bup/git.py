@@ -42,7 +42,6 @@ import bup.path
 
 
 verbose = 0
-repodir = None  # The default repository, once initialized
 
 _typemap =  {b'blob': 3, b'tree': 2, b'commit': 1, b'tag': 4}
 _typermap = {v: k for k, v in _typemap.items()}
@@ -1264,20 +1263,16 @@ def delete_ref(refname, oldvalue=None, repo_dir=None):
 
 
 def guess_repo():
-    """Return the global repodir or BUP_DIR when either is set, or ~/.bup.
+    """Return BUP_DIR when it is set, or ~/.bup.
     Usually, if you are interacting with a bup repository, you would
     not be calling this function but using check_repo_or_die().
 
     """
-    # previously set?
-    if repodir:
-        return repodir
     return bup.path.defaultrepo()
 
 
 def init_repo(path=None):
     """Create the Git bare repository for bup in a given path."""
-    global repodir
     repodir = path or guess_repo()
     d = repo(repo_dir=repodir)  # appends a / to the path
     parent = os.path.dirname(os.path.dirname(d))
@@ -1322,7 +1317,6 @@ def establish_default_repo(path=None, *, must_exist=False):
     exit() with an error status if must_exist is true or return False.
 
     """
-    global repodir
     def maybe_exit(status, msg):
         if must_exist:
             log(f'error: {msg}')
@@ -1347,7 +1341,7 @@ def establish_default_repo(path=None, *, must_exist=False):
     return maybe_exit(15, f'{path_msg(top)} is not a repository\n')
 
 
-def check_repo_or_die(path=None):
+def check_repo_or_die(path):
     """Equivalent to git.establish_default_repo(path, must_exist=True)."""
     establish_default_repo(path, must_exist=True)
 

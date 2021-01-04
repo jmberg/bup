@@ -68,7 +68,7 @@ def main(argv):
     if (opt.links, opt.bupm) == (None, None):
         opt.links = opt.bupm = True
 
-    git.check_repo_or_die()
+    git.check_repo_or_die(git.guess_repo())
     with LocalRepo() as repo:
         cat_pipe = git.catpipe(repo.repo_dir)
         ref_missing, ref_info = \

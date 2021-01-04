@@ -1,6 +1,5 @@
 
 from binascii import hexlify, unhexlify
-from contextlib import ExitStack
 from functools import partial
 from time import localtime
 import struct, os
@@ -13,7 +12,7 @@ import buptest
 from bup import git, path
 from bup.compat import environ
 from bup.config import ConfigError
-from bup.helpers import OBJECT_EXISTS, finalized, log, mkdirp
+from bup.helpers import OBJECT_EXISTS, log, mkdirp
 
 
 bup_exe = path.exe()
@@ -202,75 +201,54 @@ def test_long_index(tmpdir):
 
 
 def check_establish_default_repo_variant(tmpdir, f, is_establish):
-    WVFAIL(git.repodir) # global state...
-    def reset_state(_): git.repodir = None
-    fin = finalized(reset_state)
-    def finally_reset_state():
-        ctx = ExitStack()
-        ctx.enter_context(fin)
-        return ctx
-
     environ[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
+    # establish_default_repo() falls back to BUP_DIR when given None
+    valid = None if is_establish else bupdir
     orig_cwd = os.getcwd()
     try:
         os.chdir(tmpdir)
         git.init_repo(bupdir)
-        with finally_reset_state():
-            if is_establish:
-                WVPASSEQ(True, f())
-            else:
-                WVPASSEQ(None, f())
         if is_establish:
-            with finally_reset_state():
-                WVPASSEQ(True, f(must_exist=True))
-            with finally_reset_state():
-                WVPASSEQ(True, f(must_exist=False))
+            WVPASSEQ(True, f(valid))
+            WVPASSEQ(True, f(valid, must_exist=True))
+            WVPASSEQ(True, f(valid, must_exist=False))
+        else:
+            WVPASSEQ(None, f(valid))
 
         os.rename(bupdir + b'/objects/pack',
                   bupdir + b'/objects/pack.tmp')
         with open(bupdir + b'/objects/pack', 'wb'): pass
         if is_establish:
-            with finally_reset_state():
-                WVPASSEQ(False, f())
-            with finally_reset_state():
-                WVPASSEQ(False, f(must_exist=False))
-            with finally_reset_state(), \
-                 pytest.raises(SystemExit) as ex_info:
-                f(must_exist=True)
+            WVPASSEQ(False, f(valid))
+            WVPASSEQ(False, f(valid, must_exist=False))
+            with pytest.raises(SystemExit) as ex_info:
+                f(valid, must_exist=True)
             WVPASSEQ(14, ex_info.value.code)
         else:
-            with finally_reset_state(), \
-                 pytest.raises(SystemExit) as ex_info:
-                f()
+            with pytest.raises(SystemExit) as ex_info:
+                f(valid)
             WVPASSEQ(14, ex_info.value.code)
 
         os.unlink(bupdir + b'/objects/pack')
         os.rename(bupdir + b'/objects/pack.tmp',
                   bupdir + b'/objects/pack')
         if is_establish:
-            with finally_reset_state():
-                WVPASSEQ(False, f(b'nonexistant.bup'))
-            with finally_reset_state():
-                WVPASSEQ(False, f(b'nonexistant.bup', must_exist=False))
-            with finally_reset_state(), \
-                 pytest.raises(SystemExit) as ex_info:
+            WVPASSEQ(False, f(b'nonexistant.bup'))
+            WVPASSEQ(False, f(b'nonexistant.bup', must_exist=False))
+            with pytest.raises(SystemExit) as ex_info:
                 f(b'nonexistant.bup', must_exist=True)
             WVPASSEQ(15, ex_info.value.code)
         else:
-            with finally_reset_state(), \
-                 pytest.raises(SystemExit) as ex_info:
+            with pytest.raises(SystemExit) as ex_info:
                 f(b'nonexistant.bup')
             WVPASSEQ(15, ex_info.value.code)
-            assert not git.repodir
     finally:
         os.chdir(orig_cwd)
 
 def test_establish_default_repo(tmpdir):
-    git.repodir = None
     check_establish_default_repo_variant(tmpdir, git.establish_default_repo, True)
 
 def test_check_repo_or_die(tmpdir):
-    git.repodir = None
     check_establish_default_repo_variant(tmpdir, git.check_repo_or_die, False)
 
 

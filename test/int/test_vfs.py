@@ -13,7 +13,7 @@ from buptest.vfs import tree_dict
 from wvpytest import *
 
 from bup._helpers import write_random
-from bup import git, metadata, vfs
+from bup import metadata, vfs
 from bup.compat import environ, fsencode
 from bup.metadata import Metadata
 from bup.repo import LocalRepo
@@ -150,7 +150,6 @@ def test_misc(tmpdir):
     bup_dir = tmpdir + b'/bup'
     environ[b'GIT_DIR'] = bup_dir
     environ[b'BUP_DIR'] = bup_dir
-    git.repodir = bup_dir
     data_path = tmpdir + b'/src'
     os.mkdir(data_path)
     with open(data_path + b'/file', 'wb+') as tmpfile:
@@ -260,7 +259,6 @@ def test_read_and_seek(tmpdir):
     bup_dir = tmpdir + b'/bup'
     environ[b'GIT_DIR'] = bup_dir
     environ[b'BUP_DIR'] = bup_dir
-    git.repodir = bup_dir
     data_path = tmpdir + b'/src'
     os.mkdir(data_path)
     seed = randint(-(1 << 31), (1 << 31) - 1)
@@ -298,7 +296,6 @@ def test_contents_with_mismatched_bupm_git_ordering(tmpdir):
     bup_dir = tmpdir + b'/bup'
     environ[b'GIT_DIR'] = bup_dir
     environ[b'BUP_DIR'] = bup_dir
-    git.repodir = bup_dir
     data_path = tmpdir + b'/src'
     os.mkdir(data_path)
     os.mkdir(data_path + b'/foo')
@@ -337,7 +334,6 @@ def test_duplicate_save_dates(tmpdir):
     environ[b'BUP_DIR'] = bup_dir
     environ[b'TZ'] = b'UTC'
     tzset()
-    git.repodir = bup_dir
     data_path = tmpdir + b'/src'
     os.mkdir(data_path)
     with open(data_path + b'/file', 'wb+') as tmpfile:

@@ -25,7 +25,7 @@ class LocalRepo(RepoProtocol):
         # indicate unset without being conflated with False.
         self.closed = True
         self.repo_dir = realpath(repo_dir or git.guess_repo())
-        git.check_repo_or_die(repo_dir)
+        git.check_repo_or_die(self.repo_dir)
         self._base = _make_base(self.config_get, compression_level,
                                 max_pack_size, max_pack_objects)
         self._on_pack_finish = on_pack_finish
