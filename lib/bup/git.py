@@ -50,9 +50,7 @@ class GitError(Exception):
     pass
 
 
-def _gitenv(repo_dir=None):
-    if not repo_dir:
-        repo_dir = repo()
+def _gitenv(repo_dir):
     return merge_dict(environ, {b'GIT_DIR': os.path.abspath(repo_dir)})
 
 def _git_wait(cmd, p):
@@ -1251,17 +1249,17 @@ def init_repo(path=None):
     if os.path.exists(d) and not os.path.isdir(os.path.join(d, b'.')):
         raise GitError('"%s" exists but is not a directory\n' % path_msg(d))
     p = subprocess.Popen([b'git', b'--bare', b'init'], stdout=sys.stderr,
-                         env=_gitenv(),
+                         env=_gitenv(repodir),
                          close_fds=True)
     _git_wait('git init', p)
     # Force the index version configuration in order to ensure bup works
     # regardless of the version of the installed Git binary.
     p = subprocess.Popen([b'git', b'config', b'pack.indexVersion', '2'],
-                         stdout=sys.stderr, env=_gitenv(), close_fds=True)
+                         stdout=sys.stderr, env=_gitenv(repodir), close_fds=True)
     _git_wait('git config', p)
     # Enable the reflog
     p = subprocess.Popen([b'git', b'config', b'core.logAllRefUpdates', b'true'],
-                         stdout=sys.stderr, env=_gitenv(), close_fds=True)
+                         stdout=sys.stderr, env=_gitenv(repodir), close_fds=True)
     _git_wait('git config', p)
 
 
