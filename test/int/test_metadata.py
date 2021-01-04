@@ -6,7 +6,7 @@ import pytest
 
 from wvpytest import *
 
-from bup import git, metadata
+from bup import metadata
 from bup import vfs
 from bup.helpers import clear_errors, detect_fakeroot, is_superuser, resolve_parent
 from bup.repo import LocalRepo
@@ -136,8 +136,7 @@ def test_metadata_method(tmpdir):
     ex(bup_path, b'-d', bup_dir, b'init')
     ex(bup_path, b'-d', bup_dir, b'index', b'-v', data_path)
     ex(bup_path, b'-d', bup_dir, b'save', b'-tvvn', b'test', data_path)
-    git.check_repo_or_die(bup_dir)
-    with  LocalRepo() as repo:
+    with LocalRepo(bup_dir) as repo:
         resolved = vfs.resolve(repo,
                                b'/test/latest' + resolve_parent(data_path),
                                follow=False)
