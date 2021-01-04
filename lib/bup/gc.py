@@ -111,7 +111,7 @@ def find_live_objects(repo, existing_count, cat_pipe, verbosity=0):
         trees_visited = set()
         stop_at = lambda x: unhexlify(x) in trees_visited
     approx_live_count = 0
-    for ref_name, ref_id in git.list_refs():
+    for ref_name, ref_id in repo.refs():
         for item in walk_object(cat_pipe.get, hexlify(ref_id), stop_at=stop_at,
                                 include_data=None):
             # FIXME: batch ids
