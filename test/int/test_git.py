@@ -342,10 +342,11 @@ def test_list_refs(tmpdir):
     with open(src + b'/2', 'wb+') as f:
         f.write(b'something else\n')
     git.init_repo(bupdir)
+    list_refs = partial(git.list_refs, repo_dir=bupdir)
     emptyset = frozenset()
-    WVPASSEQ(frozenset(git.list_refs()), emptyset)
-    WVPASSEQ(frozenset(git.list_refs(limit_to_tags=True)), emptyset)
-    WVPASSEQ(frozenset(git.list_refs(limit_to_heads=True)), emptyset)
+    WVPASSEQ(frozenset(list_refs()), emptyset)
+    WVPASSEQ(frozenset(list_refs(limit_to_tags=True)), emptyset)
+    WVPASSEQ(frozenset(list_refs(limit_to_heads=True)), emptyset)
     exc(bup_exe, b'index', src)
     exc(bup_exe, b'save', b'-n', b'src', b'--strip', src)
     src_hash = exo(b'git', b'--git-dir', bupdir,
@@ -358,18 +359,18 @@ def test_list_refs(tmpdir):
     blob_hash = unhexlify(exo(b'git', b'--git-dir', bupdir,
                               b'rev-parse',
                               b'src:1').strip().split(b'\n', maxsplit=1)[0])
-    WVPASSEQ(frozenset(git.list_refs()),
+    WVPASSEQ(frozenset(list_refs()),
              frozenset([(b'refs/heads/src', src_hash)]))
-    WVPASSEQ(frozenset(git.list_refs(limit_to_tags=True)), emptyset)
-    WVPASSEQ(frozenset(git.list_refs(limit_to_heads=True)),
+    WVPASSEQ(frozenset(list_refs(limit_to_tags=True)), emptyset)
+    WVPASSEQ(frozenset(list_refs(limit_to_heads=True)),
              frozenset([(b'refs/heads/src', src_hash)]))
     exc(b'git', b'--git-dir', bupdir, b'tag', b'commit-tag', b'src')
-    WVPASSEQ(frozenset(git.list_refs()),
+    WVPASSEQ(frozenset(list_refs()),
              frozenset([(b'refs/heads/src', src_hash),
                         (b'refs/tags/commit-tag', src_hash)]))
-    WVPASSEQ(frozenset(git.list_refs(limit_to_tags=True)),
+    WVPASSEQ(frozenset(list_refs(limit_to_tags=True)),
              frozenset([(b'refs/tags/commit-tag', src_hash)]))
-    WVPASSEQ(frozenset(git.list_refs(limit_to_heads=True)),
+    WVPASSEQ(frozenset(list_refs(limit_to_heads=True)),
              frozenset([(b'refs/heads/src', src_hash)]))
     exc(b'git', b'--git-dir', bupdir, b'tag', b'tree-tag', b'src:')
     exc(b'git', b'--git-dir', bupdir, b'tag', b'blob-tag', b'src:1')
@@ -377,9 +378,9 @@ def test_list_refs(tmpdir):
     expected_tags = frozenset([(b'refs/tags/commit-tag', src_hash),
                                (b'refs/tags/tree-tag', tree_hash),
                                (b'refs/tags/blob-tag', blob_hash)])
-    WVPASSEQ(frozenset(git.list_refs()), expected_tags)
-    WVPASSEQ(frozenset(git.list_refs(limit_to_heads=True)), frozenset([]))
-    WVPASSEQ(frozenset(git.list_refs(limit_to_tags=True)), expected_tags)
+    WVPASSEQ(frozenset(list_refs()), expected_tags)
+    WVPASSEQ(frozenset(list_refs(limit_to_heads=True)), frozenset([]))
+    WVPASSEQ(frozenset(list_refs(limit_to_tags=True)), expected_tags)
 
 
 def test_cat_pipe(tmpdir):
