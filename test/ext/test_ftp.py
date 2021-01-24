@@ -70,12 +70,6 @@ def test_ftp(tmpdir):
              bup(b'ftp', input=jl(b'cd src/latest/dir-symlink', b'pwd')).out)
     wvpasseq(b'/src/%s/dir\n' % save_name,
              bup(b'ftp', input=jl(b'cd src latest dir-symlink', b'pwd')).out)
-    wvpassne(0, bup(b'ftp',
-                    input=jl(b'cd src/latest/bad-symlink', b'pwd'),
-                    check=False, stdout=None).rc)
-    wvpassne(0, bup(b'ftp',
-                    input=jl(b'cd src/latest/not-there', b'pwd'),
-                    check=False, stdout=None).rc)
 
     wvstart('ls')
     # FIXME: elaborate
@@ -99,12 +93,6 @@ def test_ftp(tmpdir):
     with open(b'dest', 'rb') as f:
         wvpasseq(b'excitement!\n', f.read())
     unlink(b'dest')
-    wvpassne(0, bup(b'ftp',
-                    input=jl(b'get src/latest/bad-symlink dest'),
-                    check=False, stdout=None).rc)
-    wvpassne(0, bup(b'ftp',
-                    input=jl(b'get src/latest/not-there'),
-                    check=False, stdout=None).rc)
     
     wvstart('mget')
     unlink_if_exists(b'file-1')
@@ -122,8 +110,5 @@ def test_ftp(tmpdir):
     bup(b'ftp', input=jl(b'mget src/latest/file-symlink'))
     with open(b'file-symlink', 'rb') as f:
         wvpasseq(b'excitement!\n', f.read())
-    wvpassne(0, bup(b'ftp',
-                    input=jl(b'mget src/latest/bad-symlink dest'),
-                    check=False, stdout=None).rc)
     # bup mget currently always does pattern matching
     bup(b'ftp', input=b'mget src/latest/not-there\n')
