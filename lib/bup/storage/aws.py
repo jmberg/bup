@@ -131,14 +131,15 @@ class S3Reader:
 class S3CacheReader:
     # TODO: this class is not concurrency safe
     # TODO: this class sort of relies on sparse files (at least for efficiency)
-    def __init__(self, reader, cachedir, blksize):
-        self.reader = reader
-        self.name = reader.name
-        self.size = reader.size
+    def __init__(self, storage, name, cachedir, blksize):
+        self._reader = None
+        self.storage = storage
+        self.name = name
         self.fn_rngs = os.path.join(cachedir, self.name + '.rngs')
         self.fn_data = os.path.join(cachedir, self.name + '.data')
         self.offs = 0
         self.blksize = blksize
+        self.size = None
 
         if not os.path.exists(self.fn_rngs):
             # unlink data if present, we don't know how valid it is
@@ -153,6 +154,9 @@ class S3CacheReader:
             ranges = []
             for line in f_rngs.readlines():
                 line = line.strip()
+                if line.startswith(b'#size='):
+                    self.size = int(line[6:])
+                    continue
                 if not line or line.startswith(b'#'):
                     continue
                 start, end = line.split(b'-')
@@ -164,6 +168,16 @@ class S3CacheReader:
             self.ranges.sort()
 
             f_rngs.close()
+        if not self.size:
+            self.size = self.reader.size
+            # if we didn't have the size cached write it out now
+            self._write_ranges()
+
+    @property
+    def reader(self):
+        if not self._reader:
+            self._reader = S3Reader(self.storage, self.name)
+        return self._reader
 
     def _compress_ranges(self):
         ranges = []
@@ -195,8 +209,12 @@ class S3CacheReader:
         # update ranges file
         sz = len(data)
         self.ranges.append((offset, offset + sz - 1))
+        self._write_ranges()
+
+    def _write_ranges(self):
         self._compress_ranges()
         f_rngs = open(self.fn_rngs, 'w+b')
+        f_rngs.write(b'#size=%d\n' % self.size)
         f_rngs.write(b'\n'.join((b'%d - %d' % i for i in self.ranges)))
         f_rngs.write(b'\n')
         f_rngs.close()
@@ -266,7 +284,8 @@ class S3CacheReader:
     def close(self):
         if self.f_data is not None:
             self.f_data.close()
-        self.reader.close()
+        if self._reader:
+            self._reader.close()
 
 def _check_exc(e, *codes):
     if not hasattr(e, 'response'):
@@ -696,10 +715,9 @@ class AWSStorage(BupStorage):
         name = name.decode('utf-8')
         if kind == Kind.CONFIG:
             return DynamoReader(self, name)
-        reader = S3Reader(self, name)
         if not self.cachedir or kind not in (Kind.DATA, Kind.METADATA):
-            return reader
-        return S3CacheReader(reader, self.cachedir, self.down_blksize)
+            return S3Reader(self, name)
+        return S3CacheReader(self, name, self.cachedir, self.down_blksize)
 
     def list(self, pattern=None):
         # TODO: filter this somehow based on the pattern?
