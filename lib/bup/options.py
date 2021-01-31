@@ -97,6 +97,7 @@ class OptDict(object):
     def __init__(self, aliases):
         self._opts = {}
         self._aliases = aliases
+        self.count = 0
 
     def _unalias(self, k):
         k, reinvert = _remove_negative_kv(k, False)
@@ -108,6 +109,8 @@ class OptDict(object):
         self._opts[k] = _invert(v, invert)
 
     def __getitem__(self, k):
+        self.count += 1
+        assert self.count < 10000
         k, invert = self._unalias(k)
         return _invert(self._opts[k], invert)
 

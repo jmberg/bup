@@ -181,7 +181,7 @@ NONCE_DATA, NONCE_LEN = 0, 0x80
 class EncryptedVuintReader:
     def __init__(self, file, vuint_cs, szhint):
         self.file = file
-        self.vuint_cs = [byte_int(x) for x in vuint_cs]
+        self.vuint_cs = tuple(byte_int(x) for x in vuint_cs)
         self.offs = 0
         self.szhint = szhint
 
@@ -227,7 +227,6 @@ class EncryptedContainer(object):
                 raise Exception('Unsupported compression algorithm %s' % compressor)
         self.idxwriter = idxwriter
         self._used_nonces = set()
-        self._blobbits_cache = None
         self.repo = repo
 
         if kind == Kind.DATA or kind == Kind.METADATA:
@@ -300,6 +299,9 @@ class EncryptedContainer(object):
             self.offset = 0
             self._write(hdr, self.HEADER)
             assert self.offset == self.headerlen
+
+        bb = self.repo.config(b'bup.blobbits', opttype='int')
+        self._blobsize = 1 << (bb or hashsplit.BUP_BLOBBITS)
 
     def __del__(self):
         if self.file is None:
@@ -374,13 +376,6 @@ class EncryptedContainer(object):
         elif self.file is not None:
             self.file.close()
         self.file = None
-
-    @property
-    def _blobsize(self):
-        if self._blobbits_cache is None:
-            bb = self.repo.config(b'bup.blobbits', opttype='int')
-            self._blobbits_cache = bb or hashsplit.BUP_BLOBBITS
-        return 1 << self._blobbits_cache
 
     def read(self, offset=None):
         assert self.mode == 'r'

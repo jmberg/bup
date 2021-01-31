@@ -33,26 +33,26 @@ def item_info(item, name,
     item.  Classification may be "all", "type", or None.
 
     """
-    result = b''
+    result = []
     if show_hash:
         oid = item_hash(item, commit_hash)
-        result += b'%s ' % (hexlify(oid) if oid
-                            else b'0000000000000000000000000000000000000000')
+        result.append(b'%s ' % (hexlify(oid) if oid
+                            else b'0000000000000000000000000000000000000000'))
     if long_fmt:
         meta = item.meta.copy()
         meta.path = name
         # FIXME: need some way to track fake vs real meta items?
-        result += metadata.summary_bytes(meta,
+        result.append(metadata.summary_bytes(meta,
                                          numeric_ids=numeric_ids,
                                          classification=classification,
-                                         human_readable=human_readable)
+                                         human_readable=human_readable))
     else:
-        result += name
+        result.append(name)
         if classification:
             cls = xstat.classification_str(vfs.item_mode(item),
                                            classification == 'all')
-            result += cls.encode('ascii')
-    return result
+            result.append(cls.encode('ascii'))
+    return b''.join(result)
 
 
 optspec = """
@@ -71,6 +71,11 @@ file-type append type indicator: dir/ sym@ fifo| sock=
 human-readable    print human readable file sizes (i.e. 3.9K, 4.7M)
 n,numeric-ids list numeric IDs (user, group, etc.) rather than names
 """
+
+class LsOpts:
+    __slots__ = ['paths', 'long_listing', 'classification', 'show_hidden',
+                 'hash', 'commit_hash', 'numeric_ids', 'human_readable',
+                 'directory', 'recursive', 'remote', 'l']
 
 def opts_from_cmdline(args, onabort=None, pwd=b'/'):
     """Parse ls command line arguments and return a dictionary of ls
@@ -97,7 +102,19 @@ def opts_from_cmdline(args, onabort=None, pwd=b'/'):
             opt.show_hidden = 'all'
         elif option in ('-A', '--almost-all'):
             opt.show_hidden = 'almost'
-    return opt
+    ret = LsOpts()
+    ret.paths = opt.paths
+    ret.l = ret.long_listing = opt.long_listing
+    ret.classification = opt.classification
+    ret.show_hidden = opt.show_hidden
+    ret.hash = opt.hash
+    ret.commit_hash = opt.commit_hash
+    ret.numeric_ids = opt.numeric_ids
+    ret.human_readable = opt.human_readable
+    ret.directory = opt.directory
+    ret.recursive = opt.recursive
+    ret.remote = opt.remote
+    return ret
 
 def show_paths(repo, opt, paths, out, pwd, should_columnate, prefix=b''):
     def item_line(item, name):

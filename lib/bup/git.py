@@ -275,7 +275,8 @@ def mangle_name(name, mode, gitmode):
 
 
 (BUP_NORMAL, BUP_CHUNKED) = (0,1)
-def demangle_name(name, mode):
+from bup._helpers import demangle_name
+def _demangle_name(name, mode):
     """Remove name mangling from a file name, if necessary.
 
     The return value is a tuple (demangled_filename,mode), where mode is one of
@@ -331,10 +332,12 @@ def tree_encode(shalist):
     return b''.join(l)
 
 
-def tree_decode(buf):
+from bup._helpers import tree_decode
+def _tree_decode(buf):
     """Generate a list of (mode,name,hash) from the git tree object in buf."""
     ofs = 0
-    while ofs < len(buf):
+    buflen = len(buf)
+    while ofs < buflen:
         z = buf.find(b'\0', ofs)
         assert(z > ofs)
         spl = buf[ofs:z].split(b' ', 1)
@@ -708,7 +711,7 @@ class PackIdxList:
         self.also.add(hash)
 
 
-def open_idx(filename):
+def _open_idx(filename):
     if filename.endswith(b'.idx'):
         f = open(filename, 'rb')
         header = f.read(8)
@@ -729,6 +732,11 @@ def open_idx(filename):
     else:
         raise GitError('idx filenames must end with .idx or .midx')
 
+_openidx_cache = {}
+def open_idx(filename):
+    if not filename in _openidx_cache:
+        _openidx_cache[filename] = _open_idx(filename)
+    return _openidx_cache[filename]
 
 def idxmerge(idxlist, final_progress=True):
     """Generate a list of all the objects reachable in a PackIdxList."""
