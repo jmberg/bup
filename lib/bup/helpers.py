@@ -12,7 +12,7 @@ import hashlib, heapq, math, operator, time, grp, tempfile
 
 from bup import _helpers
 from bup import compat
-from bup.compat import argv_bytes, byte_int
+from bup.compat import argv_bytes, byte_int, bytes_from_byte
 from bup.io import byte_stream, path_msg
 # This function should really be in helpers, not in bup.options.  But we
 # want options.py to be standalone so people can include it in other projects.
@@ -560,14 +560,36 @@ class DemuxConn(BaseConn):
         BaseConn.__init__(self, outp)
         # Anything that comes through before the sync string was not
         # multiplexed and can be assumed to be debug/log before mux init.
-        tail = b''
-        while tail != b'BUPMUX':
-            b = os.read(infd, (len(tail) < 6) and (6-len(tail)) or 1)
+        stderr = byte_stream(sys.stderr)
+        cookie = b'BUPMUX'
+        pos = 0
+        while True:
+            b = os.read(infd, 1)
             if not b:
+                stderr.write(cookie[:pos])
                 raise IOError('demux: unexpected EOF during initialization')
-            tail += b
-            byte_stream(sys.stderr).write(tail[:-6])  # pre-mux log messages
-            tail = tail[-6:]
+
+            if b == bytes_from_byte(cookie[pos]):
+                pos += 1
+                if pos == len(cookie):
+                    break
+                continue
+
+            # If we can't find a new char of 'BUPMUX' then we must have some
+            # pre-mux log messages - output those as soon and as complete as
+            # possible.
+            #
+            # \r\n interacts badly with print_clean_line() in the main bup
+            # so remove all the \r so we see the full the lines. This assumes
+            # that nothing at this point will intentionally delete lines, but
+            # as we're just during SSH init that seems reasonable.
+            if b == b'\r':
+                continue
+
+            stderr.write(cookie[:pos]) # could be we have "BU" in the logs or so
+            pos = 0
+            stderr.write(b)  # pre-mux log messages
+            stderr.flush()
         self.infd = infd
         self.reader = None
         self.buf = None
