@@ -194,8 +194,12 @@ lib/cmd/bup: lib/cmd/bup.c src/bup/compat.c src/bup/io.c
 
 clean_paths += lib/bup/_helpers$(soext)
 generated_dependencies += lib/bup/_helpers.d
-lib/bup/_helpers$(soext): lib/bup/_helpers.c lib/bup/bupsplit.c lib/bup/_hashsplit.c
-	$(CC) $(helpers_cflags) $(CFLAGS) -shared -fPIC $^ \
+lib/bup/%.o: lib/bup/%.c dev/python
+	$(CC) $(shell dev/python -c 'import sysconfig; print(sysconfig.get_config_var("CCSHARED"))') \
+	  -c $(helpers_cflags) $(CFLAGS) $< -o $@
+lib/bup/_helpers$(soext): lib/bup/_helpers.o lib/bup/bupsplit.o lib/bup/_hashsplit.o dev/python
+	$(shell dev/python -c 'import sysconfig; print(sysconfig.get_config_var("LDSHARED"))') \
+	  $(filter-out dev/python,$^) \
 	  $(helpers_ldflags) $(LDFLAGS) $(OUTPUT_OPTION)
 
 test/tmp:
