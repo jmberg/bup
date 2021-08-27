@@ -532,7 +532,7 @@ class PackWriter_Remote(git.PackWriter):
                 objcache.close()
             return self.suggest_packs() # Returns last idx received
 
-    def close(self):
+    def close(self, run_midx=True):
         # Called by inherited __exit__
         self.remote_closed = True
         id = self._end()
