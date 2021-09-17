@@ -12,5 +12,4 @@ enable=
   unidiomatic-typecheck,
   unused-import,
   unused-wildcard-import,
-  useless-return,
-  arguments-differ
+  useless-return
