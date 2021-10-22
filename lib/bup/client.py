@@ -12,7 +12,7 @@ from bup.io import path_msg
 from bup.vint import read_vint, read_vuint, read_bvec, write_bvec
 
 
-class ClientError(Exception):
+class ClientError(git.GitError):
     pass
 
 
