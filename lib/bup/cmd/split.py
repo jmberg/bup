@@ -3,7 +3,7 @@ from __future__ import absolute_import, division, print_function
 from binascii import hexlify
 import sys, time
 
-from bup import compat, hashsplit, git, options, client
+from bup import compat, hashsplit, git, options
 from bup.repo import from_opts
 from bup.compat import argv_bytes, environ
 from bup.hashsplit import HashSplitter
@@ -91,8 +91,6 @@ def opts_from_cmdline(argv):
         opt.fanout = parse_num(opt.fanout) or 128
     if opt.blobbits:
         opt.blobbits = parse_num(opt.blobbits)
-    if opt.bwlimit:
-        opt.bwlimit = parse_num(opt.bwlimit)
     if opt.date:
         opt.date = parse_date_or_fatal(opt.date, o.fatal)
     else:
@@ -176,8 +174,6 @@ def main(argv):
     opt = opts_from_cmdline(argv)
     if opt.verbose >= 2:
         git.verbose = opt.verbose - 1
-    if opt.bwlimit:
-        client.bwlimit = opt.bwlimit
 
     start_time = time.time()
 
