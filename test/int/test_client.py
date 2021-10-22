@@ -3,8 +3,9 @@ from __future__ import absolute_import
 import os, time, random, subprocess, glob
 import pytest
 
-from bup import client, git, path, repo
+from bup import git, path, repo
 from bup.compat import bytes_from_uint, environ
+from bup.repo.remote import Client
 
 def randbytes(sz):
     s = b''
@@ -25,7 +26,7 @@ def test_server_split_with_indexes(tmpdir):
     git.init_repo(bupdir)
     with git.PackWriter() as lw:
         lw.new_blob(s1)
-    with client.Client(bupdir, create=True) as c, \
+    with Client(bupdir, create=True) as c, \
          c.new_packwriter() as rw:
         rw.new_blob(s2)
         rw.breakpoint()
@@ -43,7 +44,7 @@ def test_multiple_suggestions(tmpdir):
     assert len(glob.glob(git.repo(b'objects/pack'+IDX_PAT,
                                   repo_dir=bupdir))) == 2
 
-    with client.Client(bupdir, create=True) as c, \
+    with Client(bupdir, create=True) as c, \
          c.new_packwriter() as rw:
 
         assert len(glob.glob(c.cachedir+IDX_PAT)) == 0
@@ -106,7 +107,7 @@ def test_dumb_client_server(dumb_mode, tmpdir):
     with git.PackWriter() as lw:
         lw.new_blob(s1)
 
-    with client.Client(bupdir, create=True) as c, \
+    with Client(bupdir, create=True) as c, \
          c.new_packwriter() as rw:
         assert len(glob.glob(c.cachedir+IDX_PAT)) == 1
         rw.new_blob(s1)
@@ -118,7 +119,7 @@ def test_dumb_client_server(dumb_mode, tmpdir):
 def test_midx_refreshing(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
     git.init_repo(bupdir)
-    with client.Client(bupdir, create=True) as c, \
+    with Client(bupdir, create=True) as c, \
          c.new_packwriter() as rw:
         rw.new_blob(s1)
         p1base = rw.breakpoint()
