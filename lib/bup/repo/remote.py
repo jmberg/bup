@@ -5,7 +5,7 @@ from bup import client
 
 class RemoteRepo(BaseRepo):
     def __init__(self, address, create=False, compression_level=None,
-                 max_pack_size=None, max_pack_objects=None):
+                 max_pack_size=None, max_pack_objects=None, bwlimit=None):
         self.closed = True # in case Client instantiation fails
         self.client = client.Client(address, create=create)
         self.closed = False
@@ -24,6 +24,7 @@ class RemoteRepo(BaseRepo):
         self.join = self.client.join
         self.refs = self.client.refs
         self.resolve = self.client.resolve
+        self._bwlimit = bwlimit
         self._packwriter = None
 
     def close(self):
@@ -44,7 +45,8 @@ class RemoteRepo(BaseRepo):
             self._packwriter = self.client.new_packwriter(
                                     compression_level=self.compression_level,
                                     max_pack_size=self.max_pack_size,
-                                    max_pack_objects=self.max_pack_objects)
+                                    max_pack_objects=self.max_pack_objects,
+                                    bwlimit=self._bwlimit)
 
     def is_remote(self):
         return True

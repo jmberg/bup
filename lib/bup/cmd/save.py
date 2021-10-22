@@ -3,7 +3,7 @@ from binascii import hexlify
 from errno import ENOENT
 import math, os, stat, sys, time
 
-from bup import hashsplit, options, index, client, metadata, path
+from bup import hashsplit, options, index, metadata, path
 from bup.repo import from_opts
 from bup import hlinkdb
 from bup.compat import argv_bytes, environ
@@ -67,9 +67,6 @@ def opts_from_cmdline(argv):
 
     opt.progress = (istty2 and not opt.quiet)
     opt.smaller = parse_num(opt.smaller or 0)
-
-    if opt.bwlimit:
-        opt.bwlimit = parse_num(opt.bwlimit)
 
     if opt.strip and opt.strip_path:
         o.fatal("--strip is incompatible with --strip-path")
@@ -425,7 +422,6 @@ def commit_tree(tree, parent, date, argv, repo):
 def main(argv):
     handle_ctrl_c()
     opt = opts_from_cmdline(argv)
-    client.bwlimit = opt.bwlimit
 
     with from_opts(opt) as repo:
         split_trees = repo.config_get(b'bup.split.trees', opttype='bool')
