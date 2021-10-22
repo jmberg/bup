@@ -55,9 +55,11 @@ def _make_config_repo(host, port, path, create):
     return ret
 
 def make_repo(address, create=False, compression_level=None,
-              max_pack_size=None, max_pack_objects=None):
+              max_pack_size=None, max_pack_objects=None,
+              bwlimit=None):
     protocol, host, port, dir = parse_remote(address)
     if protocol == b'config':
+        assert bwlimit is None, "bwlimit is not supported in this repo type (yet)"
         assert compression_level is None, "command-line compression level not supported in this repo type"
         assert max_pack_size is None, "command-line max pack size not supported in this repo type"
         assert max_pack_objects is None, "command-line max pack objects not supported in this repo type"
@@ -65,7 +67,8 @@ def make_repo(address, create=False, compression_level=None,
     return RemoteRepo(address, create=create,
                       compression_level=compression_level,
                       max_pack_size=max_pack_size,
-                      max_pack_objects=max_pack_objects)
+                      max_pack_objects=max_pack_objects,
+                      bwlimit=bwlimit)
 
 
 _protocol_rs = br'([a-z]+)://'
@@ -113,6 +116,7 @@ def from_opts(opt, reverse=True):
        - max-pack-objects
        - compress
        - remote
+       - bwlimit
      * the BUP_SERVER_REVERSE environment variable
     """
     if reverse:
@@ -140,9 +144,14 @@ def from_opts(opt, reverse=True):
 
     try:
         if opt.remote:
+            try:
+                bwlimit = parse_num(opt.bwlimit) if opt.bwlimit else None
+            except (KeyError, AttributeError):
+                bwlimit = None
             return make_repo(argv_bytes(opt.remote), compression_level=compress,
                              max_pack_size=max_pack_size,
-                             max_pack_objects=max_pack_objects)
+                             max_pack_objects=max_pack_objects,
+                             bwlimit=bwlimit)
 
         if is_reverse:
             return make_repo(b'reverse://%s' % is_reverse,

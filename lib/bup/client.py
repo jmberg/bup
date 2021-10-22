@@ -15,14 +15,11 @@ from bup.io import path_msg
 from bup.vint import write_bvec
 
 
-bwlimit = None
-
-
 class ClientError(Exception):
     pass
 
 
-def _raw_write_bwlimit(f, buf, bwcount, bwtime):
+def _raw_write_bwlimit(f, buf, bwcount, bwtime, bwlimit):
     if not bwlimit:
         f.write(buf)
         return (len(buf), time.time())
@@ -318,7 +315,7 @@ class Client:
 
     def new_packwriter(self, compression_level=None,
                        max_pack_size=None, max_pack_objects=None,
-                       objcache_maker=None):
+                       objcache_maker=None, bwlimit=None):
         self._require_command(b'receive-objects-v2')
         self.check_busy()
         def _set_busy():
@@ -333,7 +330,8 @@ class Client:
                                  ensure_busy = self.ensure_busy,
                                  compression_level=compression_level,
                                  max_pack_size=max_pack_size,
-                                 max_pack_objects=max_pack_objects)
+                                 max_pack_objects=max_pack_objects,
+                                 bwlimit=bwlimit)
 
     def read_ref(self, refname):
         self._require_command(b'read-ref')
@@ -544,7 +542,8 @@ class PackWriter_Remote(git.PackWriter):
                  ensure_busy,
                  compression_level=None,
                  max_pack_size=None,
-                 max_pack_objects=None):
+                 max_pack_objects=None,
+                 bwlimit=None):
         git.PackWriter.__init__(self,
                                 objcache_maker=objcache_maker,
                                 compression_level=compression_level,
@@ -560,6 +559,7 @@ class PackWriter_Remote(git.PackWriter):
         self._packopen = False
         self._bwcount = 0
         self._bwtime = time.time()
+        self._bwlimit = bwlimit
 
     # __enter__ and __exit__ are inherited
 
@@ -613,7 +613,7 @@ class PackWriter_Remote(git.PackWriter):
                            data))
         try:
             (self._bwcount, self._bwtime) = _raw_write_bwlimit(
-                    self.file, outbuf, self._bwcount, self._bwtime)
+                    self.file, outbuf, self._bwcount, self._bwtime, self._bwlimit)
         except IOError as e:
             reraise(ClientError(e))
         self.outbytes += len(data)
