@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from binascii import hexlify, unhexlify
 
 from bup import git, vfs
-from bup.client import ClientError
 from bup.compat import hexstr, pending_raise
 from bup.helpers import add_error, die_if_errors, log, saved_errors
 from bup.io import path_msg
@@ -137,7 +136,7 @@ def bup_rm(repo, paths, verbosity=None):
                         % (path_msg(ref_name),
                            hexstr(orig_ref) + ' -> ' if orig_ref else '',
                            hexstr(new_ref)))
-        except (git.GitError, ClientError) as ex:
+        except git.GitError as ex:
             if new_ref:
                 add_error('while trying to update %s (%s%s): %s'
                           % (path_msg(ref_name),
