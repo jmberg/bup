@@ -191,45 +191,58 @@ class BaseRepo(object):
         (optional, used only by bup server)
         """
 
-    @notimplemented
+    def _maybe_write(self, objtype, contents, metadata):
+        """
+        Internal helper function for the below write implementations.
+        """
+        sha = git.calc_hash(objtype, contents)
+        if not self.exists(sha):
+            self.just_write(sha, objtype, contents, metadata)
+        return sha
+
     def write_commit(self, tree, parent,
                      author, adate_sec, adate_tz,
                      committer, cdate_sec, cdate_tz,
                      msg):
         """
-        Tentatively write a new commit with the given parameters. You may use
-        git.create_commit_blob().
+        Create and tentatively write a new commit object to the
+        repository.  The date_sec values must be epoch-seconds,
+        and if a tz is None, the local timezone is assumed.
         """
+        content = git.create_commit_blob(tree, parent,
+                                         author, adate_sec, adate_tz,
+                                         committer, cdate_sec, cdate_tz,
+                                         msg)
+        return self._maybe_write(b'commit', content, True)
 
-    @notimplemented
     def write_tree(self, shalist):
         """
-        Tentatively write a new tree object into the repository, given the
-        shalist (a list or tuple of (mode, name, oid)). You can use the
-        git.tree_encode() function to convert from shalist to raw format.
+        Tentatively write the given tree shalist into the repository.
         Return the new object's oid.
         """
+        content = git.tree_encode(shalist)
+        return self._maybe_write(b'tree', content, True)
 
-    @notimplemented
     def write_data(self, data):
         """
-        Tentatively write the given data into the repository.
+        Tentatively write the given data blob into the repository.
         Return the new object's oid.
         """
+        return self._maybe_write(b'blob', data, False)
 
     def write_symlink(self, target):
         """
         Tentatively write the given symlink target into the repository.
         Return the new object's oid.
         """
-        return self.write_data(target)
+        return self._maybe_write(b'blob', target, True)
 
     def write_bupm(self, data):
         """
         Tentatively write the given bupm (fragment) into the repository.
         Return the new object's oid.
         """
-        return self.write_data(data)
+        return self._maybe_write(b'blob', data, False)
 
     @notimplemented
     def just_write(self, oid, type, content, metadata=False):

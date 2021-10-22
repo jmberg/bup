@@ -925,35 +925,6 @@ class PackWriter(object):
         if self.objcache is not None:
             self.objcache.add(sha)
 
-    def maybe_write(self, type, content):
-        """Write an object to the pack file if not present and return its id."""
-        sha = calc_hash(type, content)
-        if not self.exists(sha):
-            self._require_objcache()
-            self.just_write(sha, type, content)
-        return sha
-
-    def new_blob(self, blob):
-        """Create a blob object in the pack with the supplied content."""
-        return self.maybe_write(b'blob', blob)
-
-    def new_tree(self, shalist):
-        """Create a tree object in the pack."""
-        content = tree_encode(shalist)
-        return self.maybe_write(b'tree', content)
-
-    def new_commit(self, tree, parent,
-                   author, adate_sec, adate_tz,
-                   committer, cdate_sec, cdate_tz,
-                   msg):
-        """Create a commit object in the pack.  The date_sec values must be
-        epoch-seconds, and if a tz is None, the local timezone is assumed."""
-        content = create_commit_blob(tree, parent,
-                                     author, adate_sec, adate_tz,
-                                     committer, cdate_sec, cdate_tz,
-                                     msg)
-        return self.maybe_write(b'commit', content)
-
     def _end(self, run_midx=True, abort=False):
         # Ignores run_midx during abort
         self.tmpdir, tmpdir = None, self.tmpdir

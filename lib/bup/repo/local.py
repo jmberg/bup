@@ -106,24 +106,6 @@ class LocalRepo(BaseRepo):
         if rv:
             raise git.GitError('git rev-list returned error %d' % rv)
 
-    def write_commit(self, tree, parent,
-                     author, adate_sec, adate_tz,
-                     committer, cdate_sec, cdate_tz,
-                     msg):
-        self._ensure_packwriter()
-        return self._packwriter.new_commit(tree, parent,
-                                           author, adate_sec, adate_tz,
-                                           committer, cdate_sec, cdate_tz,
-                                           msg)
-
-    def write_tree(self, shalist):
-        self._ensure_packwriter()
-        return self._packwriter.new_tree(shalist)
-
-    def write_data(self, data):
-        self._ensure_packwriter()
-        return self._packwriter.new_blob(data)
-
     def just_write(self, sha, type, content, metadata=False):
         self._ensure_packwriter()
         return self._packwriter.just_write(sha, type, content)
