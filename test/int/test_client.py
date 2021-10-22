@@ -3,7 +3,7 @@ from __future__ import absolute_import
 import os, time, random, subprocess, glob
 import pytest
 
-from bup import client, git, path
+from bup import client, git, path, repo
 from bup.compat import bytes_from_uint, environ
 
 def randbytes(sz):
@@ -166,7 +166,7 @@ def test_remote_parsing():
         (b'config:///path/to/file.conf', (b'config', None, None, b'/path/to/file.conf')),
     )
     for remote, values in tests:
-        assert client.parse_remote(remote) == values
+        assert repo.parse_remote(remote) == values
 
-    with pytest.raises(client.ClientError):
-        client.parse_remote(b'http://asdf.com/bup')
+    with pytest.raises(Exception):
+        repo.parse_remote(b'http://asdf.com/bup')
