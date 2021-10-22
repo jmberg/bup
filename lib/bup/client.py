@@ -15,7 +15,7 @@ from bup.io import path_msg
 from bup.vint import write_bvec
 
 
-class ClientError(Exception):
+class ClientError(git.GitError):
     pass
 
 
