@@ -3,7 +3,7 @@ from binascii import hexlify, unhexlify
 import os, re, struct, sys, time, zlib
 import socket, shutil
 
-from bup import git, ssh, vfs, vint, protocol, path
+from bup import git, ssh, vfs, vint, protocol, path, repo
 from bup.compat import pending_raise
 from bup.helpers import (Conn, atomically_replaced_file, chunkyreader, debug1,
                          debug2, linereader, lines_until_sentinel,
@@ -42,47 +42,13 @@ def _raw_write_bwlimit(f, buf, bwcount, bwtime):
         return (bwcount, bwtime)
 
 
-_protocol_rs = br'([-a-z]+)://'
-_host_rs = br'(?P<sb>\[)?((?(sb)[0-9a-f:]+|[^:/]+))(?(sb)\])'
-_port_rs = br'(?::(\d+))?'
-_path_rs = br'(/.*)?'
-_url_rx = re.compile(br'%s(?:%s%s)?%s' % (_protocol_rs, _host_rs, _port_rs, _path_rs),
-                     re.I)
-
-def parse_remote(remote):
-    assert remote is not None
-    url_match = _url_rx.match(remote)
-    if url_match:
-        # Backward compatibility: version of bup prior to this patch
-        # passed "hostname:" to parse_remote, which wasn't url_match
-        # and thus went into the else, where the ssh version was then
-        # returned, and thus the dir (last component) was the empty
-        # string instead of None from the regex.
-        # This empty string was then put into the name of the index-
-        # cache directory, so we need to preserve that to avoid the
-        # index-cache being in a different location after updates.
-        if url_match.group(1) == b'bup-rev':
-            if url_match.group(5) is None:
-                return url_match.group(1, 3, 4) + (b'', )
-        elif not url_match.group(1) in (b'ssh', b'bup', b'file', b'config'):
-            raise ClientError('unexpected protocol: %s'
-                              % url_match.group(1).decode('ascii'))
-        return url_match.group(1,3,4,5)
-    else:
-        rs = remote.split(b':', 1)
-        if len(rs) == 1 or rs[0] in (b'', b'-'):
-            return b'file', None, None, rs[-1]
-        else:
-            return b'ssh', rs[0], None, rs[1]
-
-
 class Client:
     def __init__(self, remote, create=False):
         self.closed = False
         self._busy = self.conn = None
         self.sock = self.p = self.pout = self.pin = None
         try:
-            (self.protocol, self.host, self.port, self.dir) = parse_remote(remote)
+            (self.protocol, self.host, self.port, self.dir) = repo.parse_remote(remote)
 
             if self.protocol == b'bup-rev':
                 self.pout = os.fdopen(3, 'rb')

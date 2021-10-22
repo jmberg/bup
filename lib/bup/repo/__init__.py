@@ -1,5 +1,5 @@
 
-import sys
+import sys, re
 from bup.repo import local, remote, base
 
 from importlib import import_module
@@ -46,7 +46,7 @@ def _make_config_repo(host, port, path, create):
 
 def make_repo(address, create=False, compression_level=None,
               max_pack_size=None, max_pack_objects=None):
-    protocol, host, port, dir = client.parse_remote(address)
+    protocol, host, port, dir = parse_remote(address)
     if protocol == b'config':
         assert compression_level is None, "command-line compression level not supported in this repo type"
         assert max_pack_size is None, "command-line max pack size not supported in this repo type"
@@ -56,6 +56,44 @@ def make_repo(address, create=False, compression_level=None,
                       compression_level=compression_level,
                       max_pack_size=max_pack_size,
                       max_pack_objects=max_pack_objects)
+
+
+_protocol_rs = br'([-a-z]+)://'
+_host_rs = br'(?P<sb>\[)?((?(sb)[0-9a-f:]+|[^:/]+))(?(sb)\])'
+_port_rs = br'(?::(\d+))?'
+_path_rs = br'(/.*)?'
+_url_rx = re.compile(br'%s(?:%s%s)?%s' % (_protocol_rs, _host_rs, _port_rs, _path_rs),
+                     re.I)
+
+class ParseError(Exception):
+    pass
+
+def parse_remote(remote):
+    assert remote is not None
+    url_match = _url_rx.match(remote)
+    if url_match:
+        # Backward compatibility: version of bup prior to this patch
+        # passed "hostname:" to parse_remote, which wasn't url_match
+        # and thus went into the else, where the ssh version was then
+        # returned, and thus the dir (last component) was the empty
+        # string instead of None from the regex.
+        # This empty string was then put into the name of the index-
+        # cache directory, so we need to preserve that to avoid the
+        # index-cache being in a different location after updates.
+        if url_match.group(1) == b'bup-rev':
+            if url_match.group(5) is None:
+                return url_match.group(1, 3, 4) + (b'', )
+        elif not url_match.group(1) in (b'ssh', b'bup', b'file', b'config'):
+            raise ParseError('unexpected protocol: %s'
+                             % url_match.group(1).decode('ascii'))
+        return url_match.group(1,3,4,5)
+    else:
+        rs = remote.split(b':', 1)
+        if len(rs) == 1 or rs[0] in (b'', b'-'):
+            return b'file', None, None, rs[-1]
+        else:
+            return b'ssh', rs[0], None, rs[1]
+
 
 def from_opts(opt, reverse=True):
     """
@@ -106,6 +144,6 @@ def from_opts(opt, reverse=True):
         return LocalRepo(compression_level=compress,
                          max_pack_size=max_pack_size,
                          max_pack_objects=max_pack_objects)
-    except client.ClientError as e:
+    except ParseError as e:
         log('error: %s' % e)
         sys.exit(1)
