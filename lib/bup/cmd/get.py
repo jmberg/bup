@@ -14,7 +14,7 @@ from bup.compat import (
 )
 from bup.git import get_cat_data, parse_commit, walk_object
 from bup.helpers import add_error, debug1, log, saved_errors
-from bup.helpers import hostname, tty_width, parse_num
+from bup.helpers import hostname, tty_width
 from bup.io import path_msg
 from bup.pwdgrp import userfullname, username
 from bup.repo import LocalRepo
@@ -582,8 +582,6 @@ def main(argv):
     opt = parse_args(argv)
     if opt.source:
         opt.source = argv_bytes(opt.source)
-    if opt.bwlimit:
-        client.bwlimit = parse_num(opt.bwlimit)
     dest_repo = repo.from_opts(opt)
 
     with dest_repo as dest_repo:
