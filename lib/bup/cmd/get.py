@@ -5,7 +5,7 @@ from collections import namedtuple
 from stat import S_ISDIR, S_ISLNK
 import os, sys, textwrap, time
 
-from bup import compat, git, client, vfs, repo
+from bup import compat, git, vfs, repo
 from bup.compat import (
     argv_bytes,
     bytes_from_byte,
@@ -653,7 +653,7 @@ def main(argv):
                         log('updated %r (%s -> %s)\n' % (ref_name, orig_hex, new_hex))
                     else:
                         log('updated %r (%s)\n' % (ref_name, new_hex))
-            except (git.GitError, client.ClientError) as ex:
+            except git.GitError as ex:
                 add_error('unable to update ref %r: %s' % (ref_name, ex))
 
     if saved_errors:
