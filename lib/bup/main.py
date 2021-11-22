@@ -224,7 +224,7 @@ def print_clean_line(dest, content, width, sep=None):
         assert not sep_rx.match(x)
     content = b''.join(content)
     if sep == b'\r' and len(content) > width:
-        content = content[width:]
+        content = content[:width]
     os.write(dest, content)
     if len(content) < width:
         os.write(dest, b' ' * (width - len(content)))
@@ -247,10 +247,10 @@ def filter_output(srcs, dests):
     try:
         while srcs:
             ready_fds, _, _ = select.select(srcs, [], [])
-            width = tty_width()
             for fd in ready_fds:
                 buf = os.read(fd, 4096)
                 dest = dest_for[fd]
+                width = tty_width(dest)
                 if not buf:
                     srcs = tuple([x for x in srcs if x is not fd])
                     print_clean_line(dest, pending.pop(fd, []), width)
@@ -272,7 +272,7 @@ def filter_output(srcs, dests):
         # Try to finish each of the streams
         for fd, pending_items in compat.items(pending):
             dest = dest_for[fd]
-            width = tty_width()
+            width = tty_width(dest)
             try:
                 print_clean_line(dest, pending_items, width)
             except (EnvironmentError, EOFError) as ex:

@@ -130,16 +130,16 @@ def _intify(v):
 
 
 if not fcntl and termios:
-    def _tty_width():
+    def _tty_width(fd=0):
         return 70
 else:
-    def _tty_width():
+    def _tty_width(fd=sys.stderr.fileno()):
         forced = os.environ.get('BUP_TTY_WIDTH', None)
         if forced:
             return int(forced)
         s = struct.pack("HHHH", 0, 0, 0, 0)
         try:
-            s = fcntl.ioctl(sys.stderr.fileno(), termios.TIOCGWINSZ, s)
+            s = fcntl.ioctl(fd, termios.TIOCGWINSZ, s)
         except IOError:
             return 70
         ysize, xsize, ypix, xpix = struct.unpack('HHHH', s)
