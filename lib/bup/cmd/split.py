@@ -225,7 +225,6 @@ def main(argv):
     remote_dest = opt.remote or opt.is_reverse
 
     if writing:
-        git.check_repo_or_die()
         repo = from_opts(opt)
         repobits = repo.config(b'bup.blobbits', opttype='int') or hashsplit.BUP_BLOBBITS
         if not opt.blobbits:
