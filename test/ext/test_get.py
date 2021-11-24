@@ -15,6 +15,11 @@ from wvpytest import wvcheck, wvfail, wvmsg, wvpass, wvpasseq, wvpassne, wvstart
 import bup.path
 
 
+dispositions_to_test = ('get',)
+
+if int(environ.get(b'BUP_TEST_LEVEL', b'0')) >= 11:
+    dispositions_to_test += ('get-on', 'get-to')
+
 sys.stdout.flush()
 stdout = byte_stream(sys.stdout)
 
@@ -289,48 +294,60 @@ def verify_only_refs(**kwargs):
             wvpasseq(1, exr.rc)
             wvpasseq(b'', exr.out.strip())
 
-def _test_replace(get_disposition, src_info):
-    wvstart(get_disposition + ' --replace to root fails')
-    for item in (b'.tag/tinyfile',
-                 b'src/latest' + src_info['tinyfile-path'],
-                 b'.tag/subtree',
-                 b'src/latest' + src_info['subtree-vfs-path'],
-                 b'.tag/commit-1',
-                 b'src/latest',
-                 b'src'):
-        exr = run_get(get_disposition, b'--replace', (item, b'/'))
-        wvpassne(0, exr.rc)
-        verify_rx(br'impossible; can only overwrite branch or tag', exr.err)
+@pytest.mark.parametrize("disposition", dispositions_to_test)
+def test_get_replace_failures(tmpdir, disposition):
+    chdir(tmpdir)
+    try:
+        wvstart(disposition + ' --replace to root fails')
+        src_info = create_get_src()
+        for item in (b'.tag/tinyfile',
+                     b'src/latest' + src_info['tinyfile-path'],
+                     b'.tag/subtree',
+                     b'src/latest' + src_info['subtree-vfs-path'],
+                     b'.tag/commit-1',
+                     b'src/latest',
+                     b'src'):
+            exr = run_get(disposition, b'--replace', (item, b'/'))
+            wvpassne(0, exr.rc)
+            verify_rx(br'impossible; can only overwrite branch or tag', exr.err)
+    finally:
+        chdir(top)
 
-    tinyfile_id = src_info['tinyfile-id']
-    tinyfile_path = src_info['tinyfile-path']
-    subtree_vfs_path = src_info['subtree-vfs-path']
-    subtree_id = src_info['subtree-id']
-    commit_2_id = src_info['commit-2-id']
-    tree_2_id = src_info['tree-2-id']
+# Anything to tag
+existing_items = {'nothing' : None,
+                  'blob' : (b'.tag/tinyfile', b'.tag/obj'),
+                  'tree' : (b'.tag/tree-1', b'.tag/obj'),
+                  'commit': (b'.tag/commit-1', b'.tag/obj')}
+@pytest.mark.parametrize("disposition, existing_item", product(dispositions_to_test, existing_items.items()))
+def test_get_replace(tmpdir, disposition, existing_item):
+    chdir(tmpdir)
+    try:
+        src_info = create_get_src()
 
-    # Anything to tag
-    existing_items = {'nothing' : None,
-                      'blob' : (b'.tag/tinyfile', b'.tag/obj'),
-                      'tree' : (b'.tag/tree-1', b'.tag/obj'),
-                      'commit': (b'.tag/commit-1', b'.tag/obj')}
-    for ex_type, ex_ref in existing_items.items():
-        wvstart(get_disposition + ' --replace ' + ex_type + ' with blob tag')
+        tinyfile_id = src_info['tinyfile-id']
+        tinyfile_path = src_info['tinyfile-path']
+        subtree_vfs_path = src_info['subtree-vfs-path']
+        subtree_id = src_info['subtree-id']
+        commit_2_id = src_info['commit-2-id']
+        tree_2_id = src_info['tree-2-id']
+
+        ex_type, ex_ref = existing_item
+        wvstart(disposition + ' --replace ' + ex_type + ' with blob tag')
         for item in (b'.tag/tinyfile', b'src/latest' + tinyfile_path):
-            exr = run_get(get_disposition, b'--replace', (item ,b'.tag/obj'),
+            exr = run_get(disposition, b'--replace', (item ,b'.tag/obj'),
                           given=ex_ref)
             wvpasseq(0, exr.rc)        
             validate_blob(tinyfile_id, tinyfile_id)
             verify_only_refs(heads=[], tags=(b'obj',))
-        wvstart(get_disposition + ' --replace ' + ex_type + ' with tree tag')
+        wvstart(disposition + ' --replace ' + ex_type + ' with tree tag')
         for item in (b'.tag/subtree',  b'src/latest' + subtree_vfs_path):
-            exr = run_get(get_disposition, b'--replace', (item, b'.tag/obj'),
+            exr = run_get(disposition, b'--replace', (item, b'.tag/obj'),
                           given=ex_ref)
             validate_tree(subtree_id, subtree_id)
             verify_only_refs(heads=[], tags=(b'obj',))
-        wvstart(get_disposition + ' --replace ' + ex_type + ' with commitish tag')
+        wvstart(disposition + ' --replace ' + ex_type + ' with commitish tag')
         for item in (b'.tag/commit-2', b'src/latest', b'src'):
-            exr = run_get(get_disposition, b'--replace', (item, b'.tag/obj'),
+            exr = run_get(disposition, b'--replace', (item, b'.tag/obj'),
                           given=ex_ref)
             validate_tagged_save(b'obj', getcwd() + b'/src',
                                  commit_2_id, tree_2_id, b'src-2', exr.out)
@@ -343,9 +360,9 @@ def _test_replace(get_disposition, src_info):
             for item_type, item in (('commit', b'.tag/commit-2'),
                                     ('save', b'src/latest'),
                                     ('branch', b'src')):
-                wvstart(get_disposition + ' --replace '
+                wvstart(disposition + ' --replace '
                         + ex_type + ' with ' + item_type)
-                exr = run_get(get_disposition, b'--replace', (item, b'obj'),
+                exr = run_get(disposition, b'--replace', (item, b'obj'),
                               given=ex_ref)
                 validate_save(b'obj/latest', getcwd() + b'/src',
                               commit_2_id, tree_2_id, b'src-2', exr.out)
@@ -359,25 +376,28 @@ def _test_replace(get_disposition, src_info):
                                     ('blob', b'src/latest' + tinyfile_path),
                                     ('tree', b'.tag/subtree'),
                                     ('tree', b'src/latest' + subtree_vfs_path)):
-                wvstart(get_disposition + ' --replace branch with '
+                wvstart(disposition + ' --replace branch with '
                         + item_type + ' given ' + ex_type + ' fails')
 
-                exr = run_get(get_disposition, b'--replace', (item, b'obj'),
+                exr = run_get(disposition, b'--replace', (item, b'obj'),
                               given=ex_ref)
                 wvpassne(0, exr.rc)
                 verify_rx(br'cannot overwrite branch with .+ for', exr.err)
 
-        wvstart(get_disposition + ' --replace, implicit destinations')
+        wvstart(disposition + ' --replace, implicit destinations')
 
-        exr = run_get(get_disposition, b'--replace', b'src')
+        exr = run_get(disposition, b'--replace', b'src')
         validate_save(b'src/latest', getcwd() + b'/src',
                       commit_2_id, tree_2_id, b'src-2', exr.out)
         verify_only_refs(heads=(b'src',), tags=[])
 
-        exr = run_get(get_disposition, b'--replace', b'.tag/commit-2')
+        exr = run_get(disposition, b'--replace', b'.tag/commit-2')
         validate_tagged_save(b'commit-2', getcwd() + b'/src',
                              commit_2_id, tree_2_id, b'src-2', exr.out)
         verify_only_refs(heads=[], tags=(b'commit-2',))
+
+    finally:
+        chdir(top)
 
 def _test_ff(get_disposition, src_info):
 
@@ -947,12 +967,7 @@ def create_get_src():
 # FIXME: this fails in a strange way:
 #   WVPASS given nothing get --ff not-there
 
-dispositions_to_test = ('get',)
-
-if int(environ.get(b'BUP_TEST_LEVEL', b'0')) >= 11:
-    dispositions_to_test += ('get-on', 'get-to')
-
-categories = ('replace', 'universal', 'ff', 'append', 'pick_force', 'pick_noforce', 'new_tag', 'unnamed')
+categories = ('universal', 'ff', 'append', 'pick_force', 'pick_noforce', 'new_tag', 'unnamed')
 
 @pytest.mark.parametrize("disposition,category", product(dispositions_to_test, categories))
 def test_get(tmpdir, disposition, category):
