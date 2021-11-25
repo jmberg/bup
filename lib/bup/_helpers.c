@@ -2177,6 +2177,71 @@ static PyObject *bup_decode_hdr(PyObject *self, PyObject *args)
 }
 
 
+static PyObject *bup_tree_decode(PyObject *self, PyObject *args)
+{
+    char *buf;
+    Py_ssize_t len;
+    PyObject *ret;
+    int idx = 0;
+
+    if (!PyArg_ParseTuple(args, rbuf_argf, &buf, &len))
+        return NULL;
+
+    // dividing by 25 gives us a (high) upper bound
+    ret = PyTuple_New(len / 25);
+    while (len) {
+        int z = strnlen(buf, len);
+        assert(z < len); // safety for strtoul() we must have a \0
+        char *end = NULL;
+        char *sha = buf + z + 1;
+        unsigned long mode = strtoul(buf, &end, 8);
+        assert(end && *end == ' ');
+        end++;
+        assert(len >= z + 20 + 1);
+        PyTuple_SET_ITEM(ret, idx, Py_BuildValue("(kyy#)", mode, end, sha, 20));
+        idx++;
+        buf += z + 20 + 1;
+        len -= z + 20 + 1;
+    }
+
+    _PyTuple_Resize(&ret, idx);
+    return ret;
+}
+
+
+static PyObject *bup_demangle_name(PyObject *self, PyObject *args)
+{
+    char *buf;
+    Py_ssize_t len;
+    int mode;
+
+    if (!PyArg_ParseTuple(args, rbuf_argf "i", &buf, &len, &mode))
+        return NULL;
+
+/*
+    """Remove name mangling from a file name, if necessary.
+
+    The return value is a tuple (demangled_filename,mode), where mode is one of
+    the following:
+
+    * BUP_NORMAL  : files that should be read as-is from the repository
+    * BUP_CHUNKED : files that were chunked and need to be reassembled
+
+    For more information on the name mangling algorithm, see mangle_name()
+    """
+ */
+    if (len >= 5 && strncmp(buf + len - 5, ".bupl", 5) == 0)
+        return Py_BuildValue("(y#i)", buf, len - 5, 0);
+    if (len >= 4 && strncmp(buf + len - 4, ".bup", 4) == 0)
+        return Py_BuildValue("(y#i)", buf, len - 4, 1);
+    if (len >= 4 && strncmp(buf + len - 5, ".bupd", 5) == 0)
+        return NULL;
+    if (len >= 4 && strncmp(buf + len - 5, ".bupm", 5) == 0)
+        return Py_BuildValue("(y#i)", buf, len - 5, S_ISDIR(mode) ? 1 : 0);
+    return Py_BuildValue("(y#i)", buf, len, 0);
+}
+
+
 static PyMethodDef helper_methods[] = {
     { "write_sparsely", bup_write_sparsely, METH_VARARGS,
       "Write buf excepting zeros at the end. Return trailing zero count." },
@@ -2290,6 +2355,8 @@ static PyMethodDef helper_methods[] = {
     { "limited_vint_pack", bup_limited_vint_pack, METH_VARARGS,
       "Try to pack vint/vuint/str, throwing OverflowError when unable." },
     { "decode_hdr", bup_decode_hdr, METH_VARARGS, "decode pack hdr" },
+    { "_tree_decode", bup_tree_decode, METH_VARARGS, "decode tree object to a list" },
+    { "demangle_name", bup_demangle_name, METH_VARARGS, "demangle a bup name" },
     { NULL, NULL, 0, NULL },  // sentinel
 };
 
