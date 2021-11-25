@@ -274,29 +274,8 @@ def mangle_name(name, mode, gitmode):
         return name
 
 
-(BUP_NORMAL, BUP_CHUNKED) = (0,1)
-def demangle_name(name, mode):
-    """Remove name mangling from a file name, if necessary.
-
-    The return value is a tuple (demangled_filename,mode), where mode is one of
-    the following:
-
-    * BUP_NORMAL  : files that should be read as-is from the repository
-    * BUP_CHUNKED : files that were chunked and need to be reassembled
-
-    For more information on the name mangling algorithm, see mangle_name()
-    """
-    if name.endswith(b'.bupl'):
-        return (name[:-5], BUP_NORMAL)
-    elif name.endswith(b'.bup'):
-        return (name[:-4], BUP_CHUNKED)
-    elif name.endswith(b'.bupm'):
-        return (name[:-5],
-                BUP_CHUNKED if stat.S_ISDIR(mode) else BUP_NORMAL)
-    elif name.endswith(b'.bupd'): # should be unreachable
-        raise ValueError(f'Cannot unmangle *.bupd files: {path_msg(name)}')
-    return (name, BUP_NORMAL)
-
+(BUP_NORMAL, BUP_CHUNKED) = (0, 1) # must match bup._helpers
+from bup._helpers import demangle_name
 
 def calc_hash(type, content):
     """Calculate some content's hash in the Git fashion."""
@@ -330,19 +309,9 @@ def tree_encode(shalist):
     return b''.join(l)
 
 
+from bup._helpers import _tree_decode
 def tree_decode(buf):
-    """Generate a list of (mode,name,hash) from the git tree object in buf."""
-    ofs = 0
-    while ofs < len(buf):
-        z = buf.find(b'\0', ofs)
-        assert(z > ofs)
-        spl = buf[ofs:z].split(b' ', 1)
-        assert(len(spl) == 2)
-        mode,name = spl
-        sha = buf[z+1:z+1+20]
-        ofs = z+1+20
-        yield (int(mode, 8), name, sha)
-
+    return iter(_tree_decode(buf))
 
 def _encode_packobj(type, content, compression_level=1):
     if compression_level not in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9):
