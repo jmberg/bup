@@ -73,6 +73,11 @@ human-readable    print human readable file sizes (i.e. 3.9K, 4.7M)
 n,numeric-ids list numeric IDs (user, group, etc.) rather than names
 """
 
+class LsOpts:
+    __slots__ = ['paths', 'long_listing', 'classification', 'show_hidden',
+                 'hash', 'commit_hash', 'numeric_ids', 'human_readable',
+                 'directory', 'recursive', 'remote', 'l']
+
 def opts_from_cmdline(args, onabort=None, pwd=b'/'):
     """Parse ls command line arguments and return a dictionary of ls
     options, agumented with "classification", "long_listing",
@@ -98,7 +103,19 @@ def opts_from_cmdline(args, onabort=None, pwd=b'/'):
             opt.show_hidden = 'all'
         elif option in ('-A', '--almost-all'):
             opt.show_hidden = 'almost'
-    return opt
+    ret = LsOpts()
+    ret.paths = opt.paths
+    ret.l = ret.long_listing = opt.long_listing
+    ret.classification = opt.classification
+    ret.show_hidden = opt.show_hidden
+    ret.hash = opt.hash
+    ret.commit_hash = opt.commit_hash
+    ret.numeric_ids = opt.numeric_ids
+    ret.human_readable = opt.human_readable
+    ret.directory = opt.directory
+    ret.recursive = opt.recursive
+    ret.remote = opt.remote
+    return ret
 
 def show_paths(repo, opt, paths, out, pwd, should_columnate, prefix=b''):
     def item_line(item, name):
