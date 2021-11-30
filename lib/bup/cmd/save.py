@@ -10,7 +10,7 @@ from bup.compat import argv_bytes, environ
 from bup.hashsplit import GIT_MODE_TREE, GIT_MODE_FILE, GIT_MODE_SYMLINK
 from bup.helpers import (add_error, grafted_path_components, handle_ctrl_c,
                          hostname, istty2, log, parse_date_or_fatal, parse_num,
-                         path_components, progress, qprogress, resolve_parent,
+                         path_components, ProgressBar, resolve_parent,
                          saved_errors, stripped_path_components,
                          valid_save_name)
 from bup.io import byte_stream, path_msg
@@ -127,6 +127,7 @@ def save_tree(opt, reader, hlink_db, msr, repo, blobbits):
     _nonlocal['count'] = 0
     _nonlocal['subcount'] = 0
     _nonlocal['lastremain'] = None
+    pb = None
 
     def progress_report(file, n):
         _nonlocal['subcount'] += n
@@ -160,9 +161,8 @@ def save_tree(opt, reader, hlink_db, msr, repo, blobbits):
                 remainstr = '%dm%d' % (mins, secs)
             else:
                 remainstr = '%ds' % secs
-        qprogress('Saving: %.2f%% (%d/%dk, %d/%d files) %s %s\r'
-                  % (pct, cc/1024, total/1024, fcount, ftotal,
-                     remainstr, kpsstr))
+        pb.update(cc/1024, 'Saving: %.2f%% (%d/%dk, %d/%d files) %s'
+                  % (pct, cc/1024, total/1024, fcount, ftotal, kpsstr))
 
 
     def already_saved(ent):
@@ -183,18 +183,18 @@ def save_tree(opt, reader, hlink_db, msr, repo, blobbits):
 
     total = ftotal = 0
     if opt.progress:
-        for transname, ent in reader.filter(opt.sources,
-                                            wantrecurse=wantrecurse_pre):
-            if not (ftotal % 10024):
-                qprogress('Reading index: %d\r' % ftotal)
-            exists = ent.exists()
-            hashvalid = already_saved(ent)
-            ent.set_sha_missing(not hashvalid)
-            if not opt.smaller or ent.size < opt.smaller:
-                if exists and not hashvalid:
-                    total += ent.size
-            ftotal += 1
-        progress('Reading index: %d, done.\n' % ftotal)
+        with ProgressBar() as pb:
+            for transname, ent in reader.filter(opt.sources,
+                                                wantrecurse=wantrecurse_pre):
+                pb.update(ftotal, 'Reading index: %d' % ftotal)
+                exists = ent.exists()
+                hashvalid = already_saved(ent)
+                ent.set_sha_missing(not hashvalid)
+                if not opt.smaller or ent.size < opt.smaller:
+                    if exists and not hashvalid:
+                        total += ent.size
+                ftotal += 1
+            pb.update(ftotal, 'Reading index: %d.' % ftotal)
 
     # Root collisions occur when strip or graft options map more than one
     # path to the same directory (paths which originally had separate
@@ -213,8 +213,10 @@ def save_tree(opt, reader, hlink_db, msr, repo, blobbits):
     fcount = 0
     lastskip_name = None
     lastdir = b''
-    for transname, ent in reader.filter(opt.sources,
-                                        wantrecurse=wantrecurse_during):
+    with ProgressBar(total / 1024) as _pb:
+      pb = _pb
+      for transname, ent in reader.filter(opt.sources,
+                                          wantrecurse=wantrecurse_during):
         (dir, file) = os.path.split(ent.name)
         exists = (ent.flags & index.IX_EXISTS)
         already_saved_oid = already_saved(ent)
@@ -388,9 +390,9 @@ def save_tree(opt, reader, hlink_db, msr, repo, blobbits):
             _nonlocal['subcount'] = 0
 
 
-    if opt.progress:
+      if opt.progress:
         pct = total and _nonlocal['count']*100.0/total or 100
-        progress('Saving: %.2f%% (%d/%dk, %d/%d files), done.    \n'
+        pb.update(total/1024, 'Saving: %.2f%% (%d/%dk, %d/%d files).'
                  % (pct, _nonlocal['count']/1024, total/1024, fcount, ftotal))
 
     # nothing found
