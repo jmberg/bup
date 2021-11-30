@@ -1,5 +1,6 @@
 
 from binascii import hexlify
+from contextlib import nullcontext
 from errno import ENOENT
 from os import O_NOFOLLOW, O_RDONLY
 import math, os, stat, sys, time
@@ -25,12 +26,10 @@ from bup.helpers import \
      parse_date_arg,
      parse_num,
      path_components,
-     progress,
-     qprogress,
      resolve_parent,
      stripped_path_components,
      valid_save_name)
-from bup.io import byte_stream, path_msg
+from bup.io import ProgressBar, byte_stream, path_msg
 from bup.metadata import empty_metadata
 from bup.path import default_fsindex, flat_fsindex
 from bup.pwdgrp import userfullname, username
@@ -156,10 +155,9 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_cfg):
 
     prog_count = 0
     prog_subcount = 0
-    prog_lastremain = None
 
     def progress_report(file_, n):
-        nonlocal prog_count, prog_subcount, prog_lastremain
+        nonlocal prog_count, prog_subcount
         prog_subcount += n
         cc = prog_count + prog_subcount
         pct = total and (cc*100.0/total) or 0
@@ -168,32 +166,13 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_cfg):
         kps = elapsed and int(cc/1024./elapsed)
         kps_frac = 10 ** int(math.log(kps+1, 10) - 1)
         kps = int(kps/kps_frac)*kps_frac
-        if cc:
-            remain = elapsed*1.0/cc * (total-cc)
-        else:
-            remain = 0.0
-        if (prog_lastremain and (remain > prog_lastremain)
-              and ((remain - prog_lastremain)/prog_lastremain < 0.05)):
-            remain = prog_lastremain
-        else:
-            prog_lastremain = remain
-        hours = int(remain/60/60)
-        mins = int(remain/60 - hours*60)
-        secs = int(remain - hours*60*60 - mins*60)
         if elapsed < 30:
-            remainstr = ''
             kpsstr = ''
         else:
             kpsstr = '%dk/s' % kps
-            if hours:
-                remainstr = '%dh%dm' % (hours, mins)
-            elif mins:
-                remainstr = '%dm%d' % (mins, secs)
-            else:
-                remainstr = '%ds' % secs
-        qprogress('Saving: %.2f%% (%d/%dk, %d/%d files) %s %s\r'
-                  % (pct, cc/1024, total/1024, fcount, ftotal,
-                     remainstr, kpsstr))
+        pb.update(cc / 1024,
+                  'Saving: %.2f%% (%d/%dk, %d/%d files) %s'
+                  % (pct, cc/1024, total/1024, fcount, ftotal, kpsstr))
 
     def already_saved(ent):
         return ent.is_valid() and repo.exists(ent.sha) and ent.sha
@@ -216,18 +195,18 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_cfg):
         assert 'progress' not in split_cfg
         split_cfg['progress'] = progress_report
 
-        for transname_, ent in reader.filter(opt.sources,
-                                             wantrecurse=wantrecurse_pre):
-            if not (ftotal % 10024):
-                qprogress('Reading index: %d\r' % ftotal)
-            exists = ent.exists()
-            hashvalid = already_saved(ent)
-            ent.set_sha_missing(not hashvalid)
-            if not opt.smaller or ent.size < opt.smaller:
-                if exists and not hashvalid:
-                    total += ent.size
-            ftotal += 1
-        progress('Reading index: %d, done.\n' % ftotal)
+        with ProgressBar() as pb:
+            for transname_, ent in reader.filter(opt.sources,
+                                                 wantrecurse=wantrecurse_pre):
+                pb.update(ftotal, 'Reading index: %d' % ftotal)
+                exists = ent.exists()
+                hashvalid = already_saved(ent)
+                ent.set_sha_missing(not hashvalid)
+                if not opt.smaller or ent.size < opt.smaller:
+                    if exists and not hashvalid:
+                        total += ent.size
+                ftotal += 1
+            pb.update(ftotal, 'Reading index: %d' % ftotal)
 
     # Root collisions occur when strip or graft options map more than one
     # path to the same directory (paths which originally had separate
@@ -246,187 +225,188 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_cfg):
     fcount = 0
     lastskip_name = None
     lastdir = b''
-    for transname_, ent in reader.filter(opt.sources,
-                                        wantrecurse=wantrecurse_during):
-        (dir, file) = os.path.split(ent.name)
-        exists = (ent.flags & index.IX_EXISTS)
-        already_saved_oid = already_saved(ent)
-        wasmissing = ent.sha_missing()
-        oldsize = ent.size
-        if opt.verbose:
+    with (ProgressBar(total / 1024) if opt.progress else nullcontext()) as pb:
+        for transname_, ent in reader.filter(opt.sources,
+                                             wantrecurse=wantrecurse_during):
+            (dir, file) = os.path.split(ent.name)
+            exists = (ent.flags & index.IX_EXISTS)
+            already_saved_oid = already_saved(ent)
+            wasmissing = ent.sha_missing()
+            oldsize = ent.size
+            if opt.verbose:
+                if not exists:
+                    status = 'D'
+                elif not already_saved_oid:
+                    if ent.sha == index.EMPTY_SHA:
+                        status = 'A'
+                    else:
+                        status = 'M'
+                else:
+                    status = ' '
+                if opt.verbose >= 2:
+                    log('%s %-70s\n' % (status, path_msg(ent.name)))
+                elif not stat.S_ISDIR(ent.mode) and lastdir != dir:
+                    if not lastdir.startswith(dir):
+                        log('%s %-70s\n' % (status, path_msg(os.path.join(dir, b''))))
+                    lastdir = dir
+
+            if opt.progress:
+                progress_report(None, 0)
+            fcount += 1
+
             if not exists:
-                status = 'D'
-            elif not already_saved_oid:
-                if ent.sha == index.EMPTY_SHA:
-                    status = 'A'
-                else:
-                    status = 'M'
+                continue
+            if opt.smaller and ent.size >= opt.smaller:
+                if exists and not already_saved_oid:
+                    if opt.verbose:
+                        log('skipping large file "%s"\n' % path_msg(ent.name))
+                    lastskip_name = ent.name
+                continue
+
+            assert(dir.startswith(b'/'))
+            if opt.strip:
+                dirp = stripped_path_components(dir, opt.sources)
+            elif opt.strip_path:
+                dirp = stripped_path_components(dir, [opt.strip_path])
+            elif opt.grafts:
+                dirp = grafted_path_components(opt.grafts, dir)
             else:
-                status = ' '
-            if opt.verbose >= 2:
-                log('%s %-70s\n' % (status, path_msg(ent.name)))
-            elif not stat.S_ISDIR(ent.mode) and lastdir != dir:
-                if not lastdir.startswith(dir):
-                    log('%s %-70s\n' % (status, path_msg(os.path.join(dir, b''))))
-                lastdir = dir
+                dirp = path_components(dir)
 
-        if opt.progress:
-            progress_report(None, 0)
-        fcount += 1
+            # At this point, dirp contains a representation of the archive
+            # path that looks like [(archive_dir_name, real_fs_path), ...].
+            # So given "bup save ... --strip /foo/bar /foo/bar/baz", dirp
+            # might look like this at some point:
+            #   [('', '/foo/bar'), ('baz', '/foo/bar/baz'), ...].
 
-        if not exists:
-            continue
-        if opt.smaller and ent.size >= opt.smaller:
-            if exists and not already_saved_oid:
-                if opt.verbose:
-                    log('skipping large file "%s"\n' % path_msg(ent.name))
-                lastskip_name = ent.name
-            continue
+            # This dual representation supports stripping/grafting, where the
+            # archive path may not have a direct correspondence with the
+            # filesystem.  The root directory is represented by an initial
+            # component named '', and any component that doesn't have a
+            # corresponding filesystem directory (due to grafting, for
+            # example) will have a real_fs_path of None, i.e. [('', None),
+            # ...].
 
-        assert(dir.startswith(b'/'))
-        if opt.strip:
-            dirp = stripped_path_components(dir, opt.sources)
-        elif opt.strip_path:
-            dirp = stripped_path_components(dir, [opt.strip_path])
-        elif opt.grafts:
-            dirp = grafted_path_components(opt.grafts, dir)
-        else:
-            dirp = path_components(dir)
+            if first_root is None:
+                first_root = dirp[0]
+            elif first_root != dirp[0]:
+                root_collision = True
 
-        # At this point, dirp contains a representation of the archive
-        # path that looks like [(archive_dir_name, real_fs_path), ...].
-        # So given "bup save ... --strip /foo/bar /foo/bar/baz", dirp
-        # might look like this at some point:
-        #   [('', '/foo/bar'), ('baz', '/foo/bar/baz'), ...].
+            # If switching to a new sub-tree, finish the current sub-tree.
+            while stack.path() > [x[0] for x in dirp]:
+                _ = stack.pop()
 
-        # This dual representation supports stripping/grafting, where the
-        # archive path may not have a direct correspondence with the
-        # filesystem.  The root directory is represented by an initial
-        # component named '', and any component that doesn't have a
-        # corresponding filesystem directory (due to grafting, for
-        # example) will have a real_fs_path of None, i.e. [('', None),
-        # ...].
+            # If switching to a new sub-tree, start a new sub-tree.
+            for path_component in dirp[len(stack):]:
+                dir_name, fs_path = path_component
+                # Not indexed, so just grab the FS metadata or use empty metadata.
+                try:
+                    meta = metadata.from_path(fs_path, normalized=True) \
+                        if fs_path else empty_metadata
+                except (OSError, IOError) as e:
+                    add_error(e)
+                    lastskip_name = dir_name
+                    meta = empty_metadata
+                stack.push(dir_name, meta)
 
-        if first_root is None:
-            first_root = dirp[0]
-        elif first_root != dirp[0]:
-            root_collision = True
+            if not file:
+                if len(stack) == 1:
+                    continue # We're at the top level -- keep the current root dir
+                # Since there's no filename, this is a subdir -- finish it.
+                oldtree = already_saved_oid # may be False
+                newtree = stack.pop(override_tree=oldtree)
+                if not oldtree:
+                    if lastskip_name and lastskip_name.startswith(ent.name):
+                        ent.invalidate()
+                    else:
+                        ent.validate(GIT_MODE_TREE, newtree)
+                    ent.repack()
+                if exists and wasmissing:
+                    prog_count += oldsize
+                continue
 
-        # If switching to a new sub-tree, finish the current sub-tree.
-        while stack.path() > [x[0] for x in dirp]:
-            _ = stack.pop()
+            # it's not a directory
+            if already_saved_oid:
+                meta = msr.metadata_at(ent.meta_ofs).thaw()
+                meta.hardlink_target = find_hardlink_target(hlink_db, ent)
+                # Restore the times that were cleared to 0 in the metastore.
+                meta.atime, meta.mtime, meta.ctime = ent.atime, ent.mtime, ent.ctime
+                meta.freeze()
+                stack.append_to_current(file, ent.mode, ent.gitmode, ent.sha, meta)
+            else:
+                id = None
+                hlink = find_hardlink_target(hlink_db, ent)
+                try:
+                    meta = metadata.from_path(ent.name, hardlink_target=hlink,
+                                              normalized=True,
+                                              after_stat=after_nondir_metadata_stat)
+                except (OSError, IOError) as e:
+                    add_error(e)
+                    lastskip_name = ent.name
+                    continue
+                if stat.S_IFMT(ent.mode) != stat.S_IFMT(meta.mode):
+                    # The mode changed since we indexed the file, this is bad.
+                    # This can cause two issues:
+                    # 1) We e.g. think the file is a regular file, but now it's
+                    #    something else (a device, socket, FIFO or symlink, etc.)
+                    #    and _read_ from it when we shouldn't.
+                    # 2) We then record it as valid, but don't update the index
+                    #    metadata, and on a subsequent save it has 'already_saved_oid'
+                    #    but is recorded as the file type from the index, when
+                    #    the content is something else ...
+                    # Avoid all of these consistency issues by just skipping such
+                    # things - it really ought to not happen anyway.
+                    add_error("%s: mode changed since indexing, skipping." % path_msg(ent.name))
+                    lastskip_name = ent.name
+                    continue
+                if stat.S_ISREG(ent.mode):
+                    try:
+                        # If the file changes while we're reading it, then our reading
+                        # may stop at some point, but the stat() above may have gotten
+                        # a different size already. Recalculate the meta size so that
+                        # the repository records the accurate size in the metadata, even
+                        # if the other stat() data might be slightly older than the file
+                        # content (which we can't fix, this is inherently racy, but we
+                        # can prevent the size mismatch.)
+                        meta.thaw().size = 0
+                        def write_data(data):
+                            meta.size += len(data)
+                            return repo.write_data(data)
+                        before_saving_regular_file(ent.name)
 
-        # If switching to a new sub-tree, start a new sub-tree.
-        for path_component in dirp[len(stack):]:
-            dir_name, fs_path = path_component
-            # Not indexed, so just grab the FS metadata or use empty metadata.
-            try:
-                meta = metadata.from_path(fs_path, normalized=True) \
-                    if fs_path else empty_metadata
-            except (OSError, IOError) as e:
-                add_error(e)
-                lastskip_name = dir_name
-                meta = empty_metadata
-            stack.push(dir_name, meta)
-
-        if not file:
-            if len(stack) == 1:
-                continue # We're at the top level -- keep the current root dir
-            # Since there's no filename, this is a subdir -- finish it.
-            oldtree = already_saved_oid # may be False
-            newtree = stack.pop(override_tree=oldtree)
-            if not oldtree:
-                if lastskip_name and lastskip_name.startswith(ent.name):
-                    ent.invalidate()
+                        with open(open_noatime(ent.name, O_RDONLY | O_NOFOLLOW),
+                                  'rb', buffering=1024 * 1024) as f:
+                            mode, id = \
+                                split_to_blob_or_tree(write_data, repo.write_tree,
+                                                      hashsplit.from_config([f], split_cfg))
+                        meta.freeze()
+                    except (IOError, OSError) as e:
+                        add_error('%s: %s' % (ent.name, e))
+                        lastskip_name = ent.name
+                elif stat.S_ISDIR(ent.mode):
+                    assert(0)  # handled above
+                elif stat.S_ISLNK(ent.mode):
+                    mode, id = (GIT_MODE_SYMLINK, repo.write_symlink(meta.symlink_target))
                 else:
-                    ent.validate(GIT_MODE_TREE, newtree)
-                ent.repack()
+                    # Everything else should be fully described by its
+                    # metadata, so just record an empty blob, so the paths
+                    # in the tree and .bupm will match up.
+                    (mode, id) = (GIT_MODE_FILE, repo.write_data(b''))
+
+                if id:
+                    ent.validate(mode, id)
+                    ent.repack()
+                    stack.append_to_current(file, ent.mode, ent.gitmode, id, meta)
+
             if exists and wasmissing:
                 prog_count += oldsize
-            continue
+                prog_subcount = 0
 
-        # it's not a directory
-        if already_saved_oid:
-            meta = msr.metadata_at(ent.meta_ofs).thaw()
-            meta.hardlink_target = find_hardlink_target(hlink_db, ent)
-            # Restore the times that were cleared to 0 in the metastore.
-            meta.atime, meta.mtime, meta.ctime = ent.atime, ent.mtime, ent.ctime
-            meta.freeze()
-            stack.append_to_current(file, ent.mode, ent.gitmode, ent.sha, meta)
-        else:
-            id = None
-            hlink = find_hardlink_target(hlink_db, ent)
-            try:
-                meta = metadata.from_path(ent.name, hardlink_target=hlink,
-                                          normalized=True,
-                                          after_stat=after_nondir_metadata_stat)
-            except (OSError, IOError) as e:
-                add_error(e)
-                lastskip_name = ent.name
-                continue
-            if stat.S_IFMT(ent.mode) != stat.S_IFMT(meta.mode):
-                # The mode changed since we indexed the file, this is bad.
-                # This can cause two issues:
-                # 1) We e.g. think the file is a regular file, but now it's
-                #    something else (a device, socket, FIFO or symlink, etc.)
-                #    and _read_ from it when we shouldn't.
-                # 2) We then record it as valid, but don't update the index
-                #    metadata, and on a subsequent save it has 'already_saved_oid'
-                #    but is recorded as the file type from the index, when
-                #    the content is something else ...
-                # Avoid all of these consistency issues by just skipping such
-                # things - it really ought to not happen anyway.
-                add_error("%s: mode changed since indexing, skipping." % path_msg(ent.name))
-                lastskip_name = ent.name
-                continue
-            if stat.S_ISREG(ent.mode):
-                try:
-                    # If the file changes while we're reading it, then our reading
-                    # may stop at some point, but the stat() above may have gotten
-                    # a different size already. Recalculate the meta size so that
-                    # the repository records the accurate size in the metadata, even
-                    # if the other stat() data might be slightly older than the file
-                    # content (which we can't fix, this is inherently racy, but we
-                    # can prevent the size mismatch.)
-                    meta.thaw().size = 0
-                    def write_data(data):
-                        meta.size += len(data)
-                        return repo.write_data(data)
-                    before_saving_regular_file(ent.name)
-
-                    with open(open_noatime(ent.name, O_RDONLY | O_NOFOLLOW),
-                              'rb', buffering=1024 * 1024) as f:
-                        mode, id = \
-                            split_to_blob_or_tree(write_data, repo.write_tree,
-                                                  hashsplit.from_config([f], split_cfg))
-                    meta.freeze()
-                except (IOError, OSError) as e:
-                    add_error('%s: %s' % (ent.name, e))
-                    lastskip_name = ent.name
-            elif stat.S_ISDIR(ent.mode):
-                assert(0)  # handled above
-            elif stat.S_ISLNK(ent.mode):
-                mode, id = (GIT_MODE_SYMLINK, repo.write_symlink(meta.symlink_target))
-            else:
-                # Everything else should be fully described by its
-                # metadata, so just record an empty blob, so the paths
-                # in the tree and .bupm will match up.
-                (mode, id) = (GIT_MODE_FILE, repo.write_data(b''))
-
-            if id:
-                ent.validate(mode, id)
-                ent.repack()
-                stack.append_to_current(file, ent.mode, ent.gitmode, id, meta)
-
-        if exists and wasmissing:
-            prog_count += oldsize
-            prog_subcount = 0
-
-
-    if opt.progress:
-        pct = total and (prog_count * 100.0 / total) or 100
-        progress('Saving: %.2f%% (%d/%dk, %d/%d files), done.    \n'
-                 % (pct, prog_count / 1024, total / 1024, fcount, ftotal))
+        if opt.progress:
+            pct = total and (prog_count * 100.0 / total) or 100
+            pb.update(prog_count / 1024,
+                      'Saving: %.2f%% (%d/%dk, %d/%d files)'
+                      % (pct, prog_count / 1024, total / 1024, fcount, ftotal))
 
     # pop all parts above the root folder
     while len(stack) > 1:
