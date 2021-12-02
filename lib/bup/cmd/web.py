@@ -3,6 +3,7 @@ from __future__ import absolute_import, print_function
 from collections import namedtuple
 import mimetypes, os, posixpath, signal, stat, sys, time, webbrowser
 from binascii import hexlify
+import traceback
 
 
 from bup import options, vfs
@@ -270,6 +271,9 @@ class BupRequestHandler(tornado.web.RequestHandler):
             self.set_status(500)
             self.write("<h1>Server Error</h1>\n")
             self.write("%s: %s\n" % (e.__class__.__name__, str(e)))
+            self.write('<pre>')
+            self.write(traceback.format_exc())
+            self.write('</pre>')
         raise gen.Return()
 
     def _guess_type(self, path):
