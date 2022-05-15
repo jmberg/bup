@@ -351,6 +351,7 @@ opt = None
 
 def main(argv):
     signal.signal(signal.SIGTERM, handle_sigterm)
+    signal.signal(signal.SIGUSR1, lambda signum, frame: vfs.clear_cache())
 
     UnixAddress = namedtuple('UnixAddress', ['path'])
     InetAddress = namedtuple('InetAddress', ['host', 'port'])
