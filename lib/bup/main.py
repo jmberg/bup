@@ -288,7 +288,7 @@ def import_and_run_main(module, args):
 
 
 def run_module_cmd(module, args):
-    if not (fix_stdout or fix_stderr):
+    if hasattr(module, 'no_fixup') or not (fix_stdout or fix_stderr):
         import_and_run_main(module, args)
         return
     # Interpose filter_output between all attempts to write to the
