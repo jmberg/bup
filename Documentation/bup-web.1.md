@@ -29,6 +29,10 @@ filesystem socket at `path` rather than a network socket.
 A `SIGTERM` signal may be sent to the server to request an orderly
 shutdown.
 
+A `SIGUSR1` signal may be sent to the server to discard caches so
+that changes made in the repo become visible without restarting
+the server.
+
 # OPTIONS
 
 -r, \--remote=[*user*@]*host*:[*path*], \--remote=URL
