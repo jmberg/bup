@@ -1,6 +1,6 @@
 
 from __future__ import absolute_import, print_function
-import errno, os, sys
+import errno, os, sys, signal
 
 try:
     import fuse
@@ -140,6 +140,8 @@ v,verbose     increase log output (can be used more than once)
 no_fixup = True
 
 def main(argv):
+    signal.signal(signal.SIGUSR1, lambda signum, frame: vfs.clear_cache())
+
     o = options.Options(optspec)
     opt, flags, extra = o.parse_bytes(argv[1:])
     if not opt.verbose:
