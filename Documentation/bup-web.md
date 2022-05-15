@@ -29,6 +29,9 @@ filesystem socket at `path` rather than a network socket.
 A `SIGTERM` signal may be sent to the server to request an orderly
 shutdown.
 
+Sending a USR1 signal to the server will make it drop caches and
+thus reload the repository, to e.g. make it pick up new saves.
+
 # OPTIONS
 
 -r, \--remote=*host*:[*path*]
