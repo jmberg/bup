@@ -25,6 +25,9 @@ by all users.
 When you're done accessing the mounted fuse filesystem, you
 should unmount it with `umount`(8).
 
+Sending a USR1 signal to the process will make it drop caches and
+thus reload the repository, to e.g. make it pick up new saves.
+
 # OPTIONS
 
 -d, \--debug
