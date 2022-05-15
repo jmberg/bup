@@ -137,6 +137,8 @@ meta          report original metadata for paths when available
 v,verbose     increase log output (can be used more than once)
 """
 
+no_fixup = True
+
 def main(argv):
     o = options.Options(optspec)
     opt, flags, extra = o.parse_bytes(argv[1:])
