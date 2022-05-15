@@ -25,6 +25,10 @@ by all users.
 When you're done accessing the mounted fuse filesystem, you
 should unmount it with `umount`(8).
 
+A `SIGUSR1` signal may be sent to the fuse process to discard
+caches so that changes made in the repo become visible in the
+mounted filesystem without remounting it.
+
 # OPTIONS
 
 -r, \--remote=[*user*@]*host*:[*path*], \--remote=URL
