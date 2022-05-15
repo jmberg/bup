@@ -353,6 +353,7 @@ debug             start tornado in debug mode (tracebacks, autoreload, no caches
 
 async def async_main(argv):
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, handle_sigterm)
+    asyncio.get_running_loop().add_signal_handler(signal.SIGUSR1, vfs.clear_cache)
 
     UnixAddress = namedtuple('UnixAddress', ['path'])
     InetAddress = namedtuple('InetAddress', ['host', 'port'])
