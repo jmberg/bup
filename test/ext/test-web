@@ -90,6 +90,26 @@ WVPASSEQ '¡excitement!' "$(cat result-remote)"
 WVPASS kill -s TERM "$web_pid"
 WVPASS wait "$web_pid"
 
+WVSTART 'web SIGUSR1 reload'
+WVPASS rm -f socket
+WVPASS mkdir reload-src
+WVPASS echo before > reload-src/data
+WVPASS bup index reload-src
+WVPASS bup save -n reload --strip reload-src
+"$top/bup" web unix://socket </dev/null >bup-web-reload.log 2>&1 &
+web_pid=$!
+trap 'cat bup-web-reload.log' EXIT
+wait-for-server-start
+WVPASSEQ before "$(curl -s --unix-socket ./socket http://localhost/reload/latest/data)"
+
+WVPASS echo after > reload-src/data
+WVPASS bup index reload-src
+WVPASS bup save -n reload --strip reload-src
+WVPASS kill -s USR1 "$web_pid"
+WVPASSEQ after "$(curl -s --unix-socket ./socket http://localhost/reload/latest/data)"
+WVPASS kill -s TERM "$web_pid"
+WVPASS wait "$web_pid"
+
 trap - EXIT
 WVPASS cd "$top"
 WVPASS rm -r "$tmpdir"
