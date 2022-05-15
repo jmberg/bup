@@ -73,7 +73,7 @@ WVPASS bup save -n src -d "$savestamp1" --strip src
 WVSTART "basics"
 WVPASS mkdir mnt
 
-bup fuse -f mnt &
+"$top/bup" fuse -f mnt &
 fuse_pid=$!
 while ! test -d mnt/src; do
     sleep 0.1
@@ -93,10 +93,17 @@ pre-epoch"
 result=$(WVPASS cat mnt/src/latest/foo) || exit $?
 WVPASSEQ "$result" "content"
 
-# Right now we don't detect new saves.
+# Without a signal we don't detect new saves.
 WVPASS bup save -n src -d "$savestamp2" --strip src
 result=$(WVPASS ls mnt/src) || exit $?
 WVPASSEQ "$result" "$savename1
+latest"
+
+WVSTART "USR1 reload"
+WVPASS kill -s USR1 "$fuse_pid"
+result=$(WVPASS ls mnt/src) || exit $?
+WVPASSEQ "$result" "$savename1
+$savename2
 latest"
 
 WVPASS fusermount -uz mnt
