@@ -105,7 +105,7 @@ Test status
 
 | master |
 |--------|
-| [![master branch test status](https://api.cirrus-ci.com/github/bup/bup.svg?branch=master)](https://cirrus-ci.com/github/bup/bup) |
+| [![master branch test status](https://api.cirrus-ci.com/github/jmberg/bup.svg?branch=master)](https://cirrus-ci.com/github/jmberg/bup) |
 
 Getting started
 ===============
