@@ -113,7 +113,7 @@ Test status
 
 | main |
 |--------|
-| [![main branch test status](https://api.cirrus-ci.com/github/bup/bup.svg?branch=main)](https://cirrus-ci.com/github/bup/bup) |
+| [![main branch test status](https://api.cirrus-ci.com/github/jmberg/bup.svg?branch=main)](https://cirrus-ci.com/github/jmberg/bup) |
 
 Getting started
 ===============
