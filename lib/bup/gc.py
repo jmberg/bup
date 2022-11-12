@@ -7,7 +7,7 @@ import glob, os, re, subprocess, sys, tempfile
 
 from bup import bloom, git, midx
 from bup.compat import hexstr, pending_raise
-from bup.git import MissingObject, walk_object
+from bup.git import MissingObject
 from bup.helpers import \
     EXIT_FAILURE, log, note_error, progress, qprogress, reprogress
 from bup.io import path_msg
@@ -138,9 +138,9 @@ def find_live_objects(repo, existing_count, idx_list, refs=None,
         approx_live_count = 0
         missing = 0
         for ref_name, ref_id in refs if refs else repo.refs():
-            for item in walk_object(repo.cat, hexlify(ref_id),
-                                    stop_at=stop_at, include_data=None,
-                                    oid_exists=oid_exists):
+            for item in repo.walk_object(hexlify(ref_id),
+                                         stop_at=stop_at, include_data=None,
+                                         oid_exists=oid_exists):
                 if item.data is False:
                     if count_missing:
                         report_missing(ref_name, item, verbosity)
