@@ -1528,7 +1528,7 @@ class WalkItem:
         self.chunk_path = chunk_path
         self.data = data
 
-def walk_object(get_ref, oidx, *, stop_at=None, include_data=None,
+def walk_object(repo, oidx, *, stop_at=None, include_data=None,
                 oid_exists=None):
     """Yield everything reachable from oidx via get_ref (which must
     behave like CatPipe get) as a WalkItem, stopping whenever
@@ -1564,7 +1564,7 @@ def walk_object(get_ref, oidx, *, stop_at=None, include_data=None,
                            data=bool(oid_exists(oid)) if oid_exists else None)
             continue
 
-        item_it = get_ref(oidx)
+        item_it = repo.cat(oidx)
         get_oidx, typ, _ = next(item_it)
         if not get_oidx:
             yield WalkItem(oid=unhexlify(oidx), type=exp_typ,
