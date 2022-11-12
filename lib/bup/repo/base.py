@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import random
 from binascii import hexlify, unhexlify
 
-from bup import vfs
+from bup import vfs, git
 from bup.compat import pending_raise, bytes_from_byte
 from bup.helpers import debug2
 
@@ -266,3 +266,6 @@ class BaseRepo(object):
         where the git packs are stored.
         """
         raise Exception("Direct pack file access is not supported on this repository.")
+
+    def walk_object(self, oidx, stop_at=None, include_data=None):
+        return git.walk_object(self, oidx, stop_at, include_data)

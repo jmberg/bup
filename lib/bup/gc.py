@@ -6,7 +6,7 @@ import glob, os, subprocess, sys, tempfile
 
 from bup import bloom, git, midx
 from bup.compat import hexstr, pending_raise
-from bup.git import MissingObject, walk_object
+from bup.git import MissingObject
 from bup.helpers import Nonlocal, log, progress, qprogress
 from bup.io import path_msg
 
@@ -112,8 +112,8 @@ def find_live_objects(repo, existing_count, verbosity=0):
         stop_at = lambda x: unhexlify(x) in trees_visited
     approx_live_count = 0
     for ref_name, ref_id in repo.refs():
-        for item in walk_object(repo.cat, hexlify(ref_id), stop_at=stop_at,
-                                include_data=None):
+        for item in repo.walk_object(hexlify(ref_id), stop_at=stop_at,
+                                     include_data=None):
             # FIXME: batch ids
             if verbosity:
                 report_live_item(approx_live_count, existing_count,

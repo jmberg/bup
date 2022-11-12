@@ -12,7 +12,7 @@ from bup.compat import (
     environ,
     hexstr
 )
-from bup.git import get_cat_data, parse_commit, walk_object
+from bup.git import get_cat_data, parse_commit
 from bup.helpers import add_error, debug1, log, saved_errors
 from bup.helpers import hostname, tty_width
 from bup.io import path_msg
@@ -182,8 +182,8 @@ def parse_args(args):
 def get_random_item(name, hash, repo, dest_repo, opt):
     def already_seen(oid):
         return dest_repo.exists(unhexlify(oid))
-    for item in walk_object(repo.cat, hash, stop_at=already_seen,
-                            include_data=True):
+    for item in repo.walk_object(hash, stop_at=already_seen,
+                                 include_data=True):
         # already_seen ensures that dest_repo.exists(id) is false.
         # Otherwise, just_write() would fail.
         metadata = False

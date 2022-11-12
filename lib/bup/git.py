@@ -1439,13 +1439,11 @@ WalkItem = namedtuple('WalkItem', ['oid', 'type', 'mode',
 #   ...
 
 
-def walk_object(get_ref, oidx, stop_at=None, include_data=None):
-    """Yield everything reachable from oidx via get_ref (which must behave
-    like CatPipe get) as a WalkItem, stopping whenever stop_at(oidx)
-    returns true.  Throw MissingObject if a hash encountered is
-    missing from the repository, and don't read or return blob content
-    in the data field unless include_data is set.
-
+def walk_object(repo, oidx, stop_at=None, include_data=None):
+    """Yield everything reachable from oidx via repo.cat as a WalkItem,
+    stopping whenever stop_at(oidx) returns true.  Throw MissingObject
+    if a hash encountered is missing from the repository, and don't read
+    or return blob content in the data field unless include_data is set.
     """
     # Maintain the pending stack on the heap to avoid stack overflow
     pending = [(oidx, [], [], None)]
@@ -1465,7 +1463,7 @@ def walk_object(get_ref, oidx, stop_at=None, include_data=None):
                            data=None)
             continue
 
-        item_it = get_ref(oidx)
+        item_it = repo.cat(oidx)
         get_oidx, typ, _ = next(item_it)
         if not get_oidx:
             raise MissingObject(unhexlify(oidx))
