@@ -11,7 +11,7 @@ from bup.compat import (
     environ,
     hexstr
 )
-from bup.git import MissingObject, get_cat_data, parse_commit, walk_object
+from bup.git import MissingObject, get_cat_data, parse_commit
 from bup.helpers import debug1, log, note_error, saved_errors
 from bup.helpers import hostname, tty_width
 from bup.io import path_msg
@@ -191,8 +191,8 @@ def parse_args(args):
 def get_random_item(name, hash, src_repo, dest_repo, opt):
     def already_seen(oid):
         return dest_repo.exists(unhexlify(oid))
-    for item in walk_object(src_repo.cat, hash, stop_at=already_seen,
-                            include_data=True):
+    for item in src_repo.walk_object(hash, stop_at=already_seen,
+                                     include_data=True):
         if item.data is False:
             if not opt.ignore_missing:
                 raise MissingObject(item.oid)
