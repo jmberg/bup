@@ -145,3 +145,7 @@ class LocalRepo(BaseRepo):
 
     def packdir(self):
         return git.repo(b'objects/pack', repo_dir=self.repo_dir)
+
+    # Hack for 'bup gc' until we move more of that into repo
+    def restart_cp(self):
+        self._cp.restart()
