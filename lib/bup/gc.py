@@ -120,7 +120,7 @@ def report_live_item(n, total, ref_name, ref_id, item, verbosity):
         log('%s %s:%s%s\n' % (status, path_msg(ref_name), path_msg(ps), path_msg(dirslash)))
 
 
-def find_live_objects(repo, existing_count, cat_pipe, idx_list, refs=None,
+def find_live_objects(repo, existing_count, idx_list, refs=None,
                       verbosity=0, count_missing=False):
     pack_dir = repo.packdir()
     ffd, bloom_filename = tempfile.mkstemp(b'.bloom', b'tmp-gc-', pack_dir)
@@ -138,7 +138,7 @@ def find_live_objects(repo, existing_count, cat_pipe, idx_list, refs=None,
         approx_live_count = 0
         missing = 0
         for ref_name, ref_id in refs if refs else repo.refs():
-            for item in walk_object(cat_pipe.get, hexlify(ref_id),
+            for item in walk_object(repo.cat, hexlify(ref_id),
                                     stop_at=stop_at, include_data=None,
                                     oid_exists=oid_exists):
                 if item.data is False:
@@ -167,7 +167,7 @@ def find_live_objects(repo, existing_count, cat_pipe, idx_list, refs=None,
 
 _pack_stem_rx = re.compile(br'pack-[0-9a-fA-F]{40}')
 
-def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
+def sweep(repo, live_objects, live_trees, existing_count, threshold,
           compression, verbosity):
     """Traverse all the packs, saving the (probably) live data."""
 
@@ -189,7 +189,7 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
                 os.unlink(p)
         if verbosity: reprogress()
         if stale_packs:  # So git cat-pipe will close them
-            cat_pipe.restart()
+            repo.restart_cp()
         stale_packs = []
 
     writer = git.PackWriter(objcache_maker=lambda : None,
@@ -208,7 +208,7 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
                 must_rewrite = False
                 live_in_this_pack = set()
                 for sha in idx:
-                    tmp_it = cat_pipe.get(hexlify(sha), include_data=False)
+                    tmp_it = repo.cat(hexlify(sha), include_data=False)
                     _, typ, _ = next(tmp_it)
                     if typ != b'blob':
                         is_live = sha in live_trees
@@ -244,7 +244,7 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
                     reprogress()
                 for sha in idx:
                     if sha in live_in_this_pack:
-                        item_it = cat_pipe.get(hexlify(sha))
+                        item_it = repo.cat(hexlify(sha))
                         _, typ, _ = next(item_it)
                         writer.just_write(sha, typ, b''.join(item_it))
                 assert idx_name.endswith(b'.idx')
@@ -275,11 +275,7 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
 
 
 def bup_gc(repo, threshold=10, compression=1, verbosity=0, ignore_missing=False):
-    # Yes - this is a hack. We should use repo.cat() instead of cat_pipe.get(),
-    # but the repo abstraction right now can't properly deal with the fact that
-    # we modify the repository underneath.
     repodir = os.path.join(repo.packdir(), b'..', b'..')
-    cat_pipe = git.cp(repodir)
     existing_count = count_objects(repo.packdir(), verbosity)
     if verbosity:
         log('found %d objects\n' % existing_count)
@@ -294,7 +290,7 @@ def bup_gc(repo, threshold=10, compression=1, verbosity=0, ignore_missing=False)
                 if ignore_missing:
                     idxl = git.PackIdxList(repo.packdir())
                     maybe_close_idxl.enter_context(idxl)
-                found = find_live_objects(repo, existing_count, cat_pipe, idxl,
+                found = find_live_objects(repo, existing_count, idxl,
                                           verbosity=verbosity,
                                           count_missing=ignore_missing)
             live_objects, live_trees = found[:2]
@@ -319,7 +315,7 @@ def bup_gc(repo, threshold=10, compression=1, verbosity=0, ignore_missing=False)
                 expirelog = subprocess.Popen(expirelog_cmd, env=git._gitenv(repo_dir=repodir))
                 git._git_wait(b' '.join(expirelog_cmd), expirelog)
                 if verbosity: log('removing unreachable data\n')
-                sweep(repo, live_objects, live_trees, existing_count, cat_pipe,
+                sweep(repo, live_objects, live_trees, existing_count,
                       threshold, compression,
                       verbosity)
             except BaseException as ex:
