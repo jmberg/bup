@@ -749,7 +749,7 @@ class PackIdxList:
         self.also.add(hash)
 
 
-def _open_idx(filename):
+def open_idx(filename):
     if filename.endswith(b'.idx'):
         f = open(filename, 'rb')
         header = f.read(8)
@@ -770,11 +770,6 @@ def _open_idx(filename):
     else:
         raise GitError('idx filenames must end with .idx or .midx')
 
-_openidx_cache = {}
-def open_idx(filename):
-    if not filename in _openidx_cache:
-        _openidx_cache[filename] = _open_idx(filename)
-    return _openidx_cache[filename]
 
 def idxmerge(idxlist, final_progress=True):
     """Generate a list of all the objects reachable in a PackIdxList."""
