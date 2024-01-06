@@ -88,9 +88,7 @@ class Client:
             # but crashes instead when doing b'%s' % None.
             cachehost = b'None' if self.host is None else self.host
             cachedir = b'None' if self.dir is None else self.dir
-            self.cachedir = path.cachedir(re.sub(br'[^@\w]',
-                                                 b'_',
-                                                 b'%s:%s' % (cachehost, cachedir)))
+            self.cachedir = path.cachedir(b'%s:%s' % (cachehost, cachedir))
             if self.protocol == b'bup-rev':
                 self.pout = os.fdopen(3, 'rb')
                 self.pin = os.fdopen(4, 'wb')

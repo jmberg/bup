@@ -1,6 +1,6 @@
 
 from __future__ import absolute_import
-import os, sys
+import os, sys, re
 
 from bup.compat import environ
 
@@ -36,4 +36,5 @@ def defaultrepo():
     return os.path.expanduser(b'~/.bup')
 
 def cachedir(forwhat):
+    forwhat = re.sub(br'[^@\w]', b'_', forwhat)
     return os.path.join(defaultrepo(), b'index-cache', forwhat)
