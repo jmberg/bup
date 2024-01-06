@@ -1,5 +1,5 @@
 
-import os
+import os, re
 
 from bup.compat import environ
 
@@ -38,4 +38,5 @@ def cachedir(forwhat):
     return os.path.join(defaultrepo(), forwhat)
 
 def indexcache(forwhat):
+    forwhat = re.sub(br'[^@\w]', b'_', forwhat)
     return os.path.join(cachedir(b'index-cache'), forwhat)
