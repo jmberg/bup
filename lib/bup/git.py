@@ -70,9 +70,10 @@ def _git_exo(cmd, **kwargs):
 
 def repo_cfg_file(repo_dir, cfg_file):
     assert not (repo_dir and cfg_file), "repo_dir and cfg_file cannot both be used"
+    assert repo_dir or cfg_file, "repo_dir or cfg_file must be used"
     if cfg_file:
         return cfg_file
-    return os.path.join(repo_dir or repo(), b'config')
+    return os.path.join(repo_dir, b'config')
 
 def git_config_get(option, repo_dir=None, opttype=None, cfg_file=None):
     cfg_file = repo_cfg_file(repo_dir, cfg_file)
@@ -135,7 +136,6 @@ def git_config_check(option, value, opttype):
             return False
 
 def git_config_write(option, value, repo_dir=None, cfg_file=None):
-    assert repo_dir or cfg_file, "repo_dir or cfg_file must be used"
     cfg_file = repo_cfg_file(repo_dir, cfg_file)
     cmd = [b'git', b'config']
     cmd.extend([b'--file', cfg_file])
@@ -153,7 +153,6 @@ def git_config_write(option, value, repo_dir=None, cfg_file=None):
         raise GitError('%r returned %d' % (cmd, rc))
 
 def git_config_list(values=False, repo_dir=None, cfg_file=None):
-    assert repo_dir or cfg_file, "repo_dir or cfg_file must be used"
     cfg_file = repo_cfg_file(repo_dir, cfg_file)
     cmd = [b'git', b'config']
     cmd.extend([b'--list', b'--null'])
