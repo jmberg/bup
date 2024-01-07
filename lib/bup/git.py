@@ -65,7 +65,7 @@ def _raise_git_cmd_error(cmd, status):
     raise GitError(f'nonzero exit {status} for "{qcmd}"')
 
 def repo_config_file(path):
-    return os.path.join(path or repo(), b'config')
+    return os.path.join(path, b'config')
 
 
 def parse_git_int(v):
