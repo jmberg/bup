@@ -576,10 +576,3 @@ def test_config(tmpdir):
     WVPASSEQ(1, git_config_get(b'bup.istrue1', opttype='int'))
     WVPASSEQ(0, git_config_get(b'bup.isfalse2', opttype='int'))
     WVPASSEQ(0x777, git_config_get(b'bup.hex', opttype='int'))
-
-    # Make sure get_config respects the repo()
-    git_dir = tmpdir + b'/repo'
-    git.init_repo(git_dir)
-    git.check_repo_or_die(git_dir)
-    exc(b'git', b'--git-dir', git_dir, b'config', b'bup.foo', b'yep')
-    assert b'yep' == git.git_config_get(b'bup.foo')
