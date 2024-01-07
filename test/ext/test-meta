@@ -127,7 +127,7 @@ setup-test-tree()
     WVPASS touch -t 201111111111 "$tmpdir"/src/foo
     WVPASS touch -t 201112121111 "$tmpdir"/src/foo-bar
 
-    dev/mksock "$tmpdir"/src/test-socket || true
+    dev/mksock "$tmpdir"/src/test-socket 2>/dev/null || true
 }
 
 # Use the test tree to check bup meta.
