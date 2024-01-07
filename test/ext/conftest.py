@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 from subprocess import CalledProcessError
-import pytest, subprocess, sys
+import pytest, subprocess, sys, warnings
 
 from bup.compat import fsdecode
 from bup.io import byte_stream
@@ -47,6 +47,8 @@ class BupSubprocTestRunner(pytest.Item):
             raise BupSubprocFailure('%s failed (exit %d, %d failures)'
                                     % (cmd, p.returncode, len(failures)),
                                     cmd, p.returncode, failures)
+        if b'Traceback' in out:
+            warnings.warn('Traceback detected in test output')
 
     def repr_failure(self, excinfo):
         ex = excinfo.value
