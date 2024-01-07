@@ -68,10 +68,11 @@ def _git_exo(cmd, **kwargs):
 
 def git_config_get(option, repo_dir=None, opttype=None, cfg_file=None):
     assert not (repo_dir and cfg_file), "repo_dir and cfg_file cannot both be used"
+    assert repo_dir or cfg_file, "repo_dir or cfg_file must be used"
     if cfg_file:
         cmd = [b'git', b'config', b'--file', cfg_file, b'--null']
     else:
-        cmd = [b'git', b'--git-dir', repo_dir or repo(), b'config', b'--null']
+        cmd = [b'git', b'--git-dir', repo_dir, b'config', b'--null']
     if opttype == 'int':
         cmd.extend([b'--int'])
     elif opttype == 'path':
