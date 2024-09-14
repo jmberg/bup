@@ -1355,34 +1355,27 @@ class CatPipe:
             with pending_raise(ex):
                 self.close()
 
-    def _join(self, it):
+    def join(self, id):
+        """Yield bytes instances containing the data in all the blobs
+        that can be reached in depth-first order via id.  The hash
+        given in id must point to a blob, a tree or a commit.
+
+        """
+        it = self.get(id)
         _, typ, _ = next(it)
         if typ == b'blob':
-            for blob in it:
-                yield blob
+            yield from it
         elif typ == b'tree':
             treefile = b''.join(it)
             for (mode, name, sha) in tree_decode(treefile):
-                for blob in self.join(hexlify(sha)):
-                    yield blob
+                yield from self.join(hexlify(sha))
         elif typ == b'commit':
             treeline = b''.join(it).split(b'\n')[0]
             assert treeline.startswith(b'tree ')
-            for blob in self.join(treeline[5:]):
-                yield blob
+            yield from self.join(treeline[5:])
         else:
             raise GitError('invalid object type %r: expected blob/tree/commit'
                            % typ)
-
-    def join(self, id):
-        """Generate a list of the content of all blobs that can be reached
-        from an object.  The hash given in 'id' must point to a blob, a tree
-        or a commit. The content of all blobs that can be seen from trees or
-        commits will be added to the list.
-        """
-        for d in self._join(self.get(id)):
-            yield d
-
 
 _cp = {}
 
