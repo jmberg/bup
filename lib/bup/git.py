@@ -1373,6 +1373,8 @@ class CatPipe:
             treeline = b''.join(it).split(b'\n')[0]
             assert treeline.startswith(b'tree ')
             yield from self.join(treeline[5:])
+        elif typ is None:
+            raise GitError(f'missing object: {id!r}')
         else:
             raise GitError('invalid object type %r: expected blob/tree/commit'
                            % typ)
