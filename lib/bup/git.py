@@ -1361,23 +1361,26 @@ class CatPipe:
         given in id must point to a blob, a tree or a commit.
 
         """
-        it = self.get(id)
-        _, typ, _ = next(it)
-        if typ == b'blob':
-            yield from it
-        elif typ == b'tree':
-            treefile = b''.join(it)
-            for (mode, name, sha) in tree_decode(treefile):
-                yield from self.join(hexlify(sha))
-        elif typ == b'commit':
-            treeline = b''.join(it).split(b'\n')[0]
-            assert treeline.startswith(b'tree ')
-            yield from self.join(treeline[5:])
-        elif typ is None:
-            raise GitError(f'missing object: {id!r}')
-        else:
-            raise GitError('invalid object type %r: expected blob/tree/commit'
-                           % typ)
+        def _join(id, path):
+            it = self.get(id)
+            _, typ, _ = next(it)
+            if typ == b'blob':
+                yield from it
+            elif typ == b'tree':
+                treefile = b''.join(it)
+                for mode, name, sha in tree_decode(treefile):
+                    yield from _join(hexlify(sha), path + [name])
+            elif typ == b'commit':
+                treeline = b''.join(it).split(b'\n')[0]
+                assert treeline.startswith(b'tree ')
+                yield from _join(treeline[5:], path + [f'commit:{id!r}'])
+            elif typ is None:
+                path += [repr(id)]
+                raise GitError(f'missing ref at {path!r}')
+            else:
+                raise GitError(f'ref {id!r} type {typ!r} is not blob/tree/commit')
+
+        yield from _join(id, [])
 
 _cp = {}
 
