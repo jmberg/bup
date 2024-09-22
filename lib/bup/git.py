@@ -1451,14 +1451,14 @@ def walk_object(get_ref, oidx, stop_at=None, include_data=None):
 
     """
     # Maintain the pending stack on the heap to avoid stack overflow
-    pending = [(oidx, [], [], None)]
+    pending = [(oidx, [], [], None, None)]
     while len(pending):
-        oidx, parent_path, chunk_path, mode = pending.pop()
+        oidx, parent_path, chunk_path, mode, exp_typ = pending.pop()
         oid = unhexlify(oidx)
         if stop_at and stop_at(oidx):
             continue
 
-        if (not include_data) and mode and stat.S_ISREG(mode):
+        if (not include_data) and mode and exp_typ == b'blob':
             # If the object is a "regular file", then it's a leaf in
             # the graph, so we can skip reading the data if the caller
             # hasn't requested it.
@@ -1474,6 +1474,8 @@ def walk_object(get_ref, oidx, stop_at=None, include_data=None):
             raise MissingObject(unhexlify(oidx))
         if typ not in (b'blob', b'commit', b'tree'):
             raise Exception('unexpected repository object type %r' % typ)
+        if exp_typ and typ != exp_typ:
+            raise Exception(f'{oidx.decode("ascii")} object type {typ} != {exp_typ}')
 
         # FIXME: set the mode based on the type when the mode is None
         if typ == b'blob' and not include_data:
@@ -1492,9 +1494,9 @@ def walk_object(get_ref, oidx, stop_at=None, include_data=None):
         if typ == b'commit':
             commit_items = parse_commit(data)
             for pid in commit_items.parents:
-                pending.append((pid, parent_path, chunk_path, mode))
+                pending.append((pid, parent_path, chunk_path, mode, b'commit'))
             pending.append((commit_items.tree, parent_path, chunk_path,
-                            hashsplit.GIT_MODE_TREE))
+                            hashsplit.GIT_MODE_TREE, b'tree'))
         elif typ == b'tree':
             for mode, name, ent_id in tree_decode(data):
                 demangled, bup_type = demangle_name(name, mode)
@@ -1508,4 +1510,5 @@ def walk_object(get_ref, oidx, stop_at=None, include_data=None):
                     else:
                         sub_chunk_path = chunk_path
                 pending.append((hexlify(ent_id), sub_path, sub_chunk_path,
-                                mode))
+                                mode,
+                                b'tree' if stat.S_ISDIR(mode) else b'blob'))
