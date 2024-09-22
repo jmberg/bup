@@ -1443,11 +1443,10 @@ class WalkItem:
         self.data = data
 
 def walk_object(get_ref, oidx, stop_at=None, include_data=None):
-    """Yield everything reachable from oidx via get_ref (which must behave
-    like CatPipe get) as a WalkItem, stopping whenever stop_at(oidx)
-    returns true.  Throw MissingObject if a hash encountered is
-    missing from the repository, and don't read or return blob content
-    in the data field unless include_data is set.
+    """Yield everything reachable from oidx via get_ref (which must
+    behave like CatPipe get) as a WalkItem, stopping whenever
+    stop_at(oidx) returns true.  Set the data field to None when
+    include_data is false, and to False when the object is missing.
 
     """
     # Maintain the pending stack on the heap to avoid stack overflow
@@ -1471,7 +1470,9 @@ def walk_object(get_ref, oidx, stop_at=None, include_data=None):
         item_it = get_ref(oidx)
         get_oidx, typ, _ = next(item_it)
         if not get_oidx:
-            raise MissingObject(unhexlify(oidx))
+            yield WalkItem(oid=unhexlify(oidx), type=exp_typ,
+                           chunk_path=chunk_path, path=parent_path,
+                           mode=mode, data=False)
         if typ not in (b'blob', b'commit', b'tree'):
             raise Exception('unexpected repository object type %r' % typ)
         if exp_typ and typ != exp_typ:
