@@ -22,6 +22,19 @@ bup.split-trees
     "Handling large directories" in the DESIGN in the `bup` source for
     additional information.
 
+    *NOTE:*
+    It has some performance impact to use the same index for saving to
+    different repositories with different values of this setting. The
+    index stores object hashes, including for directories, whenever it
+    is used for saving. This is used to not read a directory again if
+    the index otherwise indicates that it didn't change and the object
+    already exists in the destination repository. Since the hash isn't
+    the same with and without this setting, the object won't exist in
+    a repository with a different value. As a result, any (usually big)
+    directory using tree splitting will be re-read and its object(s)
+    recalculated whenever the previous save was to a repository with a
+    different value of this setting.
+
 pack.packSizeLimit
 :   Respected when writing pack files (e.g. via `bup save ...`).
     Currently read from the repository to which the pack files are
