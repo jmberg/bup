@@ -53,26 +53,26 @@
                     {% end %}
                     <th class="dir-name">Name</th>
                 </tr>
-                {% for (name, link, size, meta, oidx) in dir_contents %}
+                {% for item in dir_contents %}
                 <tr>
                     {% if params.get('hash') %}
-                        <td class="dir-hash">{{ oidx if oidx else '' }}</td>
+                        <td class="dir-hash">{{ item.oid if item.oid else '' }}</td>
                     {% end %}
-                    {% if params.get('meta') and meta is not None%}
-                        <td class="dir-meta-mode">{{ mode_str(meta.mode) }}</td>
-                        <td class="dir-meta-owner">{{ '' if meta.user is None else meta.user }}</td>
-                        <td class="dir-meta-uid">{{ '' if meta.uid is None else meta.uid }}</td>
-                        <td class="dir-meta-group">{{ '' if meta.group is None else meta.group }}</td>
-                        <td class="dir-meta-gid">{{ '' if meta.gid is None else meta.gid }}</td>
+                    {% if params.get('meta') and item.meta is not None %}
+                        <td class="dir-meta-mode">{{ mode_str(item.meta.mode) }}</td>
+                        <td class="dir-meta-owner">{{ '' if item.meta.user is None else item.meta.user }}</td>
+                        <td class="dir-meta-uid">{{ '' if item.meta.uid is None else item.meta.uid }}</td>
+                        <td class="dir-meta-group">{{ '' if item.meta.group is None else item.meta.group }}</td>
+                        <td class="dir-meta-gid">{{ '' if item.meta.gid is None else item.meta.gid }}</td>
                     {% end %}
-                    <td class="dir-size">{{ '' if size is None else size }}</td>
-                    {% if params.get('meta') and meta %}
-                      <td class="dir-meta-mtime"> {{ local_time_str(meta.mtime) or '' }}</td>
+                    <td class="dir-size">{{ '' if item.size is None else item.size }}</td>
+                    {% if params.get('meta') and item.meta %}
+                      <td class="dir-meta-mtime"> {{ local_time_str(item.meta.mtime) or '' }}</td>
                     {% end %}
                     <td class="dir-name">
-                      <a href="{% raw link %}">{{ name }}</a>
-                      {% if params.get('meta') and meta and meta.symlink_target %}
-                        → {{ meta.symlink_target }}
+                      <a href="{% raw item.link %}">{{ name }}</a>
+                      {% if params.get('meta') and item.meta and item.meta.symlink_target %}
+                        → {{ item.meta.symlink_target }}
                       {% end %}
                     </td>
                 </tr>
