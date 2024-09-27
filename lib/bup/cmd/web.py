@@ -126,12 +126,9 @@ def _contains_hidden_files(repo, dir_item):
             return True
     return False
 
-
-def _dir_contents(repo, resolution, params, param_info):
-    """Yield the display information for the contents of dir_item."""
-
-    def item_info(name, item, resolved_item, display_name=None,
-                  include_size=False):
+class DisplayInfo:
+   def __init__(self, repo, params, param_info, name, item, resolved_item,
+                display_name=None, include_size=False):
         link = parse.quote(name)
         # link should be based on fully resolved type to avoid extra
         # HTTP redirect.
@@ -164,7 +161,15 @@ def _dir_contents(repo, resolution, params, param_info):
             meta = None
         oidx = getattr(resolved_item, 'oid', None)
         if oidx: oidx = hexlify(oidx)
-        return path_msg(display_name), link + query, display_size, meta, oidx
+
+        self.display = display_name
+        self.link = link + query
+        self.size = display_size
+        self.meta = meta
+        self.oid = oidx
+
+def _dir_contents(repo, resolution, params, param_info):
+    """Yield the display information for the contents of dir_item."""
 
     dir_item = resolution[-1][1]
     for name, item in vfs.contents(repo, dir_item):
@@ -173,11 +178,13 @@ def _dir_contents(repo, resolution, params, param_info):
                 continue
         if name == b'.':
             parent_item = resolution[-2][1] if len(resolution) > 1 else dir_item
-            yield item_info(b'..', parent_item, parent_item, b'..')
+            yield DisplayInfo(repo, params, param_info, b'..',
+                              parent_item, parent_item, b'..')
             continue
         mp = params.get('meta')
         res_item = vfs.ensure_item_has_metadata(repo, item, include_size=mp)
-        yield item_info(name, item, res_item, include_size=mp)
+        yield DisplayInfo(repo, params, param_info, name,
+                          item, res_item, include_size=mp)
 
 
 class BupRequestHandler(tornado.web.RequestHandler):
