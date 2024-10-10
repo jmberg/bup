@@ -1,13 +1,14 @@
 
-from __future__ import absolute_import, print_function
 from binascii import hexlify
 import glob, os, math, resource, struct, sys
 
 from bup import options, git, midx, _helpers, xstat
 from bup.compat import ExitStack, argv_bytes, hexstr
-from bup.helpers import (Sha1, add_error, atomically_replaced_file, debug1, fdatasync,
-                         log, mmap_readwrite, qprogress,
-                         saved_errors, unlink)
+from bup.helpers \
+    import (EXIT_FAILURE,
+            Sha1, add_error, atomically_replaced_file, debug1, fdatasync,
+            log, mmap_readwrite, qprogress,
+            saved_errors, unlink)
 from bup.io import byte_stream, path_msg
 
 
@@ -88,6 +89,7 @@ def _do_midx(outdir, outfilename, infilenames, prefixstr,
     if not outfilename:
         assert(outdir)
         sum = hexlify(Sha1(b'\0'.join(infilenames)).digest())
+        # REVIEW: see allfilenames basename below
         outfilename = b'%s/midx-%s.midx' % (outdir, sum)
 
     inp = []
@@ -95,18 +97,33 @@ def _do_midx(outdir, outfilename, infilenames, prefixstr,
     allfilenames = []
     with ExitStack() as contexts:
         for name in infilenames:
-            ix = git.open_idx(name)
+            ix = git.open_idx(name, warn_missing_idx=False)
             contexts.enter_context(ix)
-            inp.append((
-                ix.map,
-                len(ix),
-                ix.sha_ofs,
-                isinstance(ix, midx.PackMidx) and ix.which_ofs or 0,
-                len(allfilenames),
-            ))
-            for n in ix.idxnames:
-                allfilenames.append(os.path.basename(n))
-            total += len(ix)
+            if isinstance(ix, midx.PackMidx) and ix.missing_idxs:
+                mmsg = path_msg(ix.name)
+                if auto or force:
+                    for missing in ix.missing_idxs:
+                        imsg = path_msg(missing)
+                        log(f'midx {mmsg} refers to mssing idx {imsg}\n')
+                    log(f'Removing incomplete midx {mmsg} (perhaps via gc)\n')
+                    unlink(ix.name)
+                    ix = None
+                else:
+                    for missing in ix.missing_idxs:
+                        imsg = path_msg(missing)
+                        add_error(f'error: midx {mmsg} idx {imsg} is missing\n')
+                    sys.exit(EXIT_FAILURE)
+            else:
+                inp.append((
+                    ix.map,
+                    len(ix),
+                    ix.sha_ofs,
+                    isinstance(ix, midx.PackMidx) and ix.which_ofs or 0,
+                    len(allfilenames),
+                ))
+                for n in ix.idxnames:
+                    allfilenames.append(os.path.basename(n))
+                total += len(ix)
         inp.sort(reverse=True, key=lambda x: x[0][x[2] : x[2] + 20])
 
         if not _first: _first = outdir
@@ -265,6 +282,7 @@ def main(argv):
             debug1('midx: scanning %s\n' % path)
             midxes = glob.glob(os.path.join(path, b'*.midx'))
         for name in midxes:
+            # FIXME: handle missing idx via add_error?
             check_midx(name)
         if not saved_errors:
             log('All tests passed.\n')
