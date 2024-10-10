@@ -21,7 +21,7 @@ class PackMidx:
     and make it possible for bup to expand Git's indexing capabilities to vast
     amounts of files.
     """
-    def __init__(self, filename):
+    def __init__(self, filename, *, warn_missing=True):
         self.closed = False
         self.name = filename
         self.force_keep = False
@@ -63,9 +63,10 @@ class PackMidx:
         idxdir = os.path.dirname(filename) + b'/'
         for name in self.idxnames:
             if not os.path.exists(idxdir + name):
-                mmsg = path_msg(filename)
-                imsg = path_msg(name)
-                log(f'Warning: ignoring midx {mmsg} (missing idx {imsg})\n')
+                if warn_missing:
+                    mmsg = path_msg(filename)
+                    imsg = path_msg(name)
+                    log(f'Warning: ignoring midx {mmsg} (missing idx {imsg})\n')
                 self.force_keep = False
                 self.missing_idxs.append(name)
         if self.missing_idxs:

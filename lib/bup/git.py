@@ -710,7 +710,7 @@ class PackIdxList:
         self.also.add(hash)
 
 
-def open_idx(filename):
+def open_idx(filename, *, warn_missing_idx=True):
     if filename.endswith(b'.idx'):
         f = open(filename, 'rb')
         header = f.read(8)
@@ -727,7 +727,7 @@ def open_idx(filename):
             raise GitError('%s: unrecognized idx file header'
                            % path_msg(filename))
     elif filename.endswith(b'.midx'):
-        return midx.PackMidx(filename)
+        return midx.PackMidx(filename, warn_missing=warn_missing_idx)
     else:
         raise GitError('idx filenames must end with .idx or .midx')
 
