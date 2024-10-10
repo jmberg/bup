@@ -25,6 +25,7 @@ class PackMidx:
         self.closed = False
         self.name = filename
         self.force_keep = False
+        self.missing_idxs = []
         self.map = None
         assert(filename.endswith(b'.midx'))
         self.map = mmap_read(open(filename))
@@ -58,6 +59,17 @@ class PackMidx:
         self.which_ofs = self.sha_ofs + 20 * self.nsha
         # which len is self.nsha * 4
         self.idxnames = self.map[self.which_ofs + 4 * self.nsha:].split(b'\0')
+        # REVIEW: idx paths always relative to midx path?
+        idxdir = os.path.dirname(filename) + b'/'
+        for name in self.idxnames:
+            if not os.path.exists(idxdir + name):
+                mmsg = path_msg(filename)
+                imsg = path_msg(name)
+                log(f'Warning: ignoring midx {mmsg} (missing idx {imsg})\n')
+                self.force_keep = False
+                self.missing_idxs.append(name)
+        if self.missing_idxs:
+            self._init_failed()
 
     def __enter__(self):
         return self
@@ -70,6 +82,7 @@ class PackMidx:
         self.bits = 0
         self.entries = 1
         self.idxnames = []
+        self.fanout_ofs = self.sha_ofs = self.nsha = self.which_ofs = None
 
     def _fanget(self, i):
         if i >= self.entries * 4 or i < 0:
