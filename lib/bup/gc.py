@@ -96,7 +96,7 @@ def report_live_item(n, total, ref_name, ref_id, item, verbosity):
         log('%s %s:%s%s\n' % (status, hex_id, path_msg(ps), path_msg(dirslash)))
 
 
-def find_live_objects(existing_count, cat_pipe, verbosity=0):
+def find_live_objects(existing_count, cat_pipe, idx_list, verbosity=0):
     pack_dir = git.repo(b'objects/pack')
     ffd, bloom_filename = tempfile.mkstemp(b'.bloom', b'tmp-gc-', pack_dir)
     os.close(ffd)
@@ -107,9 +107,11 @@ def find_live_objects(existing_count, cat_pipe, verbosity=0):
     os.unlink(bloom_filename)
     live_trees = set()
     stop_at = lambda x: unhexlify(x) in live_trees
+    oid_exists = lambda oid: idx_list.exists(oid)
     approx_live_count = 0
     for ref_name, ref_id in git.list_refs():
-        for item in walk_object(cat_pipe.get, hexlify(ref_id), stop_at=stop_at,
+        for item in walk_object(cat_pipe.get, oid_exists,
+                                hexlify(ref_id), stop_at=stop_at,
                                 include_data=None):
             if item.data is False:
                 raise MissingObject(item.oid)
@@ -240,8 +242,10 @@ def bup_gc(threshold=10, compression=1, verbosity=0):
             log('nothing to collect\n')
     else:
         try:
-            live_objects, live_trees = find_live_objects(existing_count, cat_pipe,
-                                                         verbosity=verbosity)
+            with git.PackIdxList(git.repo(b'objects/pack')) as idxl:
+                live_objects, live_trees = find_live_objects(existing_count,
+                                                             cat_pipe, idxl,
+                                                             verbosity=verbosity)
         except MissingObject as ex:
             log('bup: missing object %r \n' % hexstr(ex.oid))
             sys.exit(1)

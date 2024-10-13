@@ -1494,13 +1494,14 @@ class WalkItem:
         self.chunk_path = chunk_path
         self.data = data
 
-def walk_object(get_ref, oidx, stop_at=None, include_data=None):
+def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
     """Yield everything reachable from oidx via get_ref (which must
     behave like CatPipe get) as a WalkItem, stopping whenever
     stop_at(oidx) returns true.  Set the data field to None when
     include_data is false, and to False when the object is missing.
 
     """
+    # REVIEW: we could allow oid_exists to be None when include_data is true.
     # Maintain the pending stack on the heap to avoid stack overflow
     pending = [(oidx, [], [], None, None)]
     while len(pending):
@@ -1516,7 +1517,7 @@ def walk_object(get_ref, oidx, stop_at=None, include_data=None):
             yield WalkItem(oid=oid, type=b'blob',
                            chunk_path=chunk_path, path=parent_path,
                            mode=mode,
-                           data=None)
+                           data=True if oid_exists(oid) else False)
             continue
 
         item_it = get_ref(oidx)

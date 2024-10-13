@@ -182,7 +182,13 @@ def parse_args(args):
 def get_random_item(name, hash, repo, writer, opt):
     def already_seen(oid):
         return writer.exists(unhexlify(oid))
-    for item in walk_object(repo.cat, hash, stop_at=already_seen,
+    def oid_exists(oid):
+        it = repo.get(oid)
+        oidx, _, _ = next(it)
+        for _ in it: pass
+        return bool(oidx)
+    for item in walk_object(repo.cat, oid_exists,
+                            hash, stop_at=already_seen,
                             include_data=True):
         if item.data is False:
             raise MissingObject(item.oid)
