@@ -1217,15 +1217,21 @@ def check_repo_or_die(path=None):
     global repodir
     repodir = path or guess_repo()
     top = repo()
-    pst = stat_if_exists(top + b'/objects/pack')
+    try:
+        pst = stat_if_exists(top + b'/objects/pack')
+    except NotADirectoryError:
+        pst = None
     if pst and stat.S_ISDIR(pst.st_mode):
         return
     if not pst:
-        top_st = stat_if_exists(top)
-        if not top_st:
-            log('error: repository %r does not exist (see "bup help init")\n'
-                % top)
-            sys.exit(15)
+        try:
+            top_st = stat_if_exists(top)
+            if not top_st:
+                log(f'error: repository %r does not exist (see "bup help init")\n'
+                    % top)
+                sys.exit(15)
+        except NotADirectoryError:
+            pass
     log('error: %s is not a repository\n' % path_msg(top))
     sys.exit(14)
 
