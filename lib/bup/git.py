@@ -1311,8 +1311,6 @@ class CatPipe:
             try:
                 p.stdout.close()
             finally:
-                # This will handle pending exceptions correctly once
-                # we drop py2
                 p.stdin.close()
         if pcheck and pcheck != p:
             try:
@@ -1320,8 +1318,12 @@ class CatPipe:
             finally:
                 pcheck.stdin.close()
         if wait:
-            p.wait()
-            return p.returncode
+            if p: p.wait()
+            if pcheck: pcheck.wait()
+            if p and p.returncode:
+                return p.returncode
+            if pcheck and pcheck.returncode:
+                return pcheck.returncode
         return None
 
     def restart(self):
