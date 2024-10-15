@@ -1485,13 +1485,14 @@ class WalkItem:
     #   item.chunk_path = ['', '2d3115e', '016b097']
     #   item.type = 'tree'
     #   ...
-    __slots__ = 'oid', 'type', 'mode', 'path', 'chunk_path', 'data'
-    def __init__(self, *, oid, type, mode, path, chunk_path, data):
+    __slots__ = 'oid', 'type', 'mode', 'path', 'chunk_path', 'oid_path', 'data'
+    def __init__(self, *, oid, type, mode, path, chunk_path, oid_path, data):
         self.oid = oid
         self.type = type
         self.mode = mode
         self.path = path
         self.chunk_path = chunk_path
+        self.oid_path = oid_path
         self.data = data
 
 def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
@@ -1503,9 +1504,9 @@ def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
     """
     # REVIEW: we could allow oid_exists to be None when include_data is true.
     # Maintain the pending stack on the heap to avoid stack overflow
-    pending = [(oidx, [], [], None, None)]
+    pending = [(oidx, [unhexlify(oidx)], [], [], None, None)]
     while len(pending):
-        oidx, parent_path, chunk_path, mode, exp_typ = pending.pop()
+        oidx, oid_path, parent_path, chunk_path, mode, exp_typ = pending.pop()
         oid = unhexlify(oidx)
         if stop_at and stop_at(oidx):
             continue
@@ -1516,7 +1517,7 @@ def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
             # hasn't requested it.
             yield WalkItem(oid=oid, type=b'blob',
                            chunk_path=chunk_path, path=parent_path,
-                           mode=mode,
+                           mode=mode, oid_path=oid_path,
                            data=True if oid_exists(oid) else False)
             continue
 
@@ -1525,7 +1526,8 @@ def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
         if not get_oidx:
             yield WalkItem(oid=unhexlify(oidx), type=exp_typ,
                            chunk_path=chunk_path, path=parent_path,
-                           mode=mode, data=False)
+                           mode=mode, oid_path=oid_path, data=False)
+            continue
         if typ not in (b'blob', b'commit', b'tree'):
             raise Exception('unexpected repository object type %r' % typ)
         if exp_typ and typ != exp_typ:
@@ -1542,14 +1544,14 @@ def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
 
         yield WalkItem(oid=oid, type=typ,
                        chunk_path=chunk_path, path=parent_path,
-                       mode=mode,
+                       mode=mode, oid_path=oid_path,
                        data=(data if include_data else None))
 
         if typ == b'commit':
             commit_items = parse_commit(data)
             for pid in commit_items.parents:
-                pending.append((pid, parent_path, chunk_path, mode, b'commit'))
-            pending.append((commit_items.tree, parent_path, chunk_path,
+                pending.append((pid, oid_path, parent_path, chunk_path, mode, b'commit'))
+            pending.append((commit_items.tree, oid_path, parent_path, chunk_path,
                             hashsplit.GIT_MODE_TREE, b'tree'))
         elif typ == b'tree':
             for mode, name, ent_id in tree_decode(data):
@@ -1563,6 +1565,7 @@ def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
                         sub_chunk_path = [b'']
                     else:
                         sub_chunk_path = chunk_path
-                pending.append((hexlify(ent_id), sub_path, sub_chunk_path,
-                                mode,
+                new_oid_path = oid_path + [ent_id]
+                pending.append((hexlify(ent_id), new_oid_path,
+                                sub_path, sub_chunk_path, mode,
                                 b'tree' if stat.S_ISDIR(mode) else b'blob'))
