@@ -122,6 +122,7 @@ def parse_args(args):
     opt.print_commits = opt.print_trees = opt.print_tags = False
     opt.bwlimit = None
     opt.compress = 1
+    opt.ignore_missing = False
     opt.source = opt.remote = None
     opt.target_specs = []
 
@@ -133,6 +134,12 @@ def parse_args(args):
             sys.exit(0)
         elif arg in (b'-v', b'--verbose'):
             opt.verbose += 1
+            remaining = remaining[1:]
+        elif arg == b'--ignore-missing':
+            opt.ignore_missing = True
+            remaining = remaining[1:]
+        elif arg == b'--no-ignore-missing':
+            opt.ignore_missing = False
             remaining = remaining[1:]
         elif arg in (b'--ff', b'--append', b'--pick', b'--force-pick',
                      b'--new-tag', b'--replace', b'--unnamed'):
@@ -173,6 +180,9 @@ def parse_args(args):
             continue
         else:
             misuse()
+    for target in opt.target_specs:
+        if opt.ignore_missing and target.method != b'unnamed':
+            misuse('currently only --unnamed allows --ignore-missing')
     return opt
 
 # FIXME: client error handling (remote exceptions, etc.)
@@ -191,7 +201,10 @@ def get_random_item(name, hash, repo, writer, opt):
                             hash, stop_at=already_seen,
                             include_data=True):
         if item.data is False:
-            raise MissingObject(item.oid)
+            if not opt.ignore_missing:
+                raise MissingObject(item.oid)
+            oidstr = hexlify(item.oid).decode('ascii')
+            log('skipping missing source object {oidstr}\n')
         # already_seen ensures that writer.exists(id) is false.
         # Otherwise, just_write() would fail.
         writer.just_write(item.oid, item.type, item.data)
@@ -219,6 +232,22 @@ def append_commits(commits, src_name, dest_hash, src_repo, writer, opt):
                                      src_repo, writer, opt)
     assert(tree is not None)
     return last_c, tree
+
+
+class GitLoc:
+    __slots__ = 'ref', 'hash', 'type'
+    def __init__(self, ref, oid, type):
+        self.ref, self.hash, self.type = ref, oid, type
+
+def find_git_item(ref, repo):
+    it = repo.get(ref)
+    oid, typ, _ = next(it)
+    # FIXME: don't include_data once repo supports it
+    for _ in it: pass
+    if not oid:
+        return None
+    return GitLoc(ref, oid, typ)
+
 
 Loc = namedtuple('Loc', ['type', 'hash', 'path'])
 default_loc = Loc(None, None, None)
@@ -296,15 +325,22 @@ def validate_vfs_path(p, spec):
     return p
 
 
-def resolve_src(spec, src_repo):
-    src = find_vfs_item(spec.src, src_repo)
+def resolve_src(spec, src_repo, *, allow=None, ignore_missing=False):
+    assert allow in (None, 'git')
     spec_args = spec_msg(spec)
-    if not src:
+    if spec.src.startswith(b'git:'):
+        if not allow == 'git':
+            misuse(f'git references not (yet) allowed here {spec_args}')
+        src = find_git_item(spec.src[4:], src_repo)
+    else:
+        src = find_vfs_item(spec.src, src_repo)
+        if src:
+            if src.type == 'root':
+                misuse('cannot fetch entire repository for %s' % spec_args)
+            if src.type == 'tags':
+                misuse('cannot fetch entire /.tag directory for %s' % spec_args)
+    if not (src or ignore_missing):
         misuse('cannot find source for %s' % spec_args)
-    if src.type == 'root':
-        misuse('cannot fetch entire repository for %s' % spec_args)
-    if src.type == 'tags':
-        misuse('cannot fetch entire /.tag directory for %s' % spec_args)
     debug1('src: %s\n' % loc_desc(src))
     return src
 
@@ -511,11 +547,13 @@ def handle_replace(item, src_repo, writer, opt):
     return item.src.hash, unhexlify(commit_items.tree)
 
 
-def resolve_unnamed(spec, src_repo, dest_repo):
+def resolve_unnamed(spec, src_repo, dest_repo, *, ignore_missing):
     if spec.dest:
         misuse('destination name given for %s' % spec_msg(spec))
-    src = resolve_src(spec, src_repo)
-    return Target(spec=spec, src=src, dest=None)
+    src = resolve_src(spec, src_repo, allow='git', ignore_missing=ignore_missing)
+    if src:
+        return Target(spec=spec, src=src, dest=None)
+    return None
 
 
 def handle_unnamed(item, src_repo, writer, opt):
@@ -524,7 +562,7 @@ def handle_unnamed(item, src_repo, writer, opt):
     return (None,)
 
 
-def resolve_targets(specs, src_repo, dest_repo):
+def resolve_targets(specs, src_repo, dest_repo, *, ignore_missing):
     resolved_items = []
     common_args = src_repo, dest_repo
     for spec in specs:
@@ -540,7 +578,10 @@ def resolve_targets(specs, src_repo, dest_repo):
         elif spec.method == 'replace':
             resolved_items.append(resolve_replace(spec, *common_args))
         elif spec.method == 'unnamed':
-            resolved_items.append(resolve_unnamed(spec, *common_args))
+            tgt = resolve_unnamed(spec, *common_args,
+                                  ignore_missing=ignore_missing)
+            if tgt:
+                resolved_items.append(tgt)
         else: # Should be impossible -- prevented by the option parser.
             assert(False)
 
@@ -601,7 +642,8 @@ def main(argv):
                 # fail before we start writing (for any obviously
                 # broken cases).
                 target_items = resolve_targets(opt.target_specs,
-                                               src_repo, dest_repo)
+                                               src_repo, dest_repo,
+                                               ignore_missing=opt.ignore_missing)
 
                 updated_refs = {}  # ref_name -> (original_ref, tip_commit(bin))
                 no_ref_info = (None, None)
