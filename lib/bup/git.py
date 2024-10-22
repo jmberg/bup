@@ -1501,12 +1501,19 @@ def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
     stop_at(oidx) returns true.  Set the data field to None when
     include_data is false, and to False when the object is missing.
 
+    Note that this must be leaves (dependencies) first, to avoid e.g.
+    interrupted bup get not being properly resumable, possibly leaving
+    the destination repository with missing objects if resumed.
     """
     # REVIEW: we could allow oid_exists to be None when include_data is true.
     # Maintain the pending stack on the heap to avoid stack overflow
     pending = [(oidx, [unhexlify(oidx)], [], [], None, None)]
     while len(pending):
-        oidx, oid_path, parent_path, chunk_path, mode, exp_typ = pending.pop()
+        next_item = pending.pop()
+        if not isinstance(next_item, tuple):
+            yield next_item
+            continue
+        oidx, oid_path, parent_path, chunk_path, mode, exp_typ = next_item
         oid = unhexlify(oidx)
         if stop_at and stop_at(oidx):
             continue
@@ -1542,18 +1549,22 @@ def walk_object(get_ref, oid_exists, oidx, stop_at=None, include_data=None):
         else:
             data = b''.join(item_it)
 
-        yield WalkItem(oid=oid, type=typ,
+        itm = WalkItem(oid=oid, type=typ,
                        chunk_path=chunk_path, path=parent_path,
                        mode=mode, oid_path=oid_path,
                        data=(data if include_data else None))
 
-        if typ == b'commit':
+        if typ == b'blob':
+            yield itm
+        elif typ == b'commit':
+            pending.append(itm) # yield after the child(ren)
             commit_items = parse_commit(data)
             for pid in commit_items.parents:
                 pending.append((pid, oid_path, parent_path, chunk_path, mode, b'commit'))
             pending.append((commit_items.tree, oid_path, parent_path, chunk_path,
                             hashsplit.GIT_MODE_TREE, b'tree'))
         elif typ == b'tree':
+            pending.append(itm) # yield after the child(ren)
             for mode, name, ent_id in tree_decode(data):
                 demangled, bup_type = demangle_name(name, mode)
                 if chunk_path:
