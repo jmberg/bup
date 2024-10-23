@@ -43,6 +43,7 @@ class Nonlocal:
 def nullcontext_if_not(manager):
     return manager if manager is not None else nullcontext()
 
+
 class finalized:
     def __init__(self, enter_result=None, finalize=None):
         assert finalize
