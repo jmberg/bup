@@ -33,7 +33,6 @@ class LocalRepo(RepoProtocol):
         else:
             self.objcache_maker = None
             self.run_midx = True
-        super()._validate_init()
 
     def close(self):
         if not self.closed:
