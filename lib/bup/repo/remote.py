@@ -1,10 +1,10 @@
 
 from bup import client
 from bup.repo import base
-from bup.repo.base import RepoProtocol
+from bup.repo.base import BaseRepo
 
 
-class RemoteRepo(RepoProtocol):
+class RemoteRepo(BaseRepo):
     def __init__(self, address, create=False, compression_level=None,
                  max_pack_size=None, max_pack_objects=None):
         self.closed = True # in case Client instantiation fails
