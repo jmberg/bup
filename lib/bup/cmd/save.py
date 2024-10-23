@@ -398,6 +398,10 @@ def save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits):
         progress('Saving: %.2f%% (%d/%dk, %d/%d files), done.    \n'
                  % (pct, _nonlocal['count']/1024, total/1024, fcount, ftotal))
 
+    # nothing found
+    if not len(stack):
+        return None
+
     # pop all parts above the root folder
     while len(stack) > 1:
         stack.pop(repo)
@@ -465,6 +469,11 @@ def main(argv):
              hlinkdb.HLinkDB(indexfile + b'.hlink') as hlink_db, \
              index.Reader(indexfile) as reader:
             tree = save_tree(opt, reader, hlink_db, msr, repo, split_trees, blobbits)
+
+        if not tree:
+            log('ERROR: nothing saved (%d errors encountered)\n' % len(saved_errors))
+            sys.exit(1)
+
         if opt.tree:
             out.write(hexlify(tree))
             out.write(b'\n')
