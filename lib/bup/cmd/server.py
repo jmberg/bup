@@ -21,6 +21,7 @@ def main(argv):
 
     class ServerRepo(LocalRepo):
         def __init__(self, repo_dir, server):
+            self.closed = True
             git.check_repo_or_die(repo_dir)
             LocalRepo.__init__(self, repo_dir, server=server)
 
