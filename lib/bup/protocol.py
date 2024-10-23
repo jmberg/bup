@@ -124,6 +124,14 @@ def _command(fn):
     fn.bup_server_command = True
     return fn
 
+PERMITTED_CONFIG_KEYS = (
+    # bup options we (will) use
+    b'bup.split-trees', b'bup.repo-id', b'bup.blobbits',
+    # git options we (may) use for compression/pack size
+    b'pack.compression', b'core.compression',
+    b'pack.packsizelimit',
+)
+
 class Server:
     def __init__(self, conn, backend):
         self.conn = conn
@@ -379,11 +387,7 @@ class Server:
         self.init_session()
         assert not args
         key, opttype = vint.recv(self.conn, 'ss')
-        if key in (# bup options we (will) use
-                   b'bup.split-trees', b'bup.repo-id', b'bup.blobbits',
-                   # git options we (may) use for compression/pack size
-                   b'pack.compression', b'core.compression',
-                   b'pack.packsizelimit', ):
+        if key in PERMITTED_CONFIG_KEYS:
             opttype = None if not len(opttype) else opttype.decode('ascii')
             val = self.repo.config_get(key, opttype=opttype)
             if val is None:
@@ -398,6 +402,37 @@ class Server:
                 raise TypeError(f'Unrecognized result type {type(val)}')
         else:
             write_vuint(self.conn, 5)
+        self.conn.ok()
+
+    @_command
+    def config_write(self, args):
+        self.init_session()
+        assert not args
+        key, val = vint.recv(self.comm, 'ss')
+        if key in PERMITTED_CONFIG_KEYS:
+            self.repo.config_write(key, val)
+            write_vuint(self.conn, 0)
+        else:
+            write_vuint(self.conn, 1)
+        self.conn.ok()
+
+    @_command
+    def config_list(self, args):
+        self.init_session()
+        values = False
+        if args:
+            assert args == b'values'
+            values = True
+        if values:
+            for k, v in self.repo.config_list(True):
+                if k in PERMITTED_CONFIG_KEYS:
+                    write_bvec(self.conn, k)
+                    write_bvec(self.conn, v)
+        else:
+            for k in self.repo.config_list(False):
+                if k in PERMITTED_CONFIG_KEYS:
+                    write_bvec(self.conn, k)
+        write_bvec(self.conn, b'')
         self.conn.ok()
 
     def handle(self):

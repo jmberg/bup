@@ -120,6 +120,20 @@ def git_config_get(option, repo_dir=None, opttype=None, cfg_file=None):
         return None
     raise GitError('%r returned %d' % (cmd, rc))
 
+def git_config_write(option, value, repo_dir=None, cfg_file=None):
+    assert not (repo_dir and cfg_file), "repo_dir and cfg_file cannot both be used"
+    assert repo_dir or cfg_file, "repo_dir or cfg_file must be used"
+    cmd = [b'git', b'config']
+    if cfg_file:
+        cmd.extend([b'--file', cfg_file])
+    cmd.extend([option, value])
+    env = None
+    if repo_dir:
+        env = _gitenv(repo_dir=repo_dir)
+    p = subprocess.Popen(cmd, env=env)
+    rc = p.wait()
+    if rc != 0:
+        raise GitError('%r returned %d' % (cmd, rc))
 
 def parse_tz_offset(s):
     """UTC offset in seconds."""

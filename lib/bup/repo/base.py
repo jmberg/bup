@@ -90,6 +90,20 @@ class BaseRepo(object):
         """
 
     @notimplemented
+    def config_write(self, name, value):
+        """
+        Write the given configuration name=value to the config file/store.
+        """
+
+    @notimplemented
+    def config_list(self, values=False):
+        """
+        Return a generator over (key, value) tuples (if 'values' is True)
+        or just keys (if 'values' is False). The keys and values must be
+        just bytes, not coerced to any type (unlike config_get.)
+        """
+
+    @notimplemented
     def list_indexes(self):
         """
         List all indexes in this repository (optional, used only by bup server)
