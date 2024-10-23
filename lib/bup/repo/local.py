@@ -3,7 +3,7 @@ import os, subprocess
 from os.path import realpath
 from functools import partial
 
-from bup import git, vfs
+from bup import git
 from bup.repo import base
 from bup.repo.base import BaseRepo
 
@@ -78,14 +78,6 @@ class LocalRepo(BaseRepo):
         yield info
         if oidx: yield from it
         assert not next(it, None)
-
-    def join(self, ref):
-        return vfs.join(self, ref)
-
-    def resolve(self, path, parent=None, want_meta=True, follow=True):
-        ## FIXME: mode_only=?
-        return vfs.resolve(self, path, parent=parent,
-                           want_meta=want_meta, follow=follow)
 
     def refs(self, patterns=None, limit_to_heads=False, limit_to_tags=False):
         yield from git.list_refs(patterns=patterns,
