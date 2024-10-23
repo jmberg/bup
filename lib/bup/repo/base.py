@@ -121,19 +121,19 @@ class BaseRepo:
         Return the new object's oid.
         """
 
-    @notimplemented
     def write_symlink(self, target):
         """
         Tentatively write the given symlink target into the repository.
         Return the new object's oid.
         """
+        return self.write_data(target)
 
-    @notimplemented
     def write_bupm(self, data):
         """
         Tentatively write the given bupm (fragment) into the repository.
         Return the new object's oid.
         """
+        return self.write_data(data)
 
     @notimplemented
     def just_write(self, oid, type, content):
