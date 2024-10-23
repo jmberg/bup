@@ -25,16 +25,10 @@ class RemoteRepo(BaseRepo):
         self._packwriter = None
 
     def close(self):
-        if not self.closed:
-            self.closed = True
-            self.finish_writing()
-            if self.client:
-                self.client.close()
-                self.client = None
-
-    def __del__(self): assert self.closed
-    def __enter__(self): return self
-    def __exit__(self, type, value, traceback): self.close()
+        super(RemoteRepo, self).close()
+        if self.client:
+            self.client.close()
+            self.client = None
 
     def update_ref(self, refname, newval, oldval):
         self.finish_writing()
