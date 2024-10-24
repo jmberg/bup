@@ -1236,17 +1236,12 @@ def rev_list(ref_or_refs, parse=None, format=None, repo_dir=None):
         raise GitError('git rev-list returned error %d' % rv)
 
 
-def update_ref(refname, newval, oldval, repo_dir=None, force=False):
+def update_ref(refname, newval, oldval, repo_dir=None):
     """Update a repository reference.
 
-    With force=True, don't care about the previous ref (oldval);
-    with force=False oldval must be either a sha1 or None (for an
-    entirely new branch)
+    oldval must be either a sha1 or None (for an entirely new ref)
     """
-    if force:
-        assert oldval is None
-        oldarg = []
-    elif not oldval:
+    if not oldval:
         oldarg = [b'']
     else:
         oldarg = [hexlify(oldval)]
