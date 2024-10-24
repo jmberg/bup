@@ -408,7 +408,11 @@ class Server:
     def config_write(self, args):
         self.init_session()
         assert not args
-        key, val = vint.recv(self.comm, 'ss')
+        key, none, val = vint.recv(self.conn, 'sss')
+        assert none in (b'', b'1')
+        if none:
+            assert not val
+            val = None
         if key in PERMITTED_CONFIG_KEYS:
             self.repo.config_write(key, val)
             write_vuint(self.conn, 0)

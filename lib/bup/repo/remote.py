@@ -10,6 +10,8 @@ class RemoteRepo(BaseRepo):
         self.client = client.Client(address, create=create)
         self.closed = False
         self.config_get = self.client.config_get
+        self.config_write = self.client.config_write
+        self.config_list = self.client.config_list
         # init the superclass only afterwards so it can access self.config_get()
         super(RemoteRepo, self).__init__(address,
                                          compression_level=compression_level,
@@ -23,15 +25,6 @@ class RemoteRepo(BaseRepo):
         self.refs = self.client.refs
         self.resolve = self.client.resolve
         self._packwriter = None
-
-    def config_write(self, key, value):
-        # ignore this for now, server has it by itself, or not
-        # if/when we add actual config writing, try to pass it
-        # through but handle calls from _ensure_repo_id() in a
-        # graceful manner
-        if key == b'bup.repo-id':
-            pass
-        assert False, "writing to remote config is not yet supported"
 
     def close(self):
         super(RemoteRepo, self).close()

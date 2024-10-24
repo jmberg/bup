@@ -93,6 +93,7 @@ class BaseRepo(object):
     def config_write(self, name, value):
         """
         Write the given configuration name=value to the config file/store.
+        When value is None, delete the given option.
         """
 
     @notimplemented

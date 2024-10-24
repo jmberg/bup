@@ -126,11 +126,38 @@ def git_config_write(option, value, repo_dir=None, cfg_file=None):
     cmd = [b'git', b'config']
     if cfg_file:
         cmd.extend([b'--file', cfg_file])
-    cmd.extend([option, value])
+    if value is None:
+        cmd.extend([b'unset', option])
+    else:
+        cmd.extend([option, value])
     env = None
     if repo_dir:
         env = _gitenv(repo_dir=repo_dir)
     p = subprocess.Popen(cmd, env=env)
+    rc = p.wait()
+    if rc != 0:
+        raise GitError('%r returned %d' % (cmd, rc))
+
+def git_config_list(values=False, repo_dir=None, cfg_file=None):
+    assert not (repo_dir and cfg_file), "repo_dir and cfg_file cannot both be used"
+    assert repo_dir or cfg_file, "repo_dir or cfg_file must be used"
+    cmd = [b'git', b'config']
+    if cfg_file:
+        cmd.extend([b'--file', cfg_file])
+    cmd.extend([b'list', b'--null'])
+    env = None
+    if repo_dir:
+        env = _gitenv(repo_dir=repo_dir)
+    p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE)
+    # assume this will fit in memory
+    output = p.stdout.read()
+    items = output.split(b'\0')
+    for item in items[:-1]:
+        key, value = item.split(b'\n', 1)
+        if values:
+            yield key, value
+        else:
+            yield key
     rc = p.wait()
     if rc != 0:
         raise GitError('%r returned %d' % (cmd, rc))
