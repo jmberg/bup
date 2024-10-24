@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+. ./wvtest-bup.sh || exit $?
+
+set -o pipefail
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+
+export BUP_DIR="$tmpdir/bup"
+
+bup() { "$top/bup" "$@"; }
+
+WVPASS bup init
+
+WVPASS cat << EOF | python -c 'import base64, os ; base64.decode(os.fdopen(0, "rb"), os.fdopen(1, "ab"))' | git -C $BUP_DIR hash-object -t tree -w --stdin
+MTAwNjQ0IDAuMjcuMS1mcm9tLTAuMjcubWQAg6dwvMaaPGpLsmD2rrJZyVdS440xMDA2NDQgMC4y
+OC1mcm9tLTAuMjcuMS5tZACa+DQCI82fLeXG4rry+uYjAEusnDEwMDY0NCAwLjI4LjEtZnJvbS0w
+LjI4Lm1kADSR/moV4bVTCJY1Gxo6scjcGZgcMTAwNjQ0IDAuMjktZnJvbS0wLjI4LjEubWQA0wF7
+dJ0SYBlX/i1fH9nKmvAcZRoxMDA2NDQgMC4yOS4xLWZyb20tMC4yOS5tZAAdhODaqtmA20RGXkzR
+Vru+ZDh+4TEwMDY0NCAwLjI5LjItZnJvbS0wLjI5LjEubWQACpFCDHXNVxBTdhue4t2BjtxTHOox
+MDA2NDQgMC4yOS4zLWZyb20tMC4yOS4yLm1kAD1gMpA1tR6fBS4xuc7ArTrftbLFMTAwNjQ0IDAu
+MzAtZnJvbS0wLjI5LjMubWQAFgVYyT97uo2sn2hSB65FExFsGe8xMDA2NDQgMC4zMC4xLWZyb20t
+MC4zMC5tZAAuhLlGryHmJwNy8eiXT2phcfy2mjEwMDY0NCAwLjMxLWZyb20tMC4zMC4xLm1kAFiP
+ylBRq4d/dq+9BHFY3XAHNzIqMTAwNjQ0IDAuMzItZnJvbS0wLjMxLm1kALZMdkvyqhEciR/jkMTO
+Qp33fdQ3MTAwNjQ0IDAuMzIuMS1mcm9tLTAuMzIubWQA50QtA3oomc4s9MKReDlp6SEVFDwxMDA2
+NDQgMC4zMi4yLWZyb20tMC4zMi4xLm1kADnZ6PN2qXJjXK7upOKyggBM6KjKMTAwNjQ0IDAuMzMt
+ZnJvbS0wLjMyLm1kAHKXDP/AYinfRRHHB0cHkfVP5Vs1MTAwNjQ0IDAuMzMuMS1mcm9tLTAuMzMu
+bWQApaEhfHwUHOe5gu7NpFh2tZb8MJ4xMDA2NDQgMC4zMy4yLWZyb20tMC4zMy4xLm1kAJuo4XoQ
+wNPayUmpgFLXufX2XilpMTAwNjQ0IDAuMzMuMy1mcm9tLTAuMzMuMi5tZABLRBkcXKlWLLsrssBa
+n0Py6avjkjEwMDY0NCAwLjMzLjQtZnJvbS0wLjMzLjMubWQAuMaXIMuc08pvKBGfmixpDYoexkw=
+EOF
+
+WVPASS cd $BUP_DIR
+WVPASS echo d1915f1820f2e08dc176691ebcecb9d537de11e5 | git pack-objects objects/pack/pack
+WVPASS git prune-packed
+WVFAIL bup -d . scan
