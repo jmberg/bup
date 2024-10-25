@@ -61,10 +61,10 @@ endif
 DESTDIR ?=
 TARGET_ARCH ?=
 
-bup_shared_cflags := -O2 -Wall -Werror -Wformat=2 -MMD -MP
-bup_shared_cflags := -Wno-unknown-pragmas -Wsign-compare $(bup_shared_cflags)
-bup_shared_cflags := -D_FILE_OFFSET_BITS=64 $(bup_shared_cflags)
-bup_shared_cflags := $(bup_config_cflags) $(bup_shared_cflags)
+bup_shared_cflags = $(bup_config_cflags)
+bup_shared_cflags += -D_FILE_OFFSET_BITS=64
+bup_shared_cflags += -Wno-unknown-pragmas -Wsign-compare
+bup_shared_cflags += -O2 -Wall -Werror -Wformat=2 -MMD -MP
 
 bup_shared_ldflags :=
 
@@ -93,8 +93,9 @@ config/config.vars: configure config/configure config/configure.inc config/*.in
 # now, we're just going to let Python's version win.
 
 helpers_cflags = $(bup_python_cflags) $(bup_shared_cflags) -I$(CURDIR)/src
-helpers_ldflags := $(bup_python_ldflags) $(bup_shared_ldflags)
+helpers_ldflags = $(bup_python_ldflags) $(bup_shared_ldflags)
 
+bup_readline_cflags ?= # avoid warnings before config.vars exists
 ifneq ($(strip $(bup_readline_cflags)),)
   readline_cflags += $(bup_readline_cflags)
   readline_xopen := $(filter -D_XOPEN_SOURCE=%,$(readline_cflags))
@@ -106,6 +107,7 @@ endif
 
 helpers_ldflags += $(bup_readline_ldflags)
 
+bup_have_libacl ?= # avoid warnings before config.vars exists
 ifeq ($(bup_have_libacl),1)
   helpers_cflags += $(bup_libacl_cflags)
   helpers_ldflags += $(bup_libacl_ldflags)
@@ -221,7 +223,7 @@ install: all
 	fi
 
 embed_cflags = $(bup_python_cflags_embed) $(bup_shared_cflags) -I$(CURDIR)/src
-embed_ldflags := $(bup_python_ldflags_embed) $(bup_shared_ldflags)
+embed_ldflags = $(bup_python_ldflags_embed) $(bup_shared_ldflags)
 
 cc_bin = $(CC) $(embed_cflags) -I src $(CPPFLAGS) $(CFLAGS) $^ \
   $(embed_ldflags) $(LDFLAGS) -fPIE -o $@
