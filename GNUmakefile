@@ -293,9 +293,15 @@ get_parallel_n = $(patsubst -j%,%,$(parallel_opt))
 maybe_specific_n = $(if $(filter -j%,$(parallel_opt)),-n$(get_parallel_n))
 xdist_opt = $(if $(filter -j,$(parallel_opt)),-nauto,$(maybe_specific_n))
 
-lint: dev/bup-exec dev/bup-python
-	$(call quiet,"LINT","(started)")
-	$(Q)./pylint
+lint-lib: dev/bup-exec dev/bup-python
+	$(call quiet,"LINT","lib")
+	$(Q)./pylint lib
+# unused-wildcard-import: we always "import * from wvpytest"
+lint-test: dev/bup-exec dev/bup-python
+	$(call quiet,"LINT","test")
+	$(Q)./pylint -d unused-wildcard-import test/lib test/int
+
+lint: lint-lib lint-test
 
 test: all test/tmp dev/python lint
 	$(Q)! bup version  # Ensure we can't test the local bup (cf. dev/shadow-bin)
