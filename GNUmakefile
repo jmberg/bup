@@ -1,3 +1,5 @@
+# disable built-in rules (mostly to aid debugging)
+.SUFFIXES:
 
 # Technically we need 4.1.90 for .SHELLSTATUS, but everything relevant
 # seems to have at least 4.2 (mostly 4.4 and higher) anyway, so let's
@@ -21,6 +23,22 @@ endif
 $(shell mkdir -p config/config.var && echo "$(MAKE)" > config/config.var/make)
 ifneq (0, $(.SHELLSTATUS))
   $(error Unable to record config/config.var/make)
+endif
+
+ifeq ($V,1)
+Q=
+define quiet
+endef
+define notquiet
+  $1
+endef
+else
+define quiet
+  @echo "  "$1 $2
+endef
+define notquiet
+endef
+Q=@
 endif
 
 MAKEFLAGS += --warn-undefined-variables
@@ -86,7 +104,7 @@ endif
 clean_paths += lib/bup/checkout_info.py
 
 config/config.vars: configure config/configure config/configure.inc config/*.in
-	MAKE="$(MAKE)" ./configure
+	$(Q)MAKE="$(MAKE)" ./configure
 
 # On some platforms, Python.h and readline.h fight over the
 # _XOPEN_SOURCE version, i.e. -Werror crashes on a mismatch, so for
@@ -133,10 +151,12 @@ clean_paths += $(incomplete_saves_svg)
 issue/missing-objects.html: $(incomplete_saves_svg)
 
 issue/%.svg: issue/%.dot
-	$(DOT) -Tsvg $< > $@
+	$(call quiet,"DOT ",$@)
+	$(Q)$(DOT) -Tsvg $< > $@
 
 issue/%.html: issue/%.md
-	$(PANDOC) -s --embed-resources --resource-path issue \
+	$(call quiet,"HTML",$@)
+	$(Q)$(PANDOC) -s --embed-resources --resource-path issue \
 	  -r markdown -w html -o $@ $<
 
 issues :=
@@ -165,7 +185,7 @@ all: dev/bup-exec dev/bup-python dev/python $(bup_deps) Documentation/all \
   $(issues) $(current_sampledata)
 
 $(current_sampledata):
-	dev/configure-sampledata --setup
+	$(Q)dev/configure-sampledata --setup
 
 man_roff := $(man_md:.md=)
 man_html := $(man_md:.md=.html)
@@ -225,19 +245,25 @@ install: all
 embed_cflags = $(bup_python_cflags_embed) $(bup_shared_cflags) -I$(CURDIR)/src
 embed_ldflags = $(bup_python_ldflags_embed) $(bup_shared_ldflags)
 
-cc_bin = $(CC) $(embed_cflags) -I src $(CPPFLAGS) $(CFLAGS) $^ \
-  $(embed_ldflags) $(LDFLAGS) -fPIE -o $@
+config/config.h: config/config.vars
+clean_paths += config/config.h.tmp
+
+define cc_bin
+  $(call quiet,"CC  ",$@)
+  $(Q)$(CC) $(embed_cflags) -I src $(CPPFLAGS) $(CFLAGS) $^ \
+    $(embed_ldflags) $(LDFLAGS) -fPIE -o $@
+endef
 
 clean_paths += dev/python-proposed
 generated_dependencies += dev/python-proposed.d
 dev/python-proposed: dev/python.c src/bup/compat.c src/bup/io.c
-	rm -f dev/python
+	$(Q)rm -f dev/python
 	$(cc_bin)
 
 clean_paths += dev/python
 dev/python: dev/python-proposed
-	dev/validate-python $@-proposed
-	cp -R -p $@-proposed $@
+	$(Q)dev/validate-python $@-proposed
+	$(Q)cp -R -p $@-proposed $@
 
 clean_paths += dev/bup-exec
 generated_dependencies += dev/bup-exec.d
@@ -259,11 +285,12 @@ lib/cmd/bup: lib/cmd/bup.c src/bup/compat.c src/bup/io.c
 clean_paths += lib/bup/_helpers$(soext)
 generated_dependencies += lib/bup/_helpers.d
 lib/bup/_helpers$(soext): lib/bup/_helpers.c src/bup/pyutil.c lib/bup/bupsplit.c lib/bup/_hashsplit.c
-	$(CC) $(helpers_cflags) $(CPPFLAGS) $(CFLAGS) $^ \
+	$(call quiet,"CC  ",$@)
+	$(Q)$(CC) $(helpers_cflags) $(CPPFLAGS) $(CFLAGS) $^ \
 	  $(helpers_ldflags) $(LDFLAGS) -o $@
 
 test/tmp:
-	mkdir test/tmp
+	$(Q)mkdir test/tmp
 
 # MAKEFLAGS must not be in an immediate := assignment
 parallel_opt = $(lastword $(filter -j%,$(MAKEFLAGS)))
@@ -273,25 +300,27 @@ xdist_opt = $(if $(filter -j,$(parallel_opt)),-nauto,$(maybe_specific_n))
 
 .PHONY: lint-lib
 lint-lib: dev/bup-exec dev/bup-python
-	./pylint lib
+	$(call quiet,"LINT","lib")
+	$(Q)./pylint lib
 
 # unused-wildcard-import: we always "import * from wvpytest"
 .PHONY: lint-test
 lint-test: dev/bup-exec dev/bup-python
-	./pylint -d unused-wildcard-import test/lib test/int
+	$(call quiet,"LINT","test")
+	$(Q)./pylint -d unused-wildcard-import test/lib test/int
 
 .PHONY: lint
 lint: lint-lib lint-test
 
 check: all test/tmp dev/python lint
         # Ensure we can't test the local bup
-	! bup version
-	test "$$(command -v bup)" = '$(CURDIR)/dev/shadow-bin/bup'
-	./bup features
-	./pytest $(xdist_opt)
+	$(Q)! bup version
+	$(Q)test "$$(command -v bup)" = '$(CURDIR)/dev/shadow-bin/bup'
+	$(Q)./bup features
+	$(Q)./pytest $(xdist_opt)
 
 distcheck: all
-	./pytest $(xdist_opt) -m release
+	$(Q)./pytest $(xdist_opt) -m release
 
 long-check: export BUP_TEST_LEVEL=11
 long-check: check
@@ -300,9 +329,9 @@ long-check: check
 Documentation/all: $(man_roff) $(man_html)
 
 Documentation/substvars: $(bup_deps)
-	set -e; bup_ver=$$(./bup version); \
+	$(Q)set -e; bup_ver=$$(./bup version); \
 	echo "s,%BUP_VERSION%,$$bup_ver,g" > $@;
-	set -e; bup_date=$$(./bup version --date); \
+	$(Q)set -e; bup_date=$$(./bup version --date); \
 	echo "s,%BUP_DATE%,$$bup_date,g" >> $@
 
 define render_page
@@ -311,9 +340,11 @@ define render_page
 endef
 
 Documentation/%: Documentation/%.md Documentation/substvars
-	$(call render_page,man,$@)
+	$(call quiet,"MAN ",$@)
+	$(Q)$(call render_page,man,$@)
 Documentation/%.html: Documentation/%.md Documentation/substvars
-	$(call render_page,html,$@)
+	$(call quiet,"HTML",$@)
+	$(Q)$(call render_page,html,$@)
 
 .PHONY: Documentation/clean
 Documentation/clean:
