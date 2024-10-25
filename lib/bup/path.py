@@ -42,4 +42,4 @@ def indexcache(forwhat):
     return os.path.join(cachedir(b'index-cache'), forwhat)
 
 def index():
-    return os.path.join(defaultrepo(), b'bupindex')
+    return cachedir(b'bupindex')
