@@ -35,7 +35,22 @@ def defaultrepo():
     return os.path.expanduser(b'~/.bup')
 
 def cachedir(forwhat):
-    return os.path.join(defaultrepo(), forwhat)
+    xdg_cache = environ.get(b'XDG_CACHE_HOME')
+    if not xdg_cache:
+        xdg_cache = os.path.expanduser(b'~/.cache')
+    xdg = os.path.join(xdg_cache, b'bup', forwhat)
+
+    # if already there, use it
+    if os.path.exists(xdg):
+        return xdg
+
+    # but if not check old path
+    legacy = os.path.join(defaultrepo(), forwhat)
+    if os.path.exists(legacy):
+        return legacy
+
+    # and if that also doesn't exist use new path
+    return xdg
 
 def indexcache(forwhat):
     forwhat = re.sub(br'[^@\w]', b'_', forwhat)

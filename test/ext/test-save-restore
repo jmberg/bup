@@ -115,6 +115,7 @@ WVSTART "save (no index)"
     WVPASS force-delete $tmp
     WVPASS mkdir $tmp
     export BUP_DIR="$(WVPASS pwd)/$tmp/bup" || exit $?
+    export XDG_CACHE_HOME="$(WVPASS pwd)/$tmp/cache" || exit $?
     WVPASS bup init
     WVFAIL bup save -n nothing /
     WVPASS rm -r "$tmp"
