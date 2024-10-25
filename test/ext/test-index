@@ -91,7 +91,7 @@ WVPASS bup init
 
 WVFAIL bup save -t $D/doesnt-exist-filename
 
-WVPASS mv "$BUP_DIR/bupindex" "$BUP_DIR/bi.old"
+WVPASS mv "$XDG_CACHE_HOME/bup/bupindex" "$XDG_CACHE_HOME/bup/bi.old"
 WVFAIL bup save -t $D/d/e/fifotest
 WVPASS mkfifo $D/d/e/fifotest
 WVPASS bup index -u $D/d/e/fifotest
@@ -100,7 +100,7 @@ WVPASS bup save -t $D/d/e
 WVPASS rm -f $D/d/e/fifotest
 WVPASS bup index -u $D/d/e
 WVFAIL bup save -t $D/d/e/fifotest
-WVPASS mv "$BUP_DIR/bi.old" "$BUP_DIR/bupindex"
+WVPASS mv "$XDG_CACHE_HOME/bup/bi.old" "$XDG_CACHE_HOME/bup/bupindex"
 
 WVPASS bup index -u $D/d/e
 WVPASS bup save -t $D/d/e

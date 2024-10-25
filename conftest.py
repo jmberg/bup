@@ -58,6 +58,22 @@ def no_lingering_errors():
     helpers.clear_errors()
 
 @pytest.fixture(autouse=True)
+def xdg_cache_home(request):
+    orig_env = environ.copy()
+    tmpdir = tempfile.mkdtemp(dir=_bup_tmp, prefix=b'cache')
+    environ[b'XDG_CACHE_HOME'] = tmpdir
+    yield None
+    if request.node.bup['call-report'].failed:
+        print('\nPreserving:', tmpdir, file=sys.stderr)
+    else:
+        subprocess.call(['chmod', '-R', 'u+rwX', tmpdir])
+        subprocess.call(['rm', '-rf', tmpdir])
+    if b'XDG_CACHE_HOME' in orig_env:
+        environ[b'XDG_CACHE_HOME'] = orig_env[b'XDG_CACHE_HOME']
+    else:
+        del environ[b'XDG_CACHE_HOME']
+
+@pytest.fixture(autouse=True)
 def ephemeral_env_changes():
     orig_env = environ.copy()
     yield None

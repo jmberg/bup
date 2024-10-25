@@ -20,3 +20,6 @@ wvmkmountpt ()
     mkdir -p "$_wvtop/test/mnt" || exit $?
     mktemp -d "$_wvtop/test/mnt/$script_name-XXXXXXX" || exit $?
 }
+
+# for bupindex/index-cache
+export XDG_CACHE_HOME="$(wvmktempdir)" || exit $?
