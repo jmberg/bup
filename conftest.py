@@ -1,6 +1,8 @@
 
+from contextlib import ExitStack
 from os.path import basename, dirname, realpath, relpath
 from time import tzset
+from sys import stderr
 from traceback import extract_stack
 import errno
 import os
@@ -14,7 +16,7 @@ sys.path[:0] = ['lib']
 
 from bup import helpers
 from bup.compat import environ, fsencode
-from bup.helpers import temp_dir
+from bup.helpers import finalized, temp_dir
 
 
 _bup_src_top = realpath(dirname(fsencode(__file__)))
@@ -68,23 +70,30 @@ except OSError as e:
         raise
 
 @pytest.fixture(autouse=True)
-def common_test_environment():
+def common_test_environment(request):
     orig_env = environ.copy()
-    with temp_dir(dir=_bup_tmp, prefix=b'home-') as home:
+    def restore_env(_):
+        for k, orig_v in orig_env.items():
+            v = environ.get(k)
+            if v is not orig_v:
+                environ[k] = orig_v
+                if k == b'TZ':
+                    tzset()
+        for k in environ.keys():
+            if k not in orig_env:
+                del environ[k]
+                if k == b'TZ':
+                    tzset()
+    with finalized(lambda _: os.chdir(_bup_src_top)), \
+         finalized(restore_env), \
+         ExitStack() as home_ctx:
+        home = home_ctx.enter_context(temp_dir(dir=_bup_tmp, prefix=b'home-'))
         environ[b'HOME'] = home
+        environ[b'XDG_CACHE_HOME'] = os.path.join(home, b'.cache')
         yield None
-    for k, orig_v in orig_env.items():
-        v = environ.get(k)
-        if v is not orig_v:
-            environ[k] = orig_v
-            if k == b'TZ':
-                tzset()
-    for k in environ.keys():
-        if k not in orig_env:
-            del environ[k]
-            if k == b'TZ':
-                tzset()
-    os.chdir(_bup_src_top)
+        if request.node.bup['call-report'].failed:
+            print('\nPreserving test HOME:', home, file=stderr)
+            home_ctx.pop_all()
 
 _safe_path_rx = re.compile(br'[^a-zA-Z0-9_-]')
 

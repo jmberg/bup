@@ -31,6 +31,7 @@ class BupSubprocTestRunner(pytest.Item):
         with temp_dir(dir=b'test/tmp', prefix=b'bup-test-home-') as home:
             env = environ.copy()
             env[b'HOME'] = home
+            env[b'XDG_CACHE_HOME'] = os.path.join(home, b'.cache')
             p = subprocess.Popen(cmd,
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT,
