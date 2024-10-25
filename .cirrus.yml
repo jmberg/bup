@@ -11,7 +11,7 @@ task:
     export LANG=C.UTF-8
     dev/system-info
     BUP_PYTHON_CONFIG=python3-config ./configure --with-pylint=yes
-    make -j6 check
+    make V=1 -j6 check
 
 task:
   name: debian long-check
@@ -29,7 +29,7 @@ task:
     dev/system-info
     adduser --disabled-password --gecos '' bup
     chown -R bup:bup .
-    printf "make -j6 -C %q BUP_PYTHON_CONFIG=python3-config long-check" \
+    printf "make V=1 -j6 -C %q BUP_PYTHON_CONFIG=python3-config long-check" \
       "$(pwd)" | su -l -w BUP_TEST_OTHER_BUP bup
 
 task:
@@ -45,7 +45,7 @@ task:
     dev/system-info
     adduser --disabled-password --gecos '' bup
     chown -R bup:bup .
-    printf "make -j6 -C %q BUP_PYTHON_CONFIG=python3-config check" \
+    printf "make V=1 -j6 -C %q BUP_PYTHON_CONFIG=python3-config check" \
       "$(pwd)" | su -l bup
 
 task:
@@ -58,7 +58,7 @@ task:
     set -xe
     dev/prep-for-freebsd-build
     dev/system-info
-    gmake -j6 check
+    gmake V=1 -j6 check
 
 task:
   name: macos check
@@ -73,4 +73,4 @@ task:
     "$BUP_TEST_OTHER_BUP" version
     export PKG_CONFIG_PATH=/usr/local/opt/readline/lib/pkgconfig
     dev/system-info
-    gmake -j6 BUP_PYTHON_CONFIG=python3-config LDFLAGS=-L/usr/local/lib check
+    gmake V=1 -j6 BUP_PYTHON_CONFIG=python3-config LDFLAGS=-L/usr/local/lib check

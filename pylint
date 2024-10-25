@@ -36,12 +36,18 @@ testlibdir="$script_home/test/lib"
 
 export PYTHONPATH="$testlibdir${PYTHONPATH:+:$PYTHONPATH}"
 
+if ! [ -z "${V:-}" ] && [ "$V" = "1" ] ; then
+  SETX="set -x"
+else
+  SETX=
+fi
+
 if test "$#" -eq 0; then
-    set -x
+    $SETX
     dev/bup-python -m pylint lib
     # unused-wildcard-import: we always "import * from wvpytest"
     dev/bup-python -m pylint -d unused-wildcard-import test/lib test/int
 else
-    set -x
+    $SETX
     exec dev/bup-python -m pylint "$@"
 fi

@@ -14,7 +14,7 @@ export PYTHONPATH="$testlibdir${PYTHONPATH:+:$PYTHONPATH}"
 exec dev/bup-python "$0" ${1+"$@"}
 """
 
-import pytest, shlex, sys
+import pytest, shlex, sys, os
 
 argv = ['-v', '-m', 'not release']
 
@@ -41,5 +41,6 @@ except ModuleNotFoundError: # delete all -n opts
             argv.append(sys.argv[i])
             i += 1
 
-print(' '.join([shlex.quote(x) for x in ['pytest'] + argv]), file=sys.stderr)
+if os.environ.get('V') == '1':
+    print(' '.join([shlex.quote(x) for x in ['pytest'] + argv]), file=sys.stderr)
 sys.exit(pytest.main(args=argv))
