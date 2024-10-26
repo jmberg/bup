@@ -51,11 +51,12 @@ class RemoteRepo(BaseRepo):
     def is_remote(self):
         return True
 
-    def cat(self, ref):
+    def cat(self, ref, include_data=True):
         # Yield all the data here so that we don't finish the
         # cat_batch iterator (triggering its cleanup) until all of the
         # data has been read.  Otherwise we'd be out of sync with the
         # server.
+        assert include_data # not supported on server yet
         items = self.client.cat_batch((ref,))
         oidx, typ, size, it = info = next(items)
         yield info[:-1]

@@ -192,10 +192,15 @@ class BaseRepo:
         """
 
     @notimplemented
-    def cat(self, ref):
+    def cat(self, ref, include_data=True):
         """
         If ref does not exist, yield (None, None, None).  Otherwise yield
         (oidx, type, size), and then all of the data associated with ref.
+
+        If include_data is False, stop after the initial tuple.
+        FIXME: should think about this - the encrypted repo can get the
+               oidx/type fairly easily, but not the size ... but we don't
+               need the size even for gc use case
         """
 
     @notimplemented

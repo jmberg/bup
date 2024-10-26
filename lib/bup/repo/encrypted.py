@@ -825,12 +825,12 @@ class EncryptedRepo(ConfigRepo):
         # return False so we don't have to implement resolve()
         return False
 
-    def cat(self, ref):
+    def cat(self, ref, include_data=True):
         """If ref does not exist, yield (None, None, None).  Otherwise yield
         (oidx, type, size), and then all of the data associated with
         ref.
-
         """
+        assert include_data # not yet supported
         self._synchronize_idxes()
 
         if len(ref) == 40 and all(x in b'0123456789abcdefABCDEF' for x in ref):
