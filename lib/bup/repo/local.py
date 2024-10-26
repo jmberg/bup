@@ -75,8 +75,8 @@ class LocalRepo(BaseRepo):
         git.delete_ref(refname, hexlify(oldval) if oldval else None,
                        repo_dir=self.repo_dir)
 
-    def cat(self, ref):
-        it = self._cp.get(ref)
+    def cat(self, ref, include_data=True):
+        it = self._cp.get(ref, include_data=include_data)
         oidx, typ, size = info = next(it)
         yield info
         if oidx: yield from it
