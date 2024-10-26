@@ -70,12 +70,15 @@ def _git_exo(cmd, **kwargs):
         raise GitError('%r returned %d' % (cmd, proc.returncode))
     return result
 
-def git_config_get(option, repo_dir=None, opttype=None, cfg_file=None):
+def repo_cfg_file(repo_dir, cfg_file):
     assert not (repo_dir and cfg_file), "repo_dir and cfg_file cannot both be used"
     if cfg_file:
-        cmd = [b'git', b'config', b'--file', cfg_file, b'--null']
-    else:
-        cmd = [b'git', b'--git-dir', repo_dir or repo(), b'config', b'--null']
+        return cfg_file
+    return os.path.join(repo_dir or repo(), b'config')
+
+def git_config_get(option, repo_dir=None, opttype=None, cfg_file=None):
+    cfg_file = repo_cfg_file(repo_dir, cfg_file)
+    cmd = [b'git', b'config', b'--file', cfg_file, b'--null']
     if opttype == 'int':
         cmd.extend([b'--int'])
     else:
