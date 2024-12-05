@@ -7,6 +7,7 @@ from bup import options, git
 from bup.compat import pairwise
 from bup.helpers import EXIT_FALSE, EXIT_TRUE, log, qprogress, reprogress
 from bup.io import byte_stream, path_msg
+from bup.repo import LocalRepo
 
 
 optspec = """
@@ -25,9 +26,9 @@ def obj_type_and_data_ofs(buf):
     return kind, i + 1
 
 class Pack:
-    def __init__(self, idx, cp):
+    def __init__(self, idx, repo):
         self._idx = idx
-        self._cp = cp
+        self._repo = repo
         self._f = None
 
     def __enter__(self):
@@ -62,7 +63,7 @@ class Pack:
                 data = zlib.decompress(data)
                 yield oid, git._typermap[kind], data
             elif kind in (5, 6, 7): # reserved obj_ofs_delta obj_ref_delta
-                it = self._cp.get(hexlify(oid))
+                it = self._repo.cat(hexlify(oid))
                 _, tp, _ = next(it)
                 data = b''.join(it)
                 if tp == b'blob':
@@ -79,43 +80,42 @@ def main(argv):
     if extra:
         o.fatal("no arguments expected")
 
-    git.check_repo_or_die()
-
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
-    cp = git.cp()
-    ret = EXIT_TRUE
-    with git.PackIdxList(git.repo(b'objects/pack')) as mi:
-        idxlist = glob.glob(path.join(git.repo(b'objects/pack'), b'*.idx'))
-        obj_n = 0
-        for idxname in idxlist:
-            with git.open_idx(idxname) as idx:
-                obj_n += idx.nsha
-        obj_i = 0
-        for idxname in idxlist:
-            with git.open_idx(idxname) as idx, Pack(idx, cp) as pack:
-                for oid, tp, data in pack:
-                    # bup doesn't generate tag objects
-                    if tp == b'tag':
-                        out.flush()
-                        sys.stderr.flush()
-                        log(f'warning: skipping tag object {oid.hex()}\n')
-                        reprogress()
-                        continue
-                    if tp == b'tree':
-                        shalist = (x[2] for x in git.tree_decode(data))
-                    elif tp == b'commit':
-                        commit = git.parse_commit(data)
-                        shalist = map(unhexlify, commit.parents + [commit.tree])
-                    else:
-                        raise Exception(f'unexpected object type {tp}')
-                    for suboid in shalist:
-                        if not mi.exists(suboid):
-                            out.write(b'no %s for %s\n'
-                                      % (hexlify(suboid), hexlify(oid)))
-                            ret = EXIT_FALSE
+
+    with LocalRepo() as repo:
+        ret = EXIT_TRUE
+        with git.PackIdxList(repo.packdir()) as mi:
+            idxlist = glob.glob(path.join(repo.packdir(), b'*.idx'))
+            obj_n = 0
+            for idxname in idxlist:
+                with git.open_idx(idxname) as idx:
+                    obj_n += idx.nsha
+            obj_i = 0
+            for idxname in idxlist:
+                with git.open_idx(idxname) as idx, Pack(idx, repo) as pack:
+                    for oid, tp, data in pack:
+                        # bup doesn't generate tag objects
+                        if tp == b'tag':
+                            out.flush()
+                            sys.stderr.flush()
+                            log(f'warning: skipping tag object {oid.hex()}\n')
                             reprogress()
-                obj_i += idx.nsha
-                obj_frac = obj_i / obj_n
-                qprogress(f'scanned {obj_i}/{obj_n} {obj_frac:.2%}\r')
+                            continue
+                        if tp == b'tree':
+                            shalist = (x[2] for x in git.tree_decode(data))
+                        elif tp == b'commit':
+                            commit = git.parse_commit(data)
+                            shalist = map(unhexlify, commit.parents + [commit.tree])
+                        else:
+                            raise Exception(f'unexpected object type {tp}')
+                        for suboid in shalist:
+                            if not mi.exists(suboid):
+                                out.write(b'no %s for %s\n'
+                                          % (hexlify(suboid), hexlify(oid)))
+                                ret = EXIT_FALSE
+                                reprogress()
+                    obj_i += idx.nsha
+                    obj_frac = obj_i / obj_n
+                    qprogress(f'scanned {obj_i}/{obj_n} {obj_frac:.2%}\r')
     return ret
