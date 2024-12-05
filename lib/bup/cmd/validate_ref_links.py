@@ -18,9 +18,6 @@ def main(argv):
     opt, flags, extra = o.parse_bytes(argv[1:])
     verbosity = opt.verbose
 
-    git.check_repo_or_die()
-    cat_pipe = git.cp()
-
     ref_missing = 0
     ref_info = []
     with LocalRepo() as repo:
@@ -43,18 +40,18 @@ def main(argv):
             else:
                 o.fatal(f"can't currently handle VFS {kind} for {path_msg(ref)}")
 
-    found_missing = 0
-    # Wanted all refs, or at least some specified weren't missing
-    if not extra or (extra and ref_info):
-        existing_count = count_objects(git.repo(b'objects/pack'), verbosity)
-        if verbosity:
-            log(f'found {existing_count} objects\n')
+        found_missing = 0
+        # Wanted all refs, or at least some specified weren't missing
+        if not extra or (extra and ref_info):
+            existing_count = count_objects(repo.packdir(), verbosity)
+            if verbosity:
+                log(f'found {existing_count} objects\n')
 
-        if existing_count:
-            with git.PackIdxList(git.repo(b'objects/pack')) as idxl:
-                live_objects, live_trees, found_missing = \
-                    find_live_objects(existing_count, cat_pipe, idxl, refs=ref_info,
-                                      verbosity=verbosity, count_missing=True)
-                live_objects.close()
+            if existing_count:
+                with git.PackIdxList(repo.packdir()) as idxl:
+                    live_objects, live_trees, found_missing = \
+                        find_live_objects(repo, existing_count, idxl, refs=ref_info,
+                                          verbosity=verbosity, count_missing=True)
+                    live_objects.close()
 
     return EXIT_FALSE if (ref_missing + found_missing) else EXIT_TRUE
