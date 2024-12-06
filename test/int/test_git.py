@@ -16,8 +16,15 @@ from bup.helpers import OBJECT_EXISTS, localtime, log, mkdirp, readpipe
 bup_exe = path.exe()
 
 
+def get_cat_data(cat_iterator, expected_type):
+    _, kind, _ = next(cat_iterator)
+    if kind != expected_type:
+        raise Exception('expected %r, saw %r' % (expected_type, kind))
+    return b''.join(cat_iterator)
+
+
 def get_commit_items(id, cp):
-    return git.parse_commit(git.get_cat_data(cp.get(id), b'commit'))
+    return git.parse_commit(get_cat_data(cp.get(id), b'commit'))
 
 
 def exc(*cmd):

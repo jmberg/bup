@@ -250,12 +250,6 @@ def parse_commit(content):
                       message=matches['message'])
 
 
-def get_cat_data(cat_iterator, expected_type):
-    _, kind, _ = next(cat_iterator)
-    if kind != expected_type:
-        raise Exception('expected %r, saw %r' % (expected_type, kind))
-    return b''.join(cat_iterator)
-
 def _local_git_date_str(epoch_sec):
     return b'%d %s' % (epoch_sec, utc_offset_str(epoch_sec))
 
