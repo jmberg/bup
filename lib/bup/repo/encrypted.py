@@ -839,7 +839,7 @@ class EncryptedRepo(ConfigRepo):
             if oid is None:
                 return None, None, None, None
         oidx = hexlify(oid)
-        need_data = include_size or include_data
+        need_data = True if include_size or include_data else False
         res = self.idxlist.exists(oid,
                                   want_source=need_data,
                                   want_offset=need_data,
@@ -848,25 +848,30 @@ class EncryptedRepo(ConfigRepo):
             return None, None, None, None
         where = res.pack
         offs = res.offset
+        objtype = git._typermap[res.crc]
+        if isinstance(include_data, tuple):
+            need_data = include_size or objtype in include_data
+            return_data = True
+        else:
+            return_data = include_data
         if need_data:
             assert where.startswith(b'pack-') and where.endswith(b'.idx')
             where = where.replace(b'.idx', b'.encpack')
             # Kind.DATA / Kind.METADATA are equivalent here
             ec = self._open_read(where, Kind.DATA, cache=True)
-            objtype, data = ec.read(offs)
-            assert objtype == res.crc, f"corrupt idx/pack for {oidx}"
+            enc_type, data = ec.read(offs)
+            assert enc_type == res.crc, f"corrupt idx/pack for {oidx}"
             sz = len(data)
         else:
-            objtype = res.crc
             data = None
             sz = None
-        if include_data:
+        if return_data:
             def _data_iter(d):
                 yield d
             data_iter = _data_iter(data)
         else:
             data_iter = None
-        return (oidx, git._typermap[objtype],
+        return (oidx, objtype,
                 sz if include_size else None,
                 data_iter)
 
