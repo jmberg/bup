@@ -213,9 +213,7 @@ def main(argv):
                 # and the root - separately to get the tree
                 tree = stack.pop()
 
-                cat = srcrepo.cat(hexlify(commit.coid))
-                info = next(cat)
-                data = b''.join(cat)
+                data = srcrepo.get_data(hexlify(commit.coid), b'commit')
                 ci = git.parse_commit(data)
                 newref = dstrepo.write_commit(tree, oldref,
                                               ci.author_name + b' <' + ci.author_mail + b'>',
