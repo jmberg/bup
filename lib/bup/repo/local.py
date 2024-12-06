@@ -76,14 +76,27 @@ class LocalRepo(BaseRepo):
                        repo_dir=self.repo_dir)
 
     def get(self, ref, *, include_size=True, include_data=True):
-        it = self._cp.get(ref, include_data=include_data)
+        it = self._cp.get(ref, include_data=True if (include_data is True) else False)
         oidx, typ, size = next(it)
+        if isinstance(include_data, tuple):
+            for _ in it: assert False
+            include_data = typ in include_data
+            it = self._cp.get(ref, include_data=include_data)
+            next(it)
         if include_data and not oidx:
             # there cannot be data if no object was found
             for _ in it: assert False
+        if include_data:
+            data_it = it
+        else:
+            data_it = None
+            for _ in it: assert False
+        if isinstance(include_data, tuple) and not typ in include_data:
+            for _ in data_it: pass
+            data_it = None
         return (oidx, typ,
                 size if include_size else None,
-                it if (include_data and oidx) else None)
+                data_it)
 
     def refs(self, patterns=None, limit_to_heads=False, limit_to_tags=False):
         yield from git.list_refs(patterns=patterns,

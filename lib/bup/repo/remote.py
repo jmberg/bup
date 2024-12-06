@@ -56,7 +56,7 @@ class RemoteRepo(BaseRepo):
         # cat_batch iterator (triggering its cleanup) until all of the
         # data has been read.  Otherwise we'd be out of sync with the
         # server.
-        assert include_data # not supported on server yet
+        assert include_data is True # not supported on server yet
         it = self.client.cat(ref)
         oidx, typ, sz = next(it)
         if include_data and not oidx:

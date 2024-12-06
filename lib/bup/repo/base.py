@@ -216,6 +216,8 @@ class BaseRepo:
         Return a tuple of (oid, type, size, data_iterator), where the
         size is None if include_size is False, and data_iterator is
         None when include_data is False.
+        In addition to being True, include_data may be a tuple of object
+        types to retrieve the data for.
         """
 
     @notimplemented
