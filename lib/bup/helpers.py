@@ -147,17 +147,18 @@ def os_closed(x): return finalized(x, os.close)
 OBJECT_EXISTS = None
 
 class ObjectLocation:
-    __slots__ = 'pack', 'offset'
-    def __init__(self, pack, offset):
+    __slots__ = 'pack', 'offset', 'crc'
+    def __init__(self, pack, offset, crc):
         self.pack = pack
         self.offset = offset
+        self.crc = crc
     def __setattr__(self, k, v):
         if self is not OBJECT_EXISTS:
             return super().__setattr__(k, v)
         raise AttributeError(f'Cannot modify read-only instance attribute {k}',
                              name=k, obj=self)
 
-OBJECT_EXISTS = ObjectLocation(None, None)
+OBJECT_EXISTS = ObjectLocation(None, None, None)
 # pylint: enable=invalid-name
 
 sc_arg_max = os.sysconf('SC_ARG_MAX')
