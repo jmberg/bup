@@ -825,12 +825,11 @@ class EncryptedRepo(ConfigRepo):
         # return False so we don't have to implement resolve()
         return False
 
-    def cat(self, ref, include_data=True):
+    def get(self, ref, *, include_size=True, include_data=True):
         """If ref does not exist, yield (None, None, None).  Otherwise yield
         (oidx, type, size), and then all of the data associated with
         ref.
         """
-        assert include_data # not yet supported
         self._synchronize_idxes()
 
         if len(ref) == 40 and all(x in b'0123456789abcdefABCDEF' for x in ref):
@@ -838,24 +837,38 @@ class EncryptedRepo(ConfigRepo):
         else:
             oid = self.read_ref(ref)
             if oid is None:
-                yield (None, None, None)
-                return
+                return None, None, None, None
         oidx = hexlify(oid)
+        need_data = include_size or include_data
         res = self.idxlist.exists(oid,
-                                  want_source=True,
-                                  want_offset=True)
+                                  want_source=need_data,
+                                  want_offset=need_data,
+                                  want_crc=True)
         if res is None:
-            yield (None, None, None)
-            return
+            return None, None, None, None
         where = res.pack
         offs = res.offset
-        assert where.startswith(b'pack-') and where.endswith(b'.idx')
-        where = where.replace(b'.idx', b'.encpack')
-        # Kind.DATA / Kind.METADATA are equivalent here
-        ec = self._open_read(where, Kind.DATA, cache=True)
-        objtype, data = ec.read(offs)
-        yield (oidx, git._typermap[objtype], len(data))
-        yield data
+        if need_data:
+            assert where.startswith(b'pack-') and where.endswith(b'.idx')
+            where = where.replace(b'.idx', b'.encpack')
+            # Kind.DATA / Kind.METADATA are equivalent here
+            ec = self._open_read(where, Kind.DATA, cache=True)
+            objtype, data = ec.read(offs)
+            assert objtype == res.crc, f"corrupt idx/pack for {oidx}"
+            sz = len(data)
+        else:
+            objtype = res.crc
+            data = None
+            sz = None
+        if include_data:
+            def _data_iter(d):
+                yield d
+            data_iter = _data_iter(data)
+        else:
+            data_iter = None
+        return (oidx, git._typermap[objtype],
+                sz if include_size else None,
+                data_iter)
 
     def join(self, ref):
         return vfs.join(self, ref)
