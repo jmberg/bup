@@ -424,7 +424,7 @@ class PackIdx:
             return self._ofs_from_idx(idx)
         return None
 
-    def exists(self, hash, want_source=False, want_offset=False):
+    def exists(self, hash, want_source=False, want_offset=False, want_crc=False):
         """Return an ObjectLocation if the object exists in this
            index, otherwise None."""
         if not hash:
@@ -432,11 +432,13 @@ class PackIdx:
         idx = self._idx_from_hash(hash)
         if idx is not None:
             if want_source or want_offset:
-                ret = ObjectLocation(None, None)
+                ret = ObjectLocation(None, None, None)
                 if want_source:
                     ret.pack = os.path.basename(self.name)
                 if want_offset:
                     ret.offset = self._ofs_from_idx(idx)
+                if want_crc:
+                    ret.crc = self._crc_from_idx(idx)
                 return ret
             return OBJECT_EXISTS
         return None
@@ -497,6 +499,9 @@ class PackIdxV1(PackIdx):
         ofs = self.sha_ofs + idx * 24
         return struct.unpack_from('!I', self.map, offset=ofs)[0]
 
+    def _crc_from_idx(self, idx):
+        assert False, "not supported in pack idx v1"
+
     def _idx_to_hash(self, idx):
         if idx >= self.nsha or idx < 0:
             raise IndexError('invalid pack index index %d' % idx)
@@ -538,7 +543,8 @@ class PackIdxV2(PackIdx):
         self.fanout.append(0)
         self.nsha = self.fanout[255]
         self.sha_ofs = 8 + 256*4
-        self.ofstable_ofs = self.sha_ofs + self.nsha * 20 + self.nsha * 4
+        self.crctable_ofs = self.sha_ofs + self.nsha * 20
+        self.ofstable_ofs = self.crctable_ofs + self.nsha * 4
         self.ofs64table_ofs = self.ofstable_ofs + self.nsha * 4
         # Avoid slicing this for individual hashes (very high overhead)
         assert self.nsha
@@ -569,6 +575,12 @@ class PackIdxV2(PackIdx):
             raise IndexError('invalid pack index index %d' % idx)
         ofs32_ofs = self.ofstable_ofs + idx * 4
         return self._oid_ofs_from_ofs32_ofs(ofs32_ofs)
+
+    def _crc_from_idx(self, idx):
+        if idx >= self.nsha or idx < 0:
+            raise IndexError('invalid pack index index %d' % idx)
+        crc_ofs = self.crctable_ofs + idx * 4
+        return struct.unpack_from('!I', self.map, offset=crc_ofs)[0]
 
     def _idx_to_hash(self, idx):
         if idx >= self.nsha or idx < 0:
@@ -650,7 +662,7 @@ class PackIdxList:
     def __len__(self):
         return sum(len(pack) for pack in self.packs)
 
-    def exists(self, hash, want_source=False, want_offset=False):
+    def exists(self, hash, want_source=False, want_offset=False, want_crc=False):
         """Return an ObjectLocation if the object exists in this
            index, otherwise None."""
         global _total_searches
@@ -665,21 +677,26 @@ class PackIdxList:
                 return None
         for i in range(len(self.packs)):
             p = self.packs[i]
-            if want_offset and isinstance(p, midx.PackMidx):
-                get_src = True
+            get_src = want_source
+            if isinstance(p, midx.PackMidx):
+                get_src = want_source or want_offset or want_crc
+                # cannot retrieve directly, look up in src idx
                 get_ofs = False
+                get_crc = False
             else:
                 get_src = want_source
                 get_ofs = want_offset
+                get_crc = want_crc
             _total_searches -= 1  # will be incremented by sub-pack
-            ret = p.exists(hash, want_source=get_src, want_offset=get_ofs)
+            ret = p.exists(hash, want_source=get_src, want_offset=get_ofs, want_crc=get_crc)
             if ret:
                 # reorder so most recently used packs are searched first
                 self.packs = [p] + self.packs[:i] + self.packs[i+1:]
-                if want_offset and ret.offset is None:
+                if (want_offset and ret.offset is None) or (want_crc and ret.crc is None):
                     with open_idx(os.path.join(self.dir, ret.pack)) as np:
                         ret = np.exists(hash, want_source=want_source,
-                                        want_offset=True)
+                                        want_offset=want_offset,
+                                        want_crc=want_crc)
                     assert ret
                 return ret
         self.do_bloom = True
