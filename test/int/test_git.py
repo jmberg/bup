@@ -449,7 +449,31 @@ def test_midx_close(tmpdir):
             WVPASSEQ(False, b'deleted' in fn)
 
 
-def test_parse_git_int():
+def test_idx_exists_crc(tmpdir):
+    environ[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
+    git.init_repo(bupdir)
+    for i in range(10):
+        _create_idx(tmpdir, i)
+    oid = struct.pack('18xBB', 1, 7)
+    pack = b'pack-%s.idx' % hexlify(struct.pack('B19x', 1))
+
+    def check(l):
+        loc = l.exists(oid, want_crc=True)
+        WVPASSEQ(loc.crc, 7)
+        WVPASSEQ(loc.offset, None)
+        loc = l.exists(oid, want_source=True, want_offset=True, want_crc=True)
+        WVPASSEQ(loc.pack, pack)
+        WVPASSEQ(loc.offset, 700)
+        WVPASSEQ(loc.crc, 7)
+        WVPASSEQ(None, l.exists(struct.pack('18xBB', 1, 255), want_crc=True))
+
+    with git.PackIdxList(tmpdir) as l:
+        check(l)
+    git.auto_midx(tmpdir)
+    WVPASS(any(fn.endswith(b'.midx') for fn in os.listdir(tmpdir)))
+    with git.PackIdxList(tmpdir) as l:
+        check(l)
+
     parse = git.parse_git_int
     with raises(ConfigError, match="unrecognized --type int value ''"):
         parse(b'')
