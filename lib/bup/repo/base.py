@@ -203,6 +203,13 @@ class BaseRepo:
         if include_data:
             yield from data_iter
 
+    def get_data(self, ref, expected_type):
+        oidx, typ, sz, data_it = self.get(ref)
+        assert typ == expected_type
+        data = b''.join(data_it)
+        assert len(data) == sz
+        return data
+
     @notimplemented
     def get(self, ref, *, include_size=True, include_data=True):
         """

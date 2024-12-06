@@ -810,7 +810,7 @@ class EncryptedRepo(ConfigRepo):
             assert len(ref_or_refs) == 1
             ref = ref_or_refs[0]
         while True:
-            commit = git.parse_commit(git.get_cat_data(self.cat(ref), b'commit'))
+            commit = git.parse_commit(self.get_data(ref, b'commit'))
             if format is None:
                 yield ref
             else:

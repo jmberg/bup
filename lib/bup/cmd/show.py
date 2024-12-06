@@ -68,6 +68,6 @@ def main(argv):
                                exists, mode, b'tree' if S_ISDIR(mode) else b'blob',
                                hexlify(hash), indent, name))
                     if recurse and S_ISDIR(mode):
-                        data = git.get_cat_data(r.cat(hexlify(hash)), b'tree')
+                        data = r.get_data(hexlify(hash), b'tree')
                         print_tree_contents(data, indent + b'  |')
             print_tree_contents(b''.join(cat))
