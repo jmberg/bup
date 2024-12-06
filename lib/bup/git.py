@@ -1577,8 +1577,7 @@ def walk_object(repo, oidx, *, stop_at=None, include_data=None,
                            data=bool(oid_exists(oid)) if oid_exists else None)
             continue
 
-        item_it = repo.cat(oidx)
-        get_oidx, typ, _ = next(item_it)
+        get_oidx, typ, _, item_it = repo.get(oidx, include_data=include_data or (b'commit', b'tree'))
         if not get_oidx:
             yield WalkItem(oid=unhexlify(oidx), type=exp_typ,
                            chunk_path=chunk_path, path=parent_path,
@@ -1591,9 +1590,7 @@ def walk_object(repo, oidx, *, stop_at=None, include_data=None,
 
         # FIXME: set the mode based on the type when the mode is None
         if typ == b'blob' and not include_data:
-            # Dump data until we can ask cat_pipe not to fetch it
-            for ignored in item_it:
-                pass
+            assert item_it is None
             data = None
         else:
             data = b''.join(item_it)
