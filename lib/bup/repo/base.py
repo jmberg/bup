@@ -191,16 +191,24 @@ class BaseRepo:
         check against it while deleting.
         """
 
-    @notimplemented
     def cat(self, ref, include_data=True):
         """
         If ref does not exist, yield (None, None, None).  Otherwise yield
         (oidx, type, size), and then all of the data associated with ref.
 
         If include_data is False, stop after the initial tuple.
-        FIXME: should think about this - the encrypted repo can get the
-               oidx/type fairly easily, but not the size ... but we don't
-               need the size even for gc use case
+        """
+        oidx, typ, sz, data_iter = self.get(ref, include_data=include_data)
+        yield oidx, typ, sz
+        if include_data:
+            yield from data_iter
+
+    @notimplemented
+    def get(self, ref, *, include_size=True, include_data=True):
+        """
+        Return a tuple of (oid, type, size, data_iterator), where the
+        size is None if include_size is False, and data_iterator is
+        None when include_data is False.
         """
 
     @notimplemented

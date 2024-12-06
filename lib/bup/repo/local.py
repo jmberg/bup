@@ -75,12 +75,15 @@ class LocalRepo(BaseRepo):
         git.delete_ref(refname, hexlify(oldval) if oldval else None,
                        repo_dir=self.repo_dir)
 
-    def cat(self, ref, include_data=True):
+    def get(self, ref, *, include_size=True, include_data=True):
         it = self._cp.get(ref, include_data=include_data)
-        oidx, typ, size = info = next(it)
-        yield info
-        if oidx: yield from it
-        assert not next(it, None)
+        oidx, typ, size = next(it)
+        if include_data and not oidx:
+            # there cannot be data if no object was found
+            for _ in it: assert False
+        return (oidx, typ,
+                size if include_size else None,
+                it if (include_data and oidx) else None)
 
     def refs(self, patterns=None, limit_to_heads=False, limit_to_tags=False):
         yield from git.list_refs(patterns=patterns,

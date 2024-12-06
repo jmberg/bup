@@ -51,17 +51,19 @@ class RemoteRepo(BaseRepo):
     def is_remote(self):
         return True
 
-    def cat(self, ref, include_data=True):
+    def get(self, ref, *, include_size=True, include_data=True):
         # Yield all the data here so that we don't finish the
         # cat_batch iterator (triggering its cleanup) until all of the
         # data has been read.  Otherwise we'd be out of sync with the
         # server.
         assert include_data # not supported on server yet
-        items = self.client.cat_batch((ref,))
-        oidx, typ, size, it = info = next(items)
-        yield info[:-1]
-        if oidx: yield from it
-        assert not next(items, None)
+        it = self.client.cat(ref)
+        oidx, typ, sz = next(it)
+        if include_data and not oidx:
+            for _ in it: assert False
+        return (oidx, typ,
+                sz if include_size else None,
+                it if (include_data and oidx) else None)
 
     def write_commit(self, tree, parent,
                      author, adate_sec, adate_tz,

@@ -502,7 +502,6 @@ def root_items(repo, names=None, want_meta=True):
         it = repo.cat(b'refs/heads/' + ref)
         oidx, typ, size = next(it)
         if not oidx:
-            for _ in it: pass
             continue
         assert typ == b'commit'
         commit = parse_commit(b''.join(it))

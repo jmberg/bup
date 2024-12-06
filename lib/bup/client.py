@@ -375,39 +375,41 @@ class Client:
         if e:
             raise KeyError(str(e))
 
-    def cat_batch(self, refs):
+    def cat(self, ref):
         self._require_command(b'cat-batch')
         self.check_busy()
         self._busy = b'cat-batch'
         conn = self.conn
         conn.write(b'cat-batch\n')
         # FIXME: do we want (only) binary protocol?
-        for ref in refs:
-            assert ref
-            assert b'\n' not in ref
-            conn.write(ref)
-            conn.write(b'\n')
+        assert ref
+        assert b'\n' not in ref
+        conn.write(ref)
         conn.write(b'\n')
-        for ref in refs:
+        # protocol supports multiple refs, end of refs:
+        conn.write(b'\n')
+        try:
             info = conn.readline()
             if info == b'missing\n':
-                yield None, None, None, None
-                continue
+                yield None, None, None
+                return
             if not (info and info.endswith(b'\n')):
                 raise ClientError('Hit EOF while looking for object info: %r'
                                   % info)
             oidx, oid_t, size = info.split(b' ')
             size = int(size)
             cr = chunkyreader(conn, size)
-            yield oidx, oid_t, size, cr
+            yield oidx, oid_t, size
+            yield from cr
             detritus = next(cr, None)
             if detritus:
                 raise ClientError('unexpected leftover data ' + repr(detritus))
-        # FIXME: confusing
-        not_ok = self.check_ok()
-        if not_ok:
-            raise not_ok
-        self._not_busy()
+        finally:
+            # FIXME: confusing
+            not_ok = self.check_ok()
+            if not_ok:
+                raise not_ok
+            self._not_busy()
 
     def refs(self, patterns=None, limit_to_heads=False, limit_to_tags=False):
         patterns = patterns or tuple()
