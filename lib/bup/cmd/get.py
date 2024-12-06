@@ -11,7 +11,7 @@ from bup.compat import (
     environ,
     hexstr
 )
-from bup.git import MissingObject, get_cat_data, parse_commit
+from bup.git import MissingObject, parse_commit
 from bup.helpers import debug1, log, note_error, saved_errors
 from bup.helpers import hostname, tty_width
 from bup.io import path_msg
@@ -212,7 +212,7 @@ def get_random_item(name, hash, src_repo, dest_repo, opt):
 
 def append_commit(name, hash, parent, src_repo, dest_repo, opt):
     now = time.time()
-    items = parse_commit(get_cat_data(src_repo.cat(hash), b'commit'))
+    items = parse_commit(src_repo.get_data(hash, b'commit'))
     tree = unhexlify(items.tree)
     author = b'%s <%s>' % (items.author_name, items.author_mail)
     author_time = (items.author_sec, items.author_offset)
@@ -406,7 +406,7 @@ def handle_ff(item, src_repo, dest_repo, opt):
     if not dest_oidx or dest_oidx in src_repo.rev_list(src_oidx):
         # Can fast forward.
         get_random_item(item.spec.src, src_oidx, src_repo, dest_repo, opt)
-        commit_items = parse_commit(get_cat_data(src_repo.cat(src_oidx), b'commit'))
+        commit_items = parse_commit(src_repo.get_data(src_oidx, b'commit'))
         return item.src.hash, unhexlify(commit_items.tree)
     misuse('destination is not an ancestor of source for %s'
            % spec_msg(item.spec))
@@ -540,7 +540,7 @@ def handle_replace(item, src_repo, dest_repo, opt):
     assert(item.dest.type == 'branch' or not item.dest.type)
     src_oidx = hexlify(item.src.hash)
     get_random_item(item.spec.src, src_oidx, src_repo, dest_repo, opt)
-    commit_items = parse_commit(get_cat_data(src_repo.cat(src_oidx), b'commit'))
+    commit_items = parse_commit(src_repo.get_data(src_oidx, b'commit'))
     return item.src.hash, unhexlify(commit_items.tree)
 
 

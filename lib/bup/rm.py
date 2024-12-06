@@ -7,7 +7,7 @@ from bup.helpers import add_error, die_if_errors, log, saved_errors
 from bup.io import path_msg
 
 def get_commit_items(repo, hash):
-    data = git.get_cat_data(repo.cat(hash), b'commit')
+    data = repo.get_data(hash, b'commit')
     return git.parse_commit(data)
 
 def append_commit(repo, hash, parent):
