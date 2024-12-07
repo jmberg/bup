@@ -157,7 +157,7 @@ class DisplayInfo:
 
         query = encode_query(params, param_info)
         meta = resolved_item.meta
-        if not isinstance(meta, Metadata):
+        if meta is not None and not isinstance(meta, Metadata):
             meta = None
         oidx = getattr(resolved_item, 'oid', None)
         if oidx: oidx = hexlify(oidx)

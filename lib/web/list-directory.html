@@ -46,9 +46,7 @@
                         <th class="dir-meta-mode">Mode</th>
                         <th class="dir-meta-owner" colspan="2">Owner</th>
                         <th class="dir-meta-group" colspan="2">Group</th>
-                    {% end %}
-                    <th class="dir-size">Size</th>
-                    {% if params.get('meta') %}
+                        <th class="dir-size">Size</th>
                         <th class="dir-meta-mtime">Last modified</th>
                     {% end %}
                     <th class="dir-name">Name</th>
@@ -58,19 +56,27 @@
                     {% if params.get('hash') %}
                         <td class="dir-hash">{{ item.oid if item.oid else '' }}</td>
                     {% end %}
-                    {% if params.get('meta') and item.meta is not None %}
+                    {% if params.get('meta') %}
+                      {%if item.meta is not None %}
                         <td class="dir-meta-mode">{{ mode_str(item.meta.mode) }}</td>
                         <td class="dir-meta-owner">{{ '' if item.meta.user is None else item.meta.user }}</td>
                         <td class="dir-meta-uid">{{ '' if item.meta.uid is None else item.meta.uid }}</td>
                         <td class="dir-meta-group">{{ '' if item.meta.group is None else item.meta.group }}</td>
                         <td class="dir-meta-gid">{{ '' if item.meta.gid is None else item.meta.gid }}</td>
-                    {% end %}
-                    <td class="dir-size">{{ '' if item.size is None else item.size }}</td>
-                    {% if params.get('meta') and item.meta %}
-                      <td class="dir-meta-mtime"> {{ local_time_str(item.meta.mtime) or '' }}</td>
+                        <td class="dir-size">{{ '' if item.size is None else item.size }}</td>
+                        <td class="dir-meta-mtime"> {{ local_time_str(item.meta.mtime) or '' }}</td>
+                      {% else %}
+                        <td class="dir-meta-mode"></td>
+                        <td class="dir-meta-owner"></td>
+                        <td class="dir-meta-uid"></td>
+                        <td class="dir-meta-group"></td>
+                        <td class="dir-meta-gid"></td>
+                        <td class="dir-size"></td>
+                        <td class="dir-meta-mtime"></td>
+                      {% end %}
                     {% end %}
                     <td class="dir-name">
-                      <a href="{% raw item.link %}">{{ name }}</a>
+                      <a href="{% raw item.link %}">{{ item.display }}</a>
                       {% if params.get('meta') and item.meta and item.meta.symlink_target %}
                         → {{ item.meta.symlink_target }}
                       {% end %}
