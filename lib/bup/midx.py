@@ -61,6 +61,7 @@ class PackMidx:
                 if not os.path.exists(os.path.join(idxdir, name)):
                     missing.append(name)
             if missing:
+                self.closed = True
                 raise MissingIdxs(paths=missing)
             contexts.pop_all()
 
