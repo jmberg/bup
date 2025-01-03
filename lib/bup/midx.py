@@ -175,14 +175,13 @@ def open_midx(path, *, ignore_missing=True):
             contexts.pop_all()
             try:
                 midx = PackMidx(path, mmap, _internal=True)
+                return midx
             except MissingIdxs as ex:
                 missing = ex.paths
-            if not missing:
-                return midx
-            pathm = path_msg(path)
-            for missing in ex.paths:
-                imsg = path_msg(missing)
-                log(f'Warning: ignoring midx {pathm} (missing idx {imsg})\n')
+                pathm = path_msg(path)
+                for missing in ex.paths:
+                    imsg = path_msg(missing)
+                    log(f'Warning: ignoring midx {pathm} (missing idx {imsg})\n')
             return None
         pathm = path_msg(path)
         if ver < MIDX_VERSION:
