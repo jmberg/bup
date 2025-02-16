@@ -13,7 +13,7 @@ The following options may be set in the relevant `git` config
 
 # OPTIONS
 
-bup.split-trees
+bup.split.trees
 :   When this boolean option is set to true, `bup` will attempt to
     split trees (directories) when writing to the repository during,
     for example `bup save ...`, `bup gc ..`, etc.  This can notably
