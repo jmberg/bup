@@ -35,8 +35,7 @@ Subcommands are described in separate man pages.  For example
     environment variable or using the default `~/.bup`
     location.
 
-
-# COMMONLY USED SUBCOMMANDS
+# COMMON COMMANDS
 
 `bup-fsck`(1)
 :   Check backup sets for damage and add redundancy information
@@ -47,53 +46,72 @@ Subcommands are described in separate man pages.  For example
 `bup-fuse`(1)
 :   Mount your backup sets as a filesystem
 
+`bup-gc`(1)
+:   Remove unreferenced, unneeded data
+
+`bup-get`(1)
+:   Transfer/transform items between/within repositories
+
 `bup-help`(1)
 :   Print detailed help for the given command
 
 `bup-index`(1)
 :   Create or display the index of files to back up
 
-`bup-on`(1)
-:   Backup a remote machine to the local one
-
-`bup-restore`(1)
-:   Extract files from a backup set
-
-`bup-save`(1)
-:   Save files into a backup set (note: run "bup index" first)
-
-`bup-web`(1)
-:   Launch a web server to examine backup sets
-
-
-# RARELY USED SUBCOMMANDS
-
-`bup-damage`(1)
-:   Deliberately destroy data
-
-`bup-drecurse`(1)
-:   Recursively list files in your filesystem
-
 `bup-init`(1)
 :   Initialize a bup repository
-
-`bup-join`(1)
-:   Retrieve a file backed up using `bup-split`(1)
 
 `bup-ls`(1)
 :   Browse the files in your backup sets
 
-`bup-margin`(1)
-:   Determine how close your bup repository is to armageddon
+`bup-on`(1)
+:   Index/save/split/get/... a remote machine
 
-`bup-memtest`(1)
-:   Test bup memory usage statistics
+`bup-prune-older`(1)
+:   Remove older saves
+
+`bup-restore`(1)
+:   Extract files from a backup set
+
+`bup-rm`(1)
+:   Remove references to archive content
+
+`bup-save`(1)
+:   Save files into a backup set (note: run "bup index" first)
+
+`bup-version`(1)
+:   Report the version number of your copy of bup.
+
+`bup-web`(1)
+:   Launch a web server to examine backup sets
+
+# IMPORT COMMANDS
+
+`bup-import-duplicity`(1)
+:   Import from `duplicity`(1)
+
+`bup-import-rdiff-backup`(1)
+:   Import from `rdiff-backup`(1)
+
+`bup-import-rsnapshot`(1)
+:   Import from `rsnapshot`(1)
+
+# OTHER COMMANDS
+
+`bup-cat-file`(1)
+:   Extract archive content
+
+`bup-drecurse`(1)
+:   Recursively list files in your filesystem
+
+`bup-features`(1)
+:   Report the current status and capabilities of bup itself
+
+`bup-join`(1)
+:   Retrieve a file backed up using `bup-split`(1)
 
 `bup-midx`(1)
 :   Index objects to speed up future backups
-
-`bup-newliner`(1)
-:   Make sure progress messages don't overlap with output
 
 `bup-random`(1)
 :   Generate a stream of random output
@@ -104,12 +122,34 @@ Subcommands are described in separate man pages.  For example
 `bup-split`(1)
 :   Split a single file into its own backup set
 
+`bup-tag`(1)
+:   Tag a commit in the bup repository
+
+`bup-validate-object-links`(1)
+:   Scan the repository for broken object links
+
+`bup-validate-ref-links`(1)
+:   Check repository refs for links to missing objects
+
+# ESOTERIC COMMANDS
+
+`bup-bloom`(1)
+:   Benerates, regenerates, updates bloom filters
+
+`bup-damage`(1)
+:   Deliberately destroy data
+
+`bup-margin`(1)
+:   Determine how close your bup repository is to armageddon
+
+`bup-memtest`(1)
+:   Test bup memory usage statistics
+
+`bup-meta`(1)
+:   Create or extract a metadata archive
+
 `bup-tick`(1)
 :   Wait for up to one second.
-
-`bup-version`(1)
-:   Report the version number of your copy of bup.
-
 
 # ENVIRONMENT
 
@@ -117,9 +157,8 @@ Subcommands are described in separate man pages.  For example
 :   If set to `true`, `yes`, or `1`, assume the version of `git`
     in the path is acceptable.
 
-
 # SEE ALSO
 
-`git`(1) and the *README* file from the bup distribution.
+The *README* file from the bup distribution, `git`(1), and
+http://bup.github.io
 
-The home of bup is at <http://github.com/bup/bup/>.
