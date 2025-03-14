@@ -1305,6 +1305,7 @@ def establish_default_repo(path=None, *, must_exist=False):
 
     """
     global repodir
+    # Q: ok to prefer ~/.bup/.git to ~/.bup
     repodir = path or guess_repo()
     top = repo()
     pst = stat_if_exists(top + b'/objects/pack')
