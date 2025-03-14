@@ -1,4 +1,14 @@
 
+class _Base():
+    """Components shared by all repos."""
+    def __init__(self, config_get, *,
+                 compression_level, max_pack_size, max_pack_objects):
+        self.compression_level = compression_level
+        self.max_pack_objects = max_pack_objects
+        self.max_pack_size = max_pack_size \
+            or config_get(b'pack.packSizeLimit', opttype='int')
+
+
 def notimplemented(fn):
     def newfn(obj, *args, **kwargs):
         raise NotImplementedError(f'{obj.__class__.__name__}.{fn.__name__}')
@@ -8,12 +18,6 @@ class RepoProtocol:
     # Specification only; intentially has no implementations
     # Subclassing just indicates intent.
     # Currently, the vfs relies on id(repo) for caching paths.
-
-    def _validate_init(self):
-        """Ensures instance is sound; should be called by all subclasses."""
-        hasattr(self, 'compression_level')
-        hasattr(self, 'max_pack_objects')
-        hasattr(self, 'max_pack_size')
 
     @notimplemented
     def is_remote(self):
