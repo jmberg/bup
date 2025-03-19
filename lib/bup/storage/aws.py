@@ -336,6 +336,9 @@ class UploadFile:
             return self._bufs[idx]
         return self._bufs[idx][subpos:]
 
+    def __bytes__(self):
+        return b''.join(self._bufs)
+
 class S3Writer:
     def __init__(self, storage, name, kind):
         self.storage = None
@@ -379,7 +382,7 @@ class S3Writer:
 
     def _bg_upload(self, buf):
         ret = self.storage.s3.upload_part(
-            Body=buf,
+            Body=bytes(buf),
             Bucket=self.storage.bucket,
             ContentLength=len(buf),
             Key=self.objname,
