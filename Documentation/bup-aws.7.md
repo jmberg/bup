@@ -8,9 +8,7 @@ bup-aws - overview of the bup AWS storage driver
 
 # DESCRIPTION
 
-The bup AWS storage stores files in S3, and for consistency and atomicity
-reasons (when updating refs) uses a DynamoDB table for each repository as
-well.
+The bup AWS storage stores a repository in S3 compatible bucket.
 
 # RECOMMENDED CONFIGURATION
 
@@ -57,7 +55,6 @@ For using bup on AWS storage, a configuration like this is recommended
 
       # your storage, see below for the necessary permissions
       s3bucket = ...
-      dynamotable = ...
       region = ...
       accessKeyId = ...
       secretAccessKey = ...
@@ -127,16 +124,11 @@ downloadBlockSize = ... [optional, default 8k, must be > 0]
 s3bucket = ... [mandatory]
 : The S3 bucket in which to store objects other than the refs file(s).
 
-dynamotable = ... [mandatory]
-: The DynamoDB table in which to store the list of objects and the refs
-  file(s).
-
 region = ... [mandatory]
-: The AWS region in which the S3 bucket and DynamoDB table are located.
+: The AWS region in which the S3 bucket is located.
 
 accessKeyId = ... [mandatory unless sessionToken is given]
-: The access key ID for the AWS account that has access to the S3 bucket and
-  the DynamoDB table.
+: The access key ID for the AWS account that has access to the S3 bucket.
 
 secretAccessKey = ... [mandatory unless sessionToken is given]
 : The secret access key for the account.
@@ -242,22 +234,10 @@ deletion of (most of) your backup, with an AWS policy like this:
         {
           "Effect": "Allow",
           "Action": [
-            "dynamodb:DeleteItem",
-            "dynamodb:GetItem",
-            "dynamodb:PutItem",
-            "dynamodb:Query",
-            "dynamodb:Scan"
-          ],
-          "Resource": [
-            "<your DynamoDB table ARN>"
-          ]
-        },
-        {
-          "Effect": "Allow",
-          "Action": [
             "s3:AbortMultipartUpload",
             "s3:GetObject",
-            "s3:PutObject"
+            "s3:PutObject",
+            "s3:ListBucket",
           ],
           "Resource": [
             "<your S3 bucket ARN>",
@@ -269,27 +249,26 @@ deletion of (most of) your backup, with an AWS policy like this:
 
 Note that this specifies s3:GetObject, this is necessary to download
 indexes, at least if multiple machines are making backups to the same
-"repository" (DynamoDB table/S3 bucket). Use the encryption features
+"repository" (S3 bucket). Use the encryption features
 (see `bup-encrypted`(7)) to prevent (compromised) machines accessing
 old data.
 
 Since s3:PutObject is permitted, bucket versioning should be used to
 prevent overwrite of old data.
 
-Finally, also note that this doesn't prevent deletion of all entries
-in the DynamoDB table. This means that the backup refs can be deleted
-by any of the backup users, but this is recoverable by searching for
-commit objects in the packs, you can do that with only the idx files
-(as we store the object type in the CRC field). No code for that is
-available right now, however.
-This also means that all the entries could be deleted, resulting in a
-new backup storing all objects again, and deleting the local copy of
-the idx files.
+Finally, also note that this doesn't prevent overwrite of the refs
+object with one that has no history, or similar, so the backup refs
+can be deleted by any of the backup users. This is recoverable by
+searching for commit objects in the packs, you can do that with only
+the idx files (as we store the object type in the CRC field). No
+code for that is available right now, however.
+This also means that packs could be overwritten with almost empty
+ones, resulting in a new backup storing all objects again.
 
 # CONCURRENT WRITES
 
 It's safe to have multiple machines backing up into the same AWS repo
-(S3 bucket/dynamoDB table), with the following caveats:
+(S3 bucket), with the following caveats:
 
 1. Concurrent backups will not deduplicate against content that's being
    added, only against content that was there when they started.
@@ -307,9 +286,9 @@ After configuring appropriately
 
     bup init -r config:///path/to/file.conf
 
-will attempt to create the S3 bucket and DynamoDB table in the configured
-region. It will fail if you've already pre-created them, but bup will be
-able to use them no matter how they were created.
+will attempt to create the S3 bucket in the configured region. It will
+fail if you've already pre-created it, but bup will be able to use it
+no matter how it was created.
 
 # BUP
 

@@ -1,9 +1,7 @@
 """
 AWS storage
 
-Uses the following AWS products:
- * S3 object storage for data, metadata and idx files
- * DynamoDB for consistent file listing and config storage
+Uses S3 compatible object storage for data, metadata and idx files
 """
 import os
 import sys
@@ -12,7 +10,8 @@ import datetime
 import threading
 import queue
 
-from bup.storage import BupStorage, FileAlreadyExists, FileNotFound, Kind
+from bup.storage import BupStorage, FileNotFound, Kind
+# FIXME FileAlreadyExists
 
 try:
     import boto3
@@ -71,26 +70,32 @@ def _nowstr():
 
 def _munge(name):
     # do some sharding - S3 uses the first few characters for this
+    if name.startswith('bup/'):
+        return name
     assert name.startswith('pack-')
     return name[5:9] + '/' + name
+
+def _unmunge(name):
+    if name.startswith('bup/'):
+        return name
+    assert name[4:10] == '/pack-'
+    return name[5:]
 
 class S3Reader:
     def __init__(self, storage, name):
         self.storage = storage
         self.name = name
         self.objname = _munge(name)
-        response = storage.dynamo.query(TableName=storage.table,
-                                        ConsistentRead=True,
-                                        KeyConditionExpression='filename = :nm',
-                                        ExpressionAttributeValues={
-                                            ':nm': { 'S': name, }
-                                        })
-        assert response['Count'] in (0, 1)
-        if response['Count'] == 0:
+        try:
+            ret = storage.s3.head_object(
+                Bucket=storage.bucket,
+                Key=self.objname,
+            )
+        except BotoClientError: # FIXME?
             raise FileNotFound(name)
         self.offs = 0
-        assert name == response['Items'][0]['filename']['S']
-        self.size = int(response['Items'][0]['size']['N'])
+        self.etag = ret['ETag']
+        self.size = int(ret['ContentLength'])
 
     def read(self, sz=None, szhint=None):
         assert sz > 0, "size must be positive (%d)" % sz
@@ -340,7 +345,7 @@ class UploadFile:
         return b''.join(self._bufs)
 
 class S3Writer:
-    def __init__(self, storage, name, kind):
+    def __init__(self, storage, name, kind, overwrite):
         self.storage = None
         self.name = name
         self.objname = _munge(name)
@@ -351,29 +356,12 @@ class S3Writer:
         self.upload_id = None
         self.upload_thread = None
         self.chunk_size = storage.chunk_size
-        item = {
-            'filename': {
-                'S': name,
-            },
-            'tentative': {
-                'N': '1',
-            },
-            'timestamp': {
-                'N': _nowstr(),
-            },
-        }
-        try:
-            condition = "attribute_not_exists(filename)"
-            storage.dynamo.put_item(Item=item, TableName=storage.table,
-                                    ConditionExpression=condition)
-        except BotoClientError as e:
-            _check_exc(e, 'ConditionalCheckFailedException')
-            raise FileAlreadyExists(name)
-        # assign this late, so we don't accidentally delete
-        # the item again while from __del__.
+        self.overwrite = overwrite
         self.storage = storage
-        self.upload_thread = UploadThread(self._bg_upload)
-        self.upload_thread.start()
+
+        if self.overwrite is None:
+            self.upload_thread = UploadThread(self._bg_upload)
+            self.upload_thread.start()
 
     def __del__(self):
         self._end_thread()
@@ -411,7 +399,7 @@ class S3Writer:
     def write(self, data):
         sz = len(data)
         # must send at least 5 MB chunks (except last)
-        if len(self.buf) + sz >= self.chunk_size:
+        if self.upload_thread and len(self.buf) + sz >= self.chunk_size:
             # upload exactly the chunk size so we avoid even any kind
             # of fingerprinting here... seems paranoid but why not
             needed = self.chunk_size - len(self.buf)
@@ -434,6 +422,18 @@ class S3Writer:
         if self.storage is None:
             self._end_thread()
             return
+        if self.overwrite is not None:
+            assert self.upload_thread is None
+            try:
+                self.storage.s3.put_object(
+                    Bucket=self.storage.bucket,
+                    Key=self.objname,
+                    Body=bytes(self.buf),
+                    IfMatch=self.overwrite.etag,
+                )
+            except:
+                raise # FIXME
+            return
         self._upload_buf()
         self._end_thread()
         storage = self.storage
@@ -449,20 +449,9 @@ class S3Writer:
                     for n, etag in enumerate(self.etags)
                 ]
             },
-            UploadId=self.upload_id
+            UploadId=self.upload_id,
+            IfNoneMatch='*',
         )
-        item = {
-            'filename': {
-                'S': self.name,
-            },
-            'size': {
-                'N': '%d' % self.size,
-            },
-            'timestamp': {
-                'N': _nowstr(),
-            },
-        }
-        storage.dynamo.put_item(Item=item, TableName=storage.table)
         self.storage = None
         self.etags = None
 
@@ -474,114 +463,7 @@ class S3Writer:
             storage.s3.abort_multipart_upload(Bucket=storage.bucket,
                                               Key=self.objname,
                                               UploadId=self.upload_id)
-        storage.dynamo.delete_item(TableName=storage.table,
-                                   Key={ 'filename': { 'S': self.name } },
-                                   ReturnValues='NONE')
 
-class DynamoReader:
-    def __init__(self, storage, name):
-        self.storage = storage
-        self.name = name
-        response = storage.dynamo.query(TableName=storage.table,
-                                        ConsistentRead=True,
-                                        KeyConditionExpression='filename = :nm',
-                                        ExpressionAttributeValues={
-                                            ':nm': { 'S': name, }
-                                        })
-        assert response['Count'] in (0, 1)
-        if response['Count'] == 0:
-            raise FileNotFound(name)
-        item = response['Items'][0]
-        assert item['filename']['S'] == name
-        self.data = item['data']['B']
-        self.offs = 0
-        self.generation = int(item['generation']['N'])
-
-    def read(self, sz=None, szhint=None):
-        assert self.data is not None
-        maxread = len(self.data) - self.offs
-        if sz is None or sz > maxread:
-            sz = maxread
-        ret = self.data[self.offs:self.offs + sz]
-        self.offs += sz
-        return ret
-
-    def close(self):
-        if self.data is not None:
-            self.data = None
-
-    def seek(self, offs):
-        assert self.data is not None
-        self.offs = offs
-
-class DynamoWriter:
-    def __init__(self, storage, name, overwrite):
-        self.storage = storage
-        self.name = name
-        self.overwrite = overwrite
-        if overwrite:
-            assert isinstance(overwrite, DynamoReader)
-        else:
-            response = storage.dynamo.query(TableName=storage.table,
-                                            ConsistentRead=True,
-                                            KeyConditionExpression='filename = :nm',
-                                            ExpressionAttributeValues={
-                                                ':nm': { 'S': name, }
-                                            })
-            assert response['Count'] in (0, 1)
-            if response['Count'] == 1:
-                raise FileAlreadyExists(name)
-        self.data = b''
-
-    def write(self, data):
-        assert self.data is not None
-        self.data += data
-
-    def close(self):
-        if self.data is None:
-            return
-        data = self.data
-        self.data = None
-        storage = self.storage
-        if self.overwrite:
-            generation = self.overwrite.generation + 1
-        else:
-            generation = 0
-        item = {
-            'filename': {
-                'S': self.name,
-            },
-            'generation': {
-                'N': '%d' % generation,
-            },
-            'data': {
-                'B': data,
-            },
-            'timestamp': {
-                'N': _nowstr(),
-            },
-        }
-        if self.overwrite:
-            condition = "generation = :gen"
-            condvals = { ':gen': { 'N': '%d' % (generation - 1, ) }, }
-            try:
-                storage.dynamo.put_item(Item=item, TableName=storage.table,
-                                        ConditionExpression=condition,
-                                        ExpressionAttributeValues=condvals)
-            except BotoClientError as e:
-                _check_exc(e, 'ConditionalCheckFailedException')
-                raise Exception("Failed to overwrite '%s', it was changed in the meantime." % self.name)
-        else:
-            try:
-                condition = "attribute_not_exists(filename)"
-                storage.dynamo.put_item(Item=item, TableName=storage.table,
-                                        ConditionExpression=condition)
-            except BotoClientError as e:
-                _check_exc(e, 'ConditionalCheckFailedException')
-                raise Exception("Failed to create '%s', it was created by someone else." % self.name)
-
-    def abort(self):
-        self.data = None
 
 class AWSStorage(BupStorage):
     def __init__(self, repo, create=False):
@@ -608,9 +490,6 @@ class AWSStorage(BupStorage):
         self.bucket = config_get(b'bup.aws.s3bucket')
         if self.bucket is None:
             raise Exception("AWSStorage: must have 's3bucket' configuration")
-        self.table = config_get(b'bup.aws.dynamotable')
-        if self.table is None:
-            raise Exception("AWSStorage: must have 'dynamotable' configuration")
         region_name = config_get(b'bup.aws.region')
         if region_name is None:
             raise Exception("AWSStorage: must have 'region' configuration")
@@ -623,7 +502,6 @@ class AWSStorage(BupStorage):
         )
 
         self.s3 = session.client('s3')
-        self.dynamo = session.client('dynamodb')
 
         defclass = config_get(b'bup.aws.defaultStorageClass',
                               default='STANDARD')
@@ -669,25 +547,17 @@ class AWSStorage(BupStorage):
             if clsdef.threshold >= self.chunk_size:
                 raise Exception("storage class threshold must be < chunkSize (default 50 MiB)")
 
+        config_storage_class = StorageClassConfig()
+        self.storage_classes[Kind.CONFIG] = config_storage_class
+        config_storage_class.large = 'STANDARD'
+        config_storage_class.small = '--NEVER-USED--'
+        config_storage_class.threshold = 0
+
         if create:
             self.s3.create_bucket(Bucket=self.bucket, ACL='private',
                                   CreateBucketConfiguration={
                                       'LocationConstraint': region_name,
                                   })
-            self.dynamo.create_table(TableName=self.table,
-                                     BillingMode='PAY_PER_REQUEST',
-                                     KeySchema=[
-                                         {
-                                             'AttributeName': 'filename',
-                                             'KeyType': 'HASH',
-                                         }
-                                     ],
-                                     AttributeDefinitions=[
-                                         {
-                                             'AttributeName': 'filename',
-                                             'AttributeType': 'S',
-                                         }
-                                     ])
 
     def _get_storage_class(self, kind, size):
         clsdef = self.storage_classes[kind]
@@ -699,33 +569,42 @@ class AWSStorage(BupStorage):
         assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX, Kind.CONFIG)
         name = name.decode('utf-8')
         if kind == Kind.CONFIG:
-            return DynamoWriter(self, name, overwrite)
-        assert overwrite is None
-        return S3Writer(self, name, kind)
+            name = 'bup/' + name
+        return S3Writer(self, name, kind, overwrite)
 
     def get_reader(self, name, kind):
         assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX, Kind.CONFIG)
         name = name.decode('utf-8')
         if kind == Kind.CONFIG:
-            return DynamoReader(self, name)
+            name = 'bup/' + name
         if not self.cachedir or kind not in (Kind.DATA, Kind.METADATA):
             return S3Reader(self, name)
         return S3CacheReader(self, name, self.cachedir, self.down_blksize)
 
     def list(self, pattern=None):
         # TODO: filter this somehow based on the pattern?
-        # TODO: implement pagination!
-        response = self.dynamo.scan(TableName=self.table,
-                                    Select='SPECIFIC_ATTRIBUTES',
-                                    AttributesToGet=['filename', 'tentative'],
-                                    ConsistentRead=True)
-        assert not 'LastEvaluatedKey' in response
-        for item in response['Items']:
-            if 'tentative' in item:
-                continue
-            name = item['filename']['S'].encode('ascii')
-            if fnmatch.fnmatch(name, pattern):
-                yield name
+        token = None
+        while True:
+            if token is not None:
+                ret = self.s3.list_objects_v2(
+                    Bucket=self.bucket,
+                    ContinuationToken=token,
+                )
+            else:
+                ret = self.s3.list_objects_v2(
+                    Bucket=self.bucket,
+                )
+            if ret['KeyCount'] == 0:
+                break
+            for item in ret['Contents']:
+                name = _unmunge(item['Key']).encode('ascii')
+                if name.startswith(b'bup/'): # reserved for refs etc.
+                    continue
+                if fnmatch.fnmatch(name, pattern):
+                    yield name
+            token = ret.get('NextContinuationToken')
+            if token is None:
+                break
 
     def close(self):
         super(AWSStorage, self).close()
