@@ -738,6 +738,10 @@ class EncryptedRepo(ConfigRepo):
             result = EncryptedContainer(self, self.storage, name,
                                         'r', kind, key=key)
             if cache:
+                if len(self.ec_cache) > 200:
+                    for c in self.ec_cache.values():
+                        c.close()
+                    self.ec_cache = {}
                 self.ec_cache[name] = result
             return result
 
