@@ -775,13 +775,15 @@ def _split_subtree_items(repo, level, oid, entries, names, want_meta, root=True)
                     raise EOFError('EOF instead of split tree placeholder metadata')
                 yield from _tree_items_except_dot(oid, entries, names, bupm)
     else:
-        validate = b'.%d.bupd' % level
+#        validate = b'.%d.bupd' % level
         for _, name, sub_oid in entries:
             if root:
                 if name == b'.bupm':
                     continue
-            assert name.endswith(validate), \
-                f'found {path_msg(name)} in split subtree but should end with {validate}'
+                if re.match(br'[0-9]+\.bupd', name):
+                    continue
+#            assert name.endswith(validate), \
+#                f'found {path_msg(name)} in split subtree but should end with {validate}'
             yield from _split_subtree_items(repo, level - 1, sub_oid,
                                             tree_entries(_get_tree_object(repo, sub_oid)),
                                             names, want_meta, False)
@@ -796,7 +798,15 @@ def _parse_tree_depth(mangled_name):
     """
     m = _tree_depth_rx.fullmatch(mangled_name)
     if not m:
-        raise Exception(f'Could not parse split tree depth in {mangled_name}')
+        # hack: Johannes's old style
+        s = mangled_name.split(b'.')
+        try:
+            if len(s) != 2:
+                s = (b'_fail', None)
+            return int(s[0].decode('ascii'))
+        except ValueError:
+            # pylint: disable-next=raise-missing-from
+            raise Exception(f'Could not parse split tree depth in {mangled_name}')
     depth = int(m.group(1))
     assert depth > 0
     return depth
@@ -816,21 +826,21 @@ def tree_items(repo, oid, tree_data, names, *, want_meta=True, repair=False):
     entries = tree_entries(tree_data)
     depth = None
     bupm_oid = None
-    split_or_not_known = False
+#    split_or_not_known = False
     for _, mangled_name, sub_oid in entries:
         if mangled_name.endswith(b'.bupd'):
             depth = _parse_tree_depth(mangled_name)
             if not dot_requested: # all other metadata in "leaf" .bupm files
                 break
-            split_or_not_known = True
+#            split_or_not_known = True
         elif mangled_name == b'.bupm':
             bupm_oid = sub_oid
-            if split_or_not_known or depth:
-                break
-        else:
-            split_or_not_known = True
-        if mangled_name > b'.bupm':
-            break
+#            if split_or_not_known or depth:
+#                break
+#        else:
+#            split_or_not_known = True
+#        if mangled_name > b'.bupm':
+#            break
 
     # When repairing, "." wouldn't be affected by the missing entries
     # issues, i.e. the first entry (the dir) should still be OK
