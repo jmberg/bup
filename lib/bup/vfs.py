@@ -668,11 +668,15 @@ def tree_items(repo, oid, tree_data, names, *, want_meta=True):
             depth = _parse_tree_depth(mangled_name)
             if not dot_requested: # all other metadata in "leaf" .bupm files
                 break
+        elif mangled_name.endswith(b'.bupd'):
+            depth = int(mangled_name.split(b'.')[0].decode('ascii'))
+            if not dot_requested: # all other metadata in "leaf" .bupm files
+                break
         if mangled_name == b'.bupm':
             bupm_oid = sub_oid
-            break
-        if mangled_name > b'.bupm':
-            break
+#            break
+#        if mangled_name > b'.bupm':
+#            break
 
     if want_meta and bupm_oid:
         if depth is None:
