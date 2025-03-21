@@ -70,13 +70,17 @@ def _nowstr():
 
 def _munge(name):
     # do some sharding - S3 uses the first few characters for this
-    if name.startswith('bup/'):
+    if name.startswith('refs/'):
+        return name
+    if name.startswith('conf/'):
         return name
     assert name.startswith('pack-')
     return name[5:9] + '/' + name
 
 def _unmunge(name):
-    if name.startswith('bup/'):
+    if name.startswith('refs/'):
+        return name
+    if name.startswith('conf/'):
         return name
     assert name[4:10] == '/pack-'
     return name[5:]
@@ -548,10 +552,11 @@ class AWSStorage(BupStorage):
                 raise Exception("storage class threshold must be < chunkSize (default 50 MiB)")
 
         config_storage_class = StorageClassConfig()
-        self.storage_classes[Kind.CONFIG] = config_storage_class
         config_storage_class.large = 'STANDARD'
         config_storage_class.small = '--NEVER-USED--'
         config_storage_class.threshold = 0
+        self.storage_classes[Kind.CONFIG] = config_storage_class
+        self.storage_classes[Kind.REFS] = config_storage_class
 
         if create:
             self.s3.create_bucket(Bucket=self.bucket, ACL='private',
@@ -566,17 +571,23 @@ class AWSStorage(BupStorage):
         return clsdef.large
 
     def get_writer(self, name, kind, overwrite=None):
-        assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX, Kind.CONFIG)
+        assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX,
+                        Kind.CONFIG, Kind.REFS)
         name = name.decode('utf-8')
         if kind == Kind.CONFIG:
-            name = 'bup/' + name
+            name = 'conf/' + name
+        elif kind == Kind.REFS:
+            name = 'refs/' + name
         return S3Writer(self, name, kind, overwrite)
 
     def get_reader(self, name, kind):
-        assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX, Kind.CONFIG)
+        assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX,
+                        Kind.CONFIG, Kind.REFS)
         name = name.decode('utf-8')
         if kind == Kind.CONFIG:
-            name = 'bup/' + name
+            name = 'conf/' + name
+        elif kind == Kind.REFS:
+            name = 'refs/' + name
         if not self.cachedir or kind not in (Kind.DATA, Kind.METADATA):
             return S3Reader(self, name)
         return S3CacheReader(self, name, self.cachedir, self.down_blksize)
@@ -597,9 +608,10 @@ class AWSStorage(BupStorage):
             if ret['KeyCount'] == 0:
                 break
             for item in ret['Contents']:
-                name = _unmunge(item['Key']).encode('ascii')
-                if name.startswith(b'bup/'): # reserved for refs etc.
+                key = item['Key']
+                if key.startswith('refs/') or key.startswith('conf/'):
                     continue
+                name = _unmunge(key).encode('ascii')
                 if fnmatch.fnmatch(name, pattern):
                     yield name
             token = ret.get('NextContinuationToken')

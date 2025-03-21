@@ -7,7 +7,7 @@ class Kind:
     Just declares the kinds of data you can store,
     use storage.Kind.DATA etc.
     """
-    DATA, IDX, METADATA, CONFIG = range(4)
+    DATA, IDX, METADATA, CONFIG, REFS = range(5)
 
 class StorageException(Exception):
     def __init__(self, name, message=None):
@@ -59,7 +59,7 @@ class BupStorage:
         Return a reader object, i.e. an object that should have (at least)
         .read(sz=None, szhint=None), .seek(absolute_offset) and .close()
         methods.
-        For kind == Kind.CONFIG, the resulting object can be passed to the
+        For Kind.CONFIG and Kind.REFS, the resulting object can be passed to the
         overwrite parameter of get_writer() to atomically replace the file.
         Raise FileNotFound(name) (with an optional message) if the file
         cannot be found.
