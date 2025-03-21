@@ -30,7 +30,7 @@ class FileWriter:
         self.overwrite = overwrite
         if overwrite:
             assert isinstance(overwrite, FileReader)
-            assert overwrite.kind == Kind.CONFIG
+            assert overwrite.kind in (Kind.CONFIG, Kind.REFS)
             assert overwrite.f is not None
             # create if it didn't exist yet
             self.lockpath = os.path.join(path, b'repolock')
@@ -92,7 +92,7 @@ class FileReader:
         self.openset = openset
         self.openset.add(self)
         self.kind = kind
-        if kind == Kind.CONFIG:
+        if kind in (Kind.CONFIG, Kind.REFS):
             self.fhash = _hash_f(self.f)
 
     def __del__(self):
@@ -134,7 +134,8 @@ class FileStorage(BupStorage):
     # we wrap open() here to ensure it doesn't exist yet
     # and that we write to a temporary file first
     def get_writer(self, name, kind, overwrite=None):
-        assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX, Kind.CONFIG)
+        assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX,
+                        Kind.CONFIG, Kind.REFS)
         return FileWriter(self.path, name, overwrite, self.openset)
 
     # we wrap open() here to ensure only our limited API is available
