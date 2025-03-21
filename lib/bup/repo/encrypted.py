@@ -4,7 +4,7 @@ Encrypted repository.
 The encrypted repository stores all files in encrypted form in any
 kind of bup.storage.BupStorage backend, we store the following
 types of files
- * configuration files (bup.storage.Kind.CONFIG)
+ * configuration files (bup.storage.Kind.CONFIG/REFS)
  * pack files (bup.storage.Kind.DATA & bup.storage.Kind.METADATA)
  * idx files (bup.storage.Kind.IDX)
 
@@ -106,6 +106,7 @@ values are stored in little endian:
 |         |  |        |  1 - pack
 |         |  |        |  2 - idx (V2)
 |         |  |        |  3 - config
+|         |  |        |  4 - refs
 |         |  +
 |         |  | 3      | compression type
 |         |  |        |  0 - no compression
@@ -256,6 +257,9 @@ class EncryptedContainer:
             header_alg = 2
         elif kind == Kind.CONFIG:
             self.filetype = 3
+            header_alg = 2
+        elif kind == Kind.REFS:
+            self.filetype = 4
             header_alg = 2
         else:
             assert False, 'Invalid kind %d' % kind
@@ -605,7 +609,7 @@ class EncryptedRepo(ConfigRepo):
 
     def _json_write(self, filename, reader, data):
         wfile = EncryptedContainer(self, self.storage, filename, 'w',
-                                   Kind.CONFIG, self.compression,
+                                   Kind.REFS, self.compression,
                                    key=self.repokey,
                                    overwrite=reader,
                                    compressor=self.compressor)
@@ -714,7 +718,7 @@ class EncryptedRepo(ConfigRepo):
         del refs[refname]
         refs = self._encode_refs(refs)
         reffile = EncryptedContainer(self, self.storage, self.refsname, 'w',
-                                     Kind.CONFIG, self.compression,
+                                     Kind.REFS, self.compression,
                                      key=self.repokey,
                                      overwrite=reader,
                                      compressor=self.compressor)
@@ -729,7 +733,7 @@ class EncryptedRepo(ConfigRepo):
         try:
             return self.ec_cache[name]
         except KeyError:
-            if kind in (Kind.IDX, Kind.CONFIG):
+            if kind in (Kind.IDX, Kind.CONFIG, Kind.REFS):
                 key = self.repokey
             elif kind in (Kind.DATA, Kind.METADATA):
                 key = self.readkey
@@ -747,7 +751,7 @@ class EncryptedRepo(ConfigRepo):
 
     def _json_read(self, filename):
         try:
-            reffile = self._open_read(filename, Kind.CONFIG)
+            reffile = self._open_read(filename, Kind.REFS)
             try:
                 data = reffile.read()[1]
                 return reffile, json.loads(data.decode('utf-8'))
