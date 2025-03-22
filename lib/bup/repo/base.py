@@ -71,6 +71,8 @@ class RepoProtocol:
         didn't exist) to newval, atomically doing a check against oldval
         and updating to newval. Both oldval and newval are given as oidx
         (hex-encoded oid).
+        Must also finish_writing() internally, so that all objects are
+        committed before the ref is updated.
         """
 
     @notimplemented
