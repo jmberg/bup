@@ -218,9 +218,7 @@ def progress(s):
     global _last_progress
     if istty2:
         if _last_progress.endswith('\r'):
-            lastn = len(_last_progress)
-            if lastn - len(s) > 0:
-                log(' ' * lastn + '\r')
+            log('\x1b[0K')
         log(s)
         _last_progress = s
 
