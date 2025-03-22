@@ -10,6 +10,8 @@ from collections import namedtuple
 from contextlib import ExitStack
 from itertools import islice
 from shutil import rmtree
+from subprocess import run
+from sys import stderr
 
 from bup import _helpers, hashsplit, path, midx, bloom, xstat
 from bup.compat import (bytes_from_byte, bytes_from_uint,
@@ -24,6 +26,7 @@ from bup.helpers import (EXIT_FAILURE,
                          fdatasync,
                          finalized,
                          log,
+                         make_repo_id,
                          merge_dict,
                          merge_iter,
                          mmap_read, mmap_readwrite,
@@ -1286,15 +1289,16 @@ def init_repo(path=None):
                          env=_gitenv(),
                          close_fds=True)
     _git_wait('git init', p)
-    # Force the index version configuration in order to ensure bup works
-    # regardless of the version of the installed Git binary.
-    p = subprocess.Popen([b'git', b'config', b'pack.indexVersion', '2'],
-                         stdout=sys.stderr, env=_gitenv(), close_fds=True)
-    _git_wait('git config', p)
-    # Enable the reflog
-    p = subprocess.Popen([b'git', b'config', b'core.logAllRefUpdates', b'true'],
-                         stdout=sys.stderr, env=_gitenv(), close_fds=True)
-    _git_wait('git config', p)
+    for opt, val in \
+            ((b'bup.repo.id', make_repo_id()),
+             (b'core.logAllRefUpdates', b'true'), # Enable the reflog
+             # Force the index version configuration in order to
+             # ensure bup works regardless of the version of the
+             # installed Git binary.
+             (b'pack.indexVersion', '2')):
+        cp = run([b'git', b'config', opt, val], stdout=stderr, env=_gitenv())
+        if cp.returncode:
+            raise GitError(f'git config {opt} {val} exited with {cp.returncode}')
 
 
 def establish_default_repo(path=None, *, must_exist=False):

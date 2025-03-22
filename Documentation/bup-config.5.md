@@ -13,6 +13,21 @@ The following options may be set in the relevant `git` config
 
 # OPTIONS
 
+bup.repo.id
+:   When set, an identifier for the repository which should be unique
+    across all repositories encountered. Because it is currently used
+    filesystem paths, it must consist of only the characters within
+    double-quotes here: "0123456789_-", "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    and "abcdefghijklmnopqrstuvwxyz". Two repo-ids must also not
+    differ only in case ("something" vs "SOMETHING") unless all all
+    relevant filesystems are case sensitive,
+
+    `bup init` now adds a random `id` when it creates new
+    repositories, and you can one to repositories created before this
+    became the norm via `git config -f "$BUP_DIR/config" bup.repo.id
+    ID`. Including randomized content will help ensure uniqueness, for
+    example by including the output from `bup random --random-id 31`.
+
 bup.server.deduplicate-writes (default `true`)
 :   When `true` the server checks each incoming object against its
     local index, and if the object already exists, the server suggests
