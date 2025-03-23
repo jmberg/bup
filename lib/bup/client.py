@@ -1,14 +1,26 @@
 
 from binascii import hexlify, unhexlify
+from contextlib import closing
 import os, re, struct, sys, time, zlib
 import socket
 
 from bup import git, ssh, vfs, vint, protocol, path
-from bup.compat import pending_raise
 from bup.git import PackWriter
-from bup.helpers import (Conn, atomically_replaced_file, chunkyreader, debug1,
-                         debug2, linereader, lines_until_sentinel,
-                         mkdirp, nullcontext_if_not, progress, qprogress, DemuxConn)
+from bup.helpers import \
+    (Conn,
+     ExitStack,
+     atomically_replaced_file,
+     chunkyreader,
+     debug1,
+     debug2,
+     finalized,
+     linereader,
+     lines_until_sentinel,
+     mkdirp,
+     nullcontext_if_not,
+     progress,
+     qprogress,
+     DemuxConn)
 from bup.io import path_msg
 from bup.vint import read_vint, read_vuint, read_bvec, write_bvec
 
@@ -78,12 +90,98 @@ def parse_remote(remote):
 
 
 class Client:
+
+    class ViaBupRev:
+        def __init__(self):
+            # only hand over to __del__ -> close() if complete, which
+            # means it's fine to initialize attrs incrementally.
+            self._closed = True
+            self._out = os.fdopen(3, 'rb')
+            self._in = os.fdopen(4, 'wb')
+            self.conn = Conn(self._out, self._in)
+            self.check_ok = self.conn.check_ok
+            sys.stdin.close()
+            self._closed = False
+        def __enter__(self): return self
+        def __del__(self): assert self._closed
+        def __exit__(self, type, value, traceback): self.close()
+        def close(self):
+            if self._closed:
+                return
+            self._closed = True
+            with closing(self._out), \
+                 closing(self.conn), \
+                 closing(self._in):
+                pass
+
+    class ViaSsh:
+        def __init__(self, host, port):
+            # only hand over to __del__ -> close() if complete, which
+            # means it's fine to initialize attrs incrementally.
+            self._closed = True
+            try:
+                # FIXME: ssh and file (ViaBup) shouldn't use the same module
+                self._proc = ssh.connect(host, port, b'server')
+            except OSError as e:
+                raise ClientError('connect: %s' % e) from e
+            self.conn = Conn(self._proc.stdout, self._proc.stdin)
+            self._closed = False
+        def __enter__(self): return self
+        def __del__(self): assert self._closed
+        def __exit__(self, type, value, traceback): self.close()
+        def close(self):
+            if self._closed:
+                return
+            self._closed = True
+            def await_ssh(p):
+                rc = self._proc.wait()
+                if rc:
+                    raise ClientError(f'server tunnel returned exit code {rc}')
+            with finalized(self._proc, await_ssh), \
+                 closing(self._proc.stdout), \
+                 closing(self.conn), \
+                 closing(self._proc.stdin):
+                pass
+        def check_ok(self):
+            rv = self._proc.poll()
+            if rv != None:
+                raise ClientError(f'server exited unexpectedly with code {rv}')
+            try:
+                return self.conn.check_ok()
+            except Exception as e:
+                raise ClientError(e) from e
+
+    class ViaBup:
+        def __init__(self, host, port):
+            # only hand over to __del__ -> close() if complete, which
+            # means it's fine to initialize attrs incrementally.
+            self._closed = True
+            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._sock.connect((host, 1982 if port is None else int(port)))
+            self._sockw = self._sock.makefile('wb')
+            self.conn = DemuxConn(self._sock.fileno(), self._sockw)
+            self.check_ok = self.conn.check_ok
+            self._closed = False
+        def __enter__(self): return self
+        def __del__(self): assert self._closed
+        def __exit__(self, type, value, traceback): self.close()
+        def close(self):
+            if self._closed:
+                return
+            self._closed = True
+            with closing(self._sock), \
+                 closing(self.conn), \
+                 finalized(lambda _: self.sock.shutdown(socket.SHUT_WR)), \
+                 closing(self._sockw), \
+                 closing(self._pin):
+                pass
+
     def __init__(self, remote, create=False):
-        self.closed = False
-        self._busy = self.conn = None
-        self.sock = self.p = self.pout = self.pin = None
-        try:
-            (self.protocol, self.host, self.port, self.dir) = parse_remote(remote)
+        # only hand over to __del__ -> close() if complete, which
+        # means it's fine to initialize attrs incrementally.
+        self.closed = True
+        with ExitStack() as ctx:
+            self.protocol, self.host, self.port, self.dir = parse_remote(remote)
             # The b'None' here matches python2's behavior of b'%s' % None == 'None',
             # python3 will (as of version 3.7.5) do the same for str ('%s' % None),
             # but crashes instead when doing b'%s' % None.
@@ -92,26 +190,15 @@ class Client:
             self.cachedir = path.indexcache(re.sub(br'[^@\w]',
                                                    b'_',
                                                    b'%s:%s' % (cachehost, cachedir)))
+            self._busy = None
             if self.protocol == b'bup-rev':
-                self.pout = os.fdopen(3, 'rb')
-                self.pin = os.fdopen(4, 'wb')
-                self.conn = Conn(self.pout, self.pin)
-                sys.stdin.close()
+                self._transport = Client.ViaBupRev()
             elif self.protocol in (b'ssh', b'file'):
-                try:
-                    # FIXME: ssh and file shouldn't use the same module
-                    self.p = ssh.connect(self.host, self.port, b'server')
-                    self.pout = self.p.stdout
-                    self.pin = self.p.stdin
-                    self.conn = Conn(self.pout, self.pin)
-                except OSError as e:
-                    raise ClientError('connect: %s' % e) from e
+                self._transport = Client.ViaSsh(self.host, self.port)
             elif self.protocol == b'bup':
-                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.sock.connect((self.host,
-                                   1982 if self.port is None else int(self.port)))
-                self.sockw = self.sock.makefile('wb')
-                self.conn = DemuxConn(self.sock.fileno(), self.sockw)
+                self._transport = Client.ViaBup(self.host, self.port)
+            ctx.enter_context(self._transport)
+            self.conn = self._transport.conn
             self._available_commands = self._get_available_commands()
             self._require_command(b'init-dir')
             self._require_command(b'set-dir')
@@ -123,70 +210,23 @@ class Client:
                     self.conn.write(b'set-dir %s\n' % self.dir)
                 self.check_ok()
             self.sync_indexes()
-        except BaseException as ex:
-            with pending_raise(ex):
-                self.close()
+            ctx.pop_all()
+        self.closed = False
+
+    def __enter__(self): return self
+    def __del__(self): assert self.closed
+    def __exit__(self, type, value, traceback): self.close()
 
     def close(self):
         if self.closed:
             return
         self.closed = True
-        try:
-            if self.conn and not self._busy:
-                self.conn.write(b'quit\n')
-        finally:
-            try:
-                if self.pin:
-                    self.pin.close()
-            finally:
-                try:
-                    self.pin = None
-                    if self.sock and self.sockw:
-                        self.sockw.close()
-                        self.sock.shutdown(socket.SHUT_WR)
-                finally:
-                    try:
-                        if self.conn:
-                            self.conn.close()
-                    finally:
-                        try:
-                            self.conn = None
-                            if self.pout:
-                                self.pout.close()
-                        finally:
-                            try:
-                                self.pout = None
-                                if self.sock:
-                                    self.sock.close()
-                            finally:
-                                self.sock = None
-                                if self.p:
-                                    self.p.wait()
-                                    rv = self.p.wait()
-                                    if rv:
-                                        raise ClientError('server tunnel returned exit code %d' % rv)
-                                self.p = None
+        if not self._busy:
+            self.conn.write(b'quit\n')
+        with closing(self._transport):
+            self._transport = None # not necessary
 
-    def __del__(self):
-        assert self.closed
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        with pending_raise(value, rethrow=False):
-            self.close()
-
-    def check_ok(self):
-        if self.p:
-            rv = self.p.poll()
-            if rv != None:
-                raise ClientError('server exited unexpectedly with code %r'
-                                  % rv)
-        try:
-            return self.conn.check_ok()
-        except Exception as e:
-            raise ClientError(e) from e
+    def check_ok(self): return self._transport.check_ok()
 
     def check_busy(self):
         if self._busy:
