@@ -54,6 +54,7 @@ For using bup on AWS storage, a configuration like this is recommended
       cachedir = cache
 
       # your storage, see below for the necessary permissions
+      endpoint-url = ...
       s3bucket = ...
       region = ...
       accessKeyId = ...
@@ -120,6 +121,10 @@ downloadBlockSize = ... [optional, default 8k, must be > 0]
   set this to a rather large value so that request costs don't become an
   extra significant cost, since you'll likely need many contiguous objects
   (all the parts of a file, to restore a file.)
+
+endpoint-url = ... [optional]
+: The endpoint URL to use, especially if you don't want to use
+  Amazon AWS S3 but something else.
 
 s3bucket = ... [mandatory]
 : The S3 bucket in which to store objects other than the refs file(s).

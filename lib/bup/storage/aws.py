@@ -505,7 +505,7 @@ class AWSStorage(BupStorage):
             region_name=region_name,
         )
 
-        self.s3 = session.client('s3')
+        self.s3 = session.client('s3', endpoint_url=config_get(b'bup.aws.endpoint-url'))
 
         defclass = config_get(b'bup.aws.defaultStorageClass',
                               default='STANDARD')
