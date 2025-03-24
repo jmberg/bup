@@ -112,6 +112,10 @@ test-split-join()
     WVPASS test "ref: refs/heads/main" = "$(< this-bup/HEAD)" \
            -o "ref: refs/heads/master" = "$(< this-bup/HEAD)"
     WVPASS rm {other,this}-bup/HEAD
+    # don't compare repo IDs
+    # (ignore exit status, returns 5 if value doesn't exist)
+    git config unset -f other-bup/config bup.repo.id
+    git config unset -f this-bup/config bup.repo.id
     WVPASS "$top/dev/compare-trees" --no-times other-bup/ this-bup/
 
     WVPASS cd "$orig_dir"
