@@ -3,7 +3,7 @@ from binascii import hexlify, unhexlify
 import os, re, struct, sys, time, zlib
 import socket
 
-from bup import git, ssh, vfs, vint, protocol, path
+from bup import git, ssh, vint, protocol, path
 from bup.compat import pending_raise
 from bup.git import PackWriter
 from bup.helpers import (Conn, atomically_replaced_file, chunkyreader, debug1,
@@ -18,6 +18,61 @@ bwlimit = None
 
 class ClientError(Exception):
     pass
+
+
+class TypicalCallBehavior:
+    def __init__(self, client, name, args=None,
+                 exception_types=None):
+        self._client = client
+        self._name = name.encode('ascii')
+        self._args = args
+        self._line_based = False
+        self._exception_types = exception_types or ()
+
+    def __enter__(self):
+        self._client._require_command(self._name)
+        self._client.check_busy()
+        self._client._busy = self._name
+        self._client.conn.write(self._name)
+        if self._args:
+            self._client.conn.write(b' ')
+            self._client.conn.write(self._args)
+        self._client.conn.write(b'\n')
+        return self
+
+    def __exit__(self, ex_type, ex, traceback):
+        if self._line_based:
+            # We know the command response is line-based, so
+            # consume any extra lines that our caller didn't
+            # want (because it raised an exception).
+            ok_ex = self._client.conn.drain_and_check_ok()
+        else:
+            # If this raises then protocol is unsynchronized,
+            # i.e. we should have seen a blank line and then
+            # "ok" or "error" next, but didn't.
+            ok_ex = self._client.conn.check_ok()
+
+        # since the above didn't raise we've reached a point
+        # where we're synchronized on the protocol, the server
+        # has completed the response
+        self._client._busy = False
+
+        if ok_ex and not ex:
+            for extp in self._exception_types:
+                name = extp.__name__
+                if ok_ex.args[0].startswith(name + ':'):
+                    raise extp(*ok_ex.args)
+            raise ok_ex
+
+    def results(self):
+        # if the caller iterates the resulting lines, then
+        # it must be terminating with a blank line (as is
+        # literally done in the code here), so we can then
+        # recover from exceptions in the caller by finishing
+        # that iteration.
+        self._line_based = True
+        for line in lines_until_sentinel(self._client.conn, b'\n', ClientError):
+            yield line[:-1]
 
 
 def _raw_write_bwlimit(f, buf, bwcount, bwtime):
@@ -112,6 +167,9 @@ class Client:
                                    1982 if self.port is None else int(self.port)))
                 self.sockw = self.sock.makefile('wb')
                 self.conn = DemuxConn(self.sock.fileno(), self.sockw)
+            # we have to assume 'help' is legal to
+            # query available commands with it
+            self._available_commands = { b'help' }
             self._available_commands = self._get_available_commands()
             self._require_command(b'init-dir')
             self._require_command(b'set-dir')
@@ -200,30 +258,22 @@ class Client:
         self._busy = None
 
     def _get_available_commands(self):
-        self.check_busy()
-        self._busy = b'help'
-        conn = self.conn
-        conn.write(b'help\n')
-        result = set()
-        line = self.conn.readline()
-        if not line == b'Commands:\n':
-            raise ClientError('unexpected help header ' + repr(line))
-        while True:
-            line = self.conn.readline()
-            if line == b'\n':
-                break
-            if not line.startswith(b'    '):
-                raise ClientError('unexpected help line ' + repr(line))
-            cmd = line.strip()
-            if not cmd:
-                raise ClientError('unexpected help line ' + repr(line))
-            result.add(cmd)
-        # FIXME: confusing
-        not_ok = self.check_ok()
-        if not_ok:
-            raise not_ok
-        self._not_busy()
-        return frozenset(result)
+        with TypicalCallBehavior(self, 'help') as call:
+            result = set()
+            first = True
+            for line in call.results():
+                if first:
+                    if not line == b'Commands:':
+                        raise ClientError('unexpected help header ' + repr(line))
+                    first = False
+                    continue
+                if not line.startswith(b'    '):
+                    raise ClientError('unexpected help line ' + repr(line))
+                cmd = line.strip()
+                if not cmd:
+                    raise ClientError('unexpected help line ' + repr(line))
+                result.add(cmd)
+            return frozenset(result)
 
     def _require_command(self, name):
         if name not in self._available_commands:
@@ -231,21 +281,16 @@ class Client:
                               % name.decode('ascii'))
 
     def _list_indexes(self):
-        self._require_command(b'list-indexes')
-        self.check_busy()
-        self.conn.write(b'list-indexes\n')
-        for line in linereader(self.conn):
-            if not line:
-                break
-            assert(line.find(b'/') < 0)
-            parts = line.split(b' ')
-            idx = parts[0]
-            load = len(parts) == 2 and parts[1] == b'load'
-            yield idx, load
-        self.check_ok()
+        with TypicalCallBehavior(self, 'list-indexes') as call:
+            for line in call.results():
+                assert(line.find(b'/') < 0)
+                parts = line.split(b' ')
+                idx = parts[0]
+                load = len(parts) == 2 and parts[1] == b'load'
+                yield idx, load
 
     def list_indexes(self):
-        for idx, load in self._list_indexes():
+        for idx, load in self._list_indexes(self):
             yield idx
 
     def sync_indexes(self):
@@ -275,23 +320,19 @@ class Client:
         git.auto_midx(self.cachedir)
 
     def send_index(self, name, f, send_size):
-        self._require_command(b'send-index')
-        #debug1('requesting %r\n' % name)
-        self.check_busy()
-        self.conn.write(b'send-index %s\n' % name)
-        n = struct.unpack('!I', self.conn.read(4))[0]
-        assert(n)
+        with TypicalCallBehavior(self, 'send-index', name):
+            n = struct.unpack('!I', self.conn.read(4))[0]
+            assert(n)
 
-        send_size(n)
+            send_size(n)
 
-        count = 0
-        progress('Receiving index from server: %d/%d\r' % (count, n))
-        for b in chunkyreader(self.conn, n):
-            f.write(b)
-            count += len(b)
-            qprogress('Receiving index from server: %d/%d\r' % (count, n))
-        progress('Receiving index from server: %d/%d, done.\n' % (count, n))
-        self.check_ok()
+            count = 0
+            progress('Receiving index from server: %d/%d\r' % (count, n))
+            for b in chunkyreader(self.conn, n):
+                f.write(b)
+                count += len(b)
+                qprogress('Receiving index from server: %d/%d\r' % (count, n))
+            progress('Receiving index from server: %d/%d, done.\n' % (count, n))
 
     def sync_index(self, name):
         mkdirp(self.cachedir)
@@ -356,101 +397,69 @@ class Client:
                           max_pack_objects=max_pack_objects)
 
     def read_ref(self, refname):
-        self._require_command(b'read-ref')
-        self.check_busy()
-        self.conn.write(b'read-ref %s\n' % refname)
-        r = self.conn.readline().strip()
-        self.check_ok()
-        if r:
-            assert(len(r) == 40)   # hexified sha
+        with TypicalCallBehavior(self, 'read-ref', refname):
+            r = self.conn.readline().strip()
+            if not r:
+                return None
+            assert len(r) == 40, f"invalid ref {r}"
             return unhexlify(r)
-        else:
-            return None   # nonexistent ref
 
     def update_ref(self, refname, newval, oldval):
-        self._require_command(b'update-ref')
-        self.check_busy()
-        self.conn.write(b'update-ref %s\n%s\n%s\n'
-                        % (refname, hexlify(newval),
-                           hexlify(oldval) if oldval else b''))
-        self.check_ok()
+        with TypicalCallBehavior(self, 'update-ref', refname):
+            self.conn.write(b'%s\n' % hexlify(newval))
+            self.conn.write(b'%s\n' % (hexlify(oldval) if oldval else b''))
 
     def join(self, id):
-        self._require_command(b'join')
-        self.check_busy()
-        self._busy = b'join'
         # Send 'cat' so we'll work fine with older versions
-        self.conn.write(b'cat %s\n' % re.sub(br'[\n\r]', b'_', id))
-        while 1:
-            sz = struct.unpack('!I', self.conn.read(4))[0]
-            if not sz: break
-            yield self.conn.read(sz)
-        # FIXME: ok to assume the only NotOk is a KeyError? (it is true atm)
-        e = self.check_ok()
-        self._not_busy()
-        if e:
-            raise KeyError(str(e))
+        with TypicalCallBehavior(self, 'cat', re.sub(br'[\n\r]', b'_', id),
+                                 exception_types=(KeyError,)):
+            while 1:
+                sz = struct.unpack('!I', self.conn.read(4))[0]
+                if not sz: break
+                yield self.conn.read(sz)
 
     def cat_batch(self, refs):
-        self._require_command(b'cat-batch')
-        self.check_busy()
-        self._busy = b'cat-batch'
         conn = self.conn
-        conn.write(b'cat-batch\n')
-        # FIXME: do we want (only) binary protocol?
-        for ref in refs:
-            assert ref
-            assert b'\n' not in ref
-            conn.write(ref)
+        with TypicalCallBehavior(self, 'cat-batch'):
+            for ref in refs:
+                assert ref
+                assert b'\n' not in ref
+                conn.write(ref)
+                conn.write(b'\n')
             conn.write(b'\n')
-        conn.write(b'\n')
-        for ref in refs:
-            info = conn.readline()
-            if info == b'missing\n':
-                yield None, None, None, None
-                continue
-            if not (info and info.endswith(b'\n')):
-                raise ClientError('Hit EOF while looking for object info: %r'
-                                  % info)
-            oidx, oid_t, size = info.split(b' ')
-            size = int(size)
-            cr = chunkyreader(conn, size)
-            yield oidx, oid_t, size, cr
-            detritus = next(cr, None)
-            if detritus:
-                raise ClientError('unexpected leftover data ' + repr(detritus))
-        # FIXME: confusing
-        not_ok = self.check_ok()
-        if not_ok:
-            raise not_ok
-        self._not_busy()
+            for ref in refs:
+                info = conn.readline()
+                if info == b'missing\n':
+                    yield None, None, None, None
+                    continue
+                if not (info and info.endswith(b'\n')):
+                    raise ClientError('Hit EOF while looking for object info: %r'
+                                      % info)
+                oidx, oid_t, size = info.split(b' ')
+                size = int(size)
+                cr = chunkyreader(conn, size)
+                yield oidx, oid_t, size, cr
+                detritus = next(cr, None)
+                if detritus:
+                    raise ClientError('unexpected leftover data ' + repr(detritus))
 
     def refs(self, patterns=None, limit_to_heads=False, limit_to_tags=False):
-        patterns = patterns or tuple()
-        self._require_command(b'refs')
-        self.check_busy()
-        self._busy = b'refs'
-        conn = self.conn
-        conn.write(b'refs %d %d\n' % (1 if limit_to_heads else 0,
-                                      1 if limit_to_tags else 0))
-        for pattern in patterns:
-            assert b'\n' not in pattern
-            conn.write(pattern)
-            conn.write(b'\n')
-        conn.write(b'\n')
-        for line in lines_until_sentinel(conn, b'\n', ClientError):
-            line = line[:-1]
-            oidx, name = line.split(b' ')
-            if len(oidx) != 40:
-                raise ClientError('Invalid object fingerprint in %r' % line)
-            if not name:
-                raise ClientError('Invalid reference name in %r' % line)
-            yield name, unhexlify(oidx)
-        # FIXME: confusing
-        not_ok = self.check_ok()
-        if not_ok:
-            raise not_ok
-        self._not_busy()
+        args = b'%d %d\n' % (1 if limit_to_heads else 0,
+                             1 if limit_to_tags else 0)
+        with TypicalCallBehavior(self, 'refs', args) as call:
+            patterns = patterns or tuple()
+            for pattern in patterns:
+                assert b'\n' not in pattern
+                self.conn.write(pattern)
+                self.conn.write(b'\n')
+            self.conn.write(b'\n')
+            for line in call.results():
+                oidx, name = line.split(b' ')
+                if len(oidx) != 40:
+                    raise ClientError('Invalid object fingerprint in %r' % line)
+                if not name:
+                    raise ClientError('Invalid reference name in %r' % line)
+                yield name, unhexlify(oidx)
 
     def rev_list(self, refs, parse=None, format=None):
         """See git.rev_list for the general semantics, but note that with the
@@ -460,100 +469,71 @@ class Client:
         as a terminator for the entire rev-list result.
 
         """
-        self._require_command(b'rev-list')
-        if format:
-            assert b'\n' not in format
-            assert parse
-        for ref in refs:
-            assert ref
-            assert b'\n' not in ref
-        self.check_busy()
-        self._busy = b'rev-list'
-        conn = self.conn
-        conn.write(b'rev-list\n')
-        conn.write(b'\n')
-        if format:
-            conn.write(format)
-        conn.write(b'\n')
-        for ref in refs:
-            conn.write(ref)
-            conn.write(b'\n')
-        conn.write(b'\n')
-        if not format:
-            for line in lines_until_sentinel(conn, b'\n', ClientError):
-                line = line.strip()
-                assert len(line) == 40
-                yield line
-        else:
-            for line in lines_until_sentinel(conn, b'\n', ClientError):
-                if not line.startswith(b'commit '):
-                    raise ClientError('unexpected line ' + repr(line))
-                cmt_oidx = line[7:].strip()
-                assert len(cmt_oidx) == 40
-                yield cmt_oidx, parse(conn)
-        # FIXME: confusing
-        not_ok = self.check_ok()
-        if not_ok:
-            raise not_ok
-        self._not_busy()
+        with TypicalCallBehavior(self, 'rev-list') as call:
+            if format:
+                assert b'\n' not in format
+                assert parse
+            for ref in refs:
+                assert ref
+                assert b'\n' not in ref
+            self.conn.write(b'\n')
+            if format:
+                self.conn.write(format)
+            self.conn.write(b'\n')
+            for ref in refs:
+                self.conn.write(ref)
+                self.conn.write(b'\n')
+            self.conn.write(b'\n')
+            if not format:
+                for line in call.results():
+                    line = line.strip()
+                    assert len(line) == 40
+                    yield line
+            else:
+                for line in call.results():
+                    if not line.startswith(b'commit '):
+                        raise ClientError('unexpected line ' + repr(line))
+                    cmt_oidx = line[7:].strip()
+                    assert len(cmt_oidx) == 40
+                    yield cmt_oidx, parse(self.conn)
 
     def resolve(self, path, parent=None, want_meta=True, follow=True):
-        self._require_command(b'resolve')
-        self.check_busy()
-        self._busy = b'resolve'
-        conn = self.conn
-        conn.write(b'resolve %d\n' % ((1 if want_meta else 0)
-                                      | (2 if follow else 0)
-                                      | (4 if parent else 0)))
-        if parent:
-            protocol.write_resolution(conn, parent)
-        write_bvec(conn, path)
-        success = ord(conn.read(1))
-        assert success in (0, 1)
-        if success:
-            result = protocol.read_resolution(conn)
-        else:
-            result = protocol.read_ioerror(conn)
-        # FIXME: confusing
-        not_ok = self.check_ok()
-        if not_ok:
-            raise not_ok
-        self._not_busy()
-        if isinstance(result, vfs.IOError):
-            raise result
-        return result
+        arg = b'%d' % ((1 if want_meta else 0)
+                       | (2 if follow else 0)
+                       | (4 if parent else 0))
+        with TypicalCallBehavior(self, 'resolve', arg) as call:
+            conn = self.conn
+            if parent:
+                protocol.write_resolution(conn, parent)
+            write_bvec(conn, path)
+            success = ord(conn.read(1))
+            assert success in (0, 1)
+            if success:
+                return protocol.read_resolution(conn)
+            raise protocol.read_ioerror(conn)
 
     def config_get(self, name, opttype=None):
         assert isinstance(name, bytes)
         name = name.lower() # git is case insensitive here
         assert opttype in ('int', 'bool', None)
-        self._require_command(b'config-get')
-        self.check_busy()
-        self._busy = b'config'
         conn = self.conn
-        conn.write(b'config-get\n')
-        vint.send(conn, 'ss', name, opttype.encode('ascii') if opttype else b'')
-        kind = read_vuint(conn)
-        if kind == 0:
-            val = None
-        elif kind == 1:
-            val = True
-        elif kind == 2:
-            val = False
-        elif kind == 3:
-            val = read_vint(conn)
-        elif kind == 4:
-            val = read_bvec(conn)
-        elif kind == 5:
-            raise PermissionError(f'config-get does not allow remote access to {name}')
-        else:
-            raise TypeError(f'Unrecognized result type {kind}')
-        # FIXME: confusing
-        not_ok = self.check_ok()
-        if not_ok:
-            raise not_ok
-        self._not_busy()
-        return val
+        with TypicalCallBehavior(self, 'config-get'):
+            vint.send(conn, 'ss', name, opttype.encode('ascii') if opttype else b'')
+            kind = read_vuint(conn)
+            if kind == 0:
+                return None
+            elif kind == 1:
+                return True
+            elif kind == 2:
+                return False
+            elif kind == 3:
+                return read_vint(conn)
+            elif kind == 4:
+                return read_bvec(conn)
+            elif kind == 5:
+                raise PermissionError(f'config-get does not allow remote access to {name}')
+            else:
+                raise TypeError(f'Unrecognized result type {kind}')
 
 
 class RemotePackStore:
