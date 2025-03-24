@@ -555,6 +555,7 @@ class BaseConn:
 
     def error(self, s):
         """Indicate server error to the client."""
+        s = s.encode('utf-8', errors='backslashescape')
         s = re.sub(br'\s+', b' ', s)
         self.write(b'\nerror %s\n' % s)
 
