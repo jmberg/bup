@@ -65,10 +65,10 @@ class BupStorage:
         cannot be found.
         """
 
-    def list(self, pattern=None):
+    def list(self, kind, pattern=None):
         """
-        Return an iterator/iterable over the list of filenames, globbed with
-        the given fnmatch pattern (if any).
+        Return an iterator/iterable over the list of filenames of the given
+        kind, filtered by fnmatch() for the pattern, if any.
         """
         return
         # but have an empty 'yield' so the function is an iterator

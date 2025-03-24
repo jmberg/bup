@@ -68,28 +68,37 @@ def _nowstr():
     # actually seem to guarantee UTC
     return datetime.datetime.utcnow().strftime('%s')
 
-def _munge(name):
-    # do some sharding - S3 uses the first few characters for this
-    if name.startswith('refs/'):
-        return name
-    if name.startswith('conf/'):
-        return name
-    assert name.startswith('pack-')
-    return name[5:9] + '/' + name
+def _kind_to_prefix(kind):
+    return {
+        Kind.IDX: 'idx/',
+        Kind.CONFIG: 'conf/',
+        Kind.REFS: 'refs/',
+        # data/metadata must be same, reader doesn't
+        # know which it is and just use Kind.DATA
+        Kind.DATA: 'data/',
+        Kind.METADATA: 'data/',
+    }[kind]
+
+def _munge(name, kind):
+    return _kind_to_prefix(kind) + name
 
 def _unmunge(name):
-    if name.startswith('refs/'):
-        return name
+    if name.startswith('data/'):
+        return name[5:]
+    if name.startswith('idx/'):
+        return name[4:]
     if name.startswith('conf/'):
-        return name
-    assert name[4:10] == '/pack-'
-    return name[5:]
+        return name[5:]
+    if name.startswith('refs/'):
+        return name[5:]
+    assert False
+    return None
 
 class S3Reader:
-    def __init__(self, storage, name):
+    def __init__(self, storage, name, kind):
         self.storage = storage
         self.name = name
-        self.objname = _munge(name)
+        self.objname = _munge(name, kind)
         try:
             ret = storage.s3.head_object(
                 Bucket=storage.bucket,
@@ -132,7 +141,7 @@ class S3Reader:
 class S3CacheReader:
     # TODO: this class is not concurrency safe
     # TODO: this class sort of relies on sparse files (at least for efficiency)
-    def __init__(self, storage, name, cachedir, blksize):
+    def __init__(self, storage, name, cachedir, blksize, kind):
         self._reader = None
         self.storage = storage
         self.name = name
@@ -142,6 +151,7 @@ class S3CacheReader:
         self.blksize = blksize
         self.f_data = None
         self.size = None
+        self.kind = kind
 
         if not os.path.exists(self.fn_rngs):
             # unlink data if present, we don't know how valid it is
@@ -178,7 +188,7 @@ class S3CacheReader:
     @property
     def reader(self):
         if not self._reader:
-            self._reader = S3Reader(self.storage, self.name)
+            self._reader = S3Reader(self.storage, self.name, self.kind)
         return self._reader
 
     def _compress_ranges(self):
@@ -352,7 +362,7 @@ class S3Writer:
     def __init__(self, storage, name, kind, overwrite):
         self.storage = None
         self.name = name
-        self.objname = _munge(name)
+        self.objname = _munge(name, kind)
         self.buf = UploadFile()
         self.size = 0
         self.kind = kind
@@ -574,45 +584,37 @@ class AWSStorage(BupStorage):
         assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX,
                         Kind.CONFIG, Kind.REFS)
         name = name.decode('utf-8')
-        if kind == Kind.CONFIG:
-            name = 'conf/' + name
-        elif kind == Kind.REFS:
-            name = 'refs/' + name
         return S3Writer(self, name, kind, overwrite)
 
     def get_reader(self, name, kind):
         assert kind in (Kind.DATA, Kind.METADATA, Kind.IDX,
                         Kind.CONFIG, Kind.REFS)
         name = name.decode('utf-8')
-        if kind == Kind.CONFIG:
-            name = 'conf/' + name
-        elif kind == Kind.REFS:
-            name = 'refs/' + name
         if not self.cachedir or kind not in (Kind.DATA, Kind.METADATA):
-            return S3Reader(self, name)
-        return S3CacheReader(self, name, self.cachedir, self.down_blksize)
+            return S3Reader(self, name, kind)
+        return S3CacheReader(self, name, self.cachedir, self.down_blksize, kind)
 
-    def list(self, pattern=None):
-        # TODO: filter this somehow based on the pattern?
+    def list(self, kind, pattern=None):
+        prefix = _kind_to_prefix(kind)
         token = None
         while True:
             if token is not None:
                 ret = self.s3.list_objects_v2(
                     Bucket=self.bucket,
                     ContinuationToken=token,
+                    Prefix=prefix,
                 )
             else:
                 ret = self.s3.list_objects_v2(
                     Bucket=self.bucket,
+                    Prefix=prefix,
                 )
             if ret['KeyCount'] == 0:
                 break
             for item in ret['Contents']:
                 key = item['Key']
-                if key.startswith('refs/') or key.startswith('conf/'):
-                    continue
-                name = _unmunge(key).encode('ascii')
-                if fnmatch.fnmatch(name, pattern):
+                name = _unmunge(key).encode('utf-8')
+                if pattern is None or fnmatch.fnmatch(name, pattern):
                     yield name
             token = ret.get('NextContinuationToken')
             if token is None:

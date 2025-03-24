@@ -142,12 +142,11 @@ class FileStorage(BupStorage):
     def get_reader(self, name, kind):
         return FileReader(self.path, name, kind, self.openset)
 
-    def list(self, pattern=None):
+    def list(self, kind, pattern=None):
         # be an iterator here for test purposes, rather than
         # returning the list, to ensure nothing relies on this
         # being a list ...
-        for n in fnmatch.filter(os.listdir(self.path), pattern or b'*'):
-            yield n
+        yield from fnmatch.filter(os.listdir(self.path), pattern or b'*')
 
     def close(self):
         super(FileStorage, self).close()

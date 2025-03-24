@@ -525,7 +525,7 @@ class EncryptedRepo(ConfigRepo):
             return
         changes = False
         local_idxes = set(fnmatch.filter(os.listdir(self.cachedir), b'*.idx'))
-        for remote_idx in self.storage.list(b'*.encidx'):
+        for remote_idx in self.storage.list(Kind.IDX, b'*.encidx'):
             local_idx = remote_idx.replace(b'.encidx', b'.idx')
             if local_idx in local_idxes:
                 local_idxes.remove(local_idx)
