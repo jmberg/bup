@@ -29,14 +29,36 @@ export GIT_DIR=$tmpdir/cache
 # NOTE: set a very low packSizeLimit to test that
 # pack switching while writing works.
 
+mode=${TEST_ENCRYPTED_MODE:-local}
+if [ "$mode" = "local" ] ; then
+    repo_storage=File
+elif [ "$mode" = "s3" ] ; then
+    repo_storage=AWS
+else
+    WVPASS false "unsupported mode"
+fi
+
 cat > $tmpdir/repo.conf << EOF
 [bup]
   type = Encrypted
-  storage = File
+  storage = $repo_storage
   path = $tmpdir/repo
   cachedir = $tmpdir/cache/enc-cache
 EOF
+
 bup genkey | grep key >> $tmpdir/repo.conf
+
+if [ "$mode" = "s3" ] ; then
+    cat >> $tmpdir/repo.conf << EOF
+[bup.aws]
+cachedir = $tmpdir/cache
+s3bucket = test-bucket
+endpoint-url = http://localhost:19875
+accessKeyId = $MINIO_ROOT_USER
+secretAccessKey = $MINIO_ROOT_PASSWORD
+region = huh
+EOF
+fi
 
 grep -v readkey < $tmpdir/repo.conf > $tmpdir/repow.conf
 grep -v writekey < $tmpdir/repo.conf > $tmpdir/repor.conf

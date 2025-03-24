@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+. wvtest.sh
+. wvtest-bup.sh
+. dev/lib.sh
+
+set -o pipefail
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+
+bup() { "$top/bup" "$@"; }
+
+if test -z "$(type -p minio)"; then
+    WVSKIP minio binary not available
+    exit 0
+fi
+
+if test -z "$(type -p mc)"; then
+    WVSKIP mc binary not available
+    exit 0
+fi
+
+WVPASS mkdir "$tmpdir/home"
+export HOME="$tmpdir/home/"
+export MINIO_ROOT_USER=bup-test-root-user
+export MINIO_ROOT_PASSWORD=bup-test-root-pass
+
+WVSTART "start server"
+WVPASS mkdir "$tmpdir/storage"
+minio server --address localhost:19875 "$tmpdir/storage" &
+minio_pid=$!
+trap "kill -9 $minio_pid" EXIT
+
+sleep 1 # minio needs time to start up
+
+WVPASS mc alias set bup-test http://localhost:19875/ "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
+
+TEST_ENCRYPTED_MODE=s3 WVPASS test/ext/test-encrypted-repo
+
+echo "bucket content:"
+WVPASS mc find bup-test/test-bucket/
+echo "check config/refs exist:"
+WVPASS mc find bup-test/test-bucket/conf/config
+WVPASS mc find bup-test/test-bucket/refs/refs
+
+WVPASS cd "$top"
+WVPASS rm -rf "$tmpdir"

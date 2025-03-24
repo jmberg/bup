@@ -42,6 +42,7 @@ debs=(acl
       python3-tornado
       python3-hypothesis
       python3-libnacl
+      python3-boto3
       rdiff-backup
       rsync)
 
