@@ -7,7 +7,7 @@ task:
     memory: 2
   script: |
     set -xe
-    dev/prep-for-debianish-build
+    _INSTALL_MINIO=y dev/prep-for-debianish-build
     export LANG=C.UTF-8
     dev/system-info
     BUP_PYTHON_CONFIG=python3-config ./configure --with-pylint=yes
