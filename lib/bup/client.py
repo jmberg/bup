@@ -257,8 +257,11 @@ class Client:
     def _not_busy(self):
         self._busy = None
 
+    def _call(self, name, args=None, exception_types=None):
+        return TypicalCallBehavior(self, name, args, exception_types)
+
     def _get_available_commands(self):
-        with TypicalCallBehavior(self, 'help') as call:
+        with self._call('help') as call:
             result = set()
             first = True
             for line in call.results():
@@ -281,7 +284,7 @@ class Client:
                               % name.decode('ascii'))
 
     def _list_indexes(self):
-        with TypicalCallBehavior(self, 'list-indexes') as call:
+        with self._call('list-indexes') as call:
             for line in call.results():
                 assert(line.find(b'/') < 0)
                 parts = line.split(b' ')
@@ -320,7 +323,7 @@ class Client:
         git.auto_midx(self.cachedir)
 
     def send_index(self, name, f, send_size):
-        with TypicalCallBehavior(self, 'send-index', name):
+        with self._call('send-index', name):
             n = struct.unpack('!I', self.conn.read(4))[0]
             assert(n)
 
@@ -397,7 +400,7 @@ class Client:
                           max_pack_objects=max_pack_objects)
 
     def read_ref(self, refname):
-        with TypicalCallBehavior(self, 'read-ref', refname):
+        with self._call('read-ref', refname):
             r = self.conn.readline().strip()
             if not r:
                 return None
@@ -405,13 +408,13 @@ class Client:
             return unhexlify(r)
 
     def update_ref(self, refname, newval, oldval):
-        with TypicalCallBehavior(self, 'update-ref', refname):
+        with self._call('update-ref', refname):
             self.conn.write(b'%s\n' % hexlify(newval))
             self.conn.write(b'%s\n' % (hexlify(oldval) if oldval else b''))
 
     def join(self, id):
         # Send 'cat' so we'll work fine with older versions
-        with TypicalCallBehavior(self, 'cat', re.sub(br'[\n\r]', b'_', id),
+        with self._call('cat', re.sub(br'[\n\r]', b'_', id),
                                  exception_types=(KeyError,)):
             while 1:
                 sz = struct.unpack('!I', self.conn.read(4))[0]
@@ -420,7 +423,7 @@ class Client:
 
     def cat_batch(self, refs):
         conn = self.conn
-        with TypicalCallBehavior(self, 'cat-batch'):
+        with self._call('cat-batch'):
             for ref in refs:
                 assert ref
                 assert b'\n' not in ref
@@ -446,7 +449,7 @@ class Client:
     def refs(self, patterns=None, limit_to_heads=False, limit_to_tags=False):
         args = b'%d %d\n' % (1 if limit_to_heads else 0,
                              1 if limit_to_tags else 0)
-        with TypicalCallBehavior(self, 'refs', args) as call:
+        with self._call('refs', args) as call:
             patterns = patterns or tuple()
             for pattern in patterns:
                 assert b'\n' not in pattern
@@ -469,13 +472,13 @@ class Client:
         as a terminator for the entire rev-list result.
 
         """
-        with TypicalCallBehavior(self, 'rev-list') as call:
-            if format:
-                assert b'\n' not in format
-                assert parse
-            for ref in refs:
-                assert ref
-                assert b'\n' not in ref
+        if format:
+            assert b'\n' not in format
+            assert parse
+        for ref in refs:
+            assert ref
+            assert b'\n' not in ref
+        with self._call('rev-list') as call:
             self.conn.write(b'\n')
             if format:
                 self.conn.write(format)
@@ -501,7 +504,7 @@ class Client:
         arg = b'%d' % ((1 if want_meta else 0)
                        | (2 if follow else 0)
                        | (4 if parent else 0))
-        with TypicalCallBehavior(self, 'resolve', arg) as call:
+        with self._call('resolve', arg) as call:
             conn = self.conn
             if parent:
                 protocol.write_resolution(conn, parent)
@@ -517,7 +520,7 @@ class Client:
         name = name.lower() # git is case insensitive here
         assert opttype in ('int', 'bool', None)
         conn = self.conn
-        with TypicalCallBehavior(self, 'config-get'):
+        with self._call('config-get'):
             vint.send(conn, 'ss', name, opttype.encode('ascii') if opttype else b'')
             kind = read_vuint(conn)
             if kind == 0:
