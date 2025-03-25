@@ -12,6 +12,7 @@ export BUP_DIR="$tmpdir/bup"
 export BUP_DIR2="$tmpdir/bup2"
 export BUP_DIR3="$tmpdir/bup3"
 export BUP_DIR4="$tmpdir/bup4"
+export BUP_DIR5="$tmpdir/bup5"
 
 bup() { "$top/bup" "$@"; }
 
@@ -103,6 +104,20 @@ WVPASS instrumented-bup -d $BUP_DIR4 ls -l save/latest/test/sampledata/y/testfil
 WVPASS bup -d $BUP_DIR3 rewrite --work-db=$tmpdir/db -s $BUP_DIR save:save2
 WVPASS instrumented-bup -d $BUP_DIR3 ls -l save/latest/test/sampledata/y/testfile1 |
     WVPASS grep -- 158664
+
+WVSTART rewrite with excluded files
+WVPASS bup -d $BUP_DIR5 init
+WVPASS bup -d $BUP_DIR5 rewrite --work-db "$tmpdir/db2" -s $BUP_DIR4 \
+    --exclude-rx ^/test/sampledata/y/ save
+WVPASS extract_all "$BUP_DIR4" "save" "orig"
+WVPASS extract_all "$BUP_DIR5" "save" "new"
+rm -rf "$tmpdir/restore/orig/"*"/test/sampledata/y/"
+# that rm -rf changed timestamps - just ignore them
+touch -r "$tmpdir/restore/orig/" "$tmpdir/restore/orig/"*"/test/sampledata/"
+touch -r "$tmpdir/restore/orig/" "$tmpdir/restore/new/"*"/test/sampledata/"
+touch -r "$tmpdir/restore/orig/" "$tmpdir/restore/new/"
+WVPASS $top/dev/compare-trees "$tmpdir/restore/orig/" "$tmpdir/restore/new/"
+WVPASS rm -rf "$tmpdir/restore"
 
 
 WVPASS rm -rf $tmpdir

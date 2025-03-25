@@ -7,7 +7,9 @@ from bup import hashsplit, git, options, repo, metadata, vfs
 from bup.compat import argv_bytes
 from bup.hashsplit import GIT_MODE_FILE, GIT_MODE_SYMLINK
 from bup.helpers import (handle_ctrl_c, path_components,
-                         valid_save_name)
+                         valid_save_name,
+                         parse_rx_excludes,
+                         should_rx_exclude_path)
 from bup.io import path_msg
 from bup.tree import Stack
 from bup.repo import make_repo
@@ -17,9 +19,11 @@ from bup.config import derive_repo_addr, ConfigError
 optspec = """
 bup rewrite -s srcrepo <branch-name>
 --
-s,source=    source repository
-r,remote=    remote destination repository
-work-db=     work database filename (required, can be deleted after running)
+s,source=        source repository
+r,remote=        remote destination repository
+work-db=         work database filename (required, can be deleted after running)
+exclude-rx=      skip paths matching the unanchored regex (may be repeated)
+exclude-rx-from= skip --exclude-rx patterns in file (may be repeated)
 """
 def main(argv):
     o = options.Options(optspec)
@@ -27,6 +31,8 @@ def main(argv):
 
     if len(extra) != 1:
         o.fatal("no branch name given")
+
+    exclude_rxs = parse_rx_excludes(flags, o.fatal)
 
     src = argv_bytes(extra[0])
     if b':' in src:
@@ -117,6 +123,9 @@ def main(argv):
                 if name in (b'.', b'..'):
                     continue
                 itemname = fullname + b'/' + name
+                check_name = itemname + (b'/' if stat.S_ISDIR(vfs.item_mode(item)) else b'')
+                if should_rx_exclude_path(check_name, exclude_rxs):
+                    continue
                 if stat.S_ISDIR(vfs.item_mode(item)):
                     if converted_already(dstrepo, item, True)[0] is None:
                         yield from vfs_walk_recursively(srcrepo, dstrepo, item,
