@@ -2,7 +2,7 @@
 task:
   name: debian check/lint root
   container:
-    image: debian:bullseye
+    image: debian:trixie
     cpu: 4
     memory: 2
   script: |
