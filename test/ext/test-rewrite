@@ -119,5 +119,27 @@ touch -r "$tmpdir/restore/orig/" "$tmpdir/restore/new/"
 WVPASS $top/dev/compare-trees "$tmpdir/restore/orig/" "$tmpdir/restore/new/"
 WVPASS rm -rf "$tmpdir/restore"
 
+WVSTART "rewrite with excluded files (in repo)"
+WVPASS git config -f "$BUP_DIR/config" bup.split.trees true
+WVPASS git config -f "$BUP_DIR/config" bup.split.files legacy:14
+WVPASS bup -d "$BUP_DIR" rewrite --work-db "$tmpdir/db3" -s $BUP_DIR \
+    --exclude-rx ^/test/sampledata/y/ save:save-new
+WVPASS extract_all "$BUP_DIR" "save" "orig"
+WVPASS extract_all "$BUP_DIR" "save-new" "new"
+rm -rf "$tmpdir/restore/orig/"*"/test/sampledata/y/"
+# that rm -rf changed timestamps - just ignore them
+touch -r "$tmpdir/restore/orig/" "$tmpdir/restore/orig/"*"/test/sampledata/"
+touch -r "$tmpdir/restore/orig/" "$tmpdir/restore/new/"*"/test/sampledata/"
+touch -r "$tmpdir/restore/orig/" "$tmpdir/restore/new/"
+WVPASS $top/dev/compare-trees "$tmpdir/restore/orig/" "$tmpdir/restore/new/"
+WVPASS rm -rf "$tmpdir/restore"
+echo ----
+GIT_DIR="$BUP_DIR" WVPASS git ls-tree -r save^ > $tmpdir/o
+echo ----
+GIT_DIR="$BUP_DIR" WVPASS git ls-tree -r save-new^ > $tmpdir/n
+echo ----
+# FIXME: analyse the diff properly
+diff -u $tmpdir/o $tmpdir/n
+
 
 WVPASS rm -rf $tmpdir

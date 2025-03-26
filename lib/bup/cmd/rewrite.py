@@ -99,8 +99,9 @@ def main(argv):
             # can't do that if it's a directory, since it might exist
             # but in the non-augmented version, so dirs always go
             # through the database lookup
-            if not vfs_dir and size is not None and dstrepo.exists(item.oid):
-                return item.oid, mode
+# FIXME: this seems wrong - what if we're splitting in-repo to smaller chunks?
+#            if not vfs_dir and size is not None and dstrepo.exists(item.oid):
+#                return item.oid, mode
             wdbc.execute('SELECT dst, mode, size FROM %s WHERE src = ?' % tablename,
                          (item.oid, ))
             data = wdbc.fetchone()
