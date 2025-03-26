@@ -364,8 +364,6 @@ def _read_dir_meta(bupm):
     if not m:
         return default_dir_mode
     assert m.mode is not None
-    if m.size is None:
-        m.size = 0
     return m
 
 def _treeish_tree_data(repo, oid):
@@ -432,6 +430,8 @@ def _compute_item_size(repo, item):
         if isinstance(item, FakeLink):
             return len(item.target)
         return len(_readlink(repo, item.oid))
+    if S_ISDIR(mode):
+        return None
     return 0
 
 def item_size(repo, item):
