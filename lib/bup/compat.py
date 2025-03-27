@@ -4,7 +4,7 @@ from contextlib import ExitStack, nullcontext
 from os import environb as environ
 from os import fsdecode, fsencode
 from shlex import quote
-import dataclasses, os, sys
+import dataclasses, os, sys, traceback
 
 import bup_main
 
@@ -24,6 +24,12 @@ else:
         for y in it:
             yield x, y
             x = y
+
+if (ver.major, ver.minor) >= (3, 10):
+    print_exception = traceback.print_exception
+else:
+    def print_exception(ex):
+        return traceback.print_exception(type(ex), ex, ex.__traceback__)
 
 class pending_raise:
     """If rethrow is true, rethrow ex (if any), unless the body throws.
