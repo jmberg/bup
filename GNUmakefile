@@ -257,7 +257,10 @@ lib/cmd/bup: lib/cmd/bup.c src/bup/compat.c src/bup/io.c
 clean_paths += lib/bup/_helpers$(soext)
 generated_dependencies += lib/bup/_helpers.d
 lib/bup/_helpers$(soext): lib/bup/_helpers.c src/bup/pyutil.c lib/bup/bupsplit.c lib/bup/_hashsplit.c
-	$(CC) $(helpers_cflags) $(CPPFLAGS) $(CFLAGS) $^ \
+lib/bup/_helpers$(soext): lib/bup/_hashsplit.h lib/bup/bupsplit.h config/config.h
+lib/bup/_helpers$(soext): src/bup/compat.h src/bup/intprops.h src/bup/io.h
+lib/bup/_helpers$(soext): src/bup/pyutil.h src/bup.h
+	$(CC) $(helpers_cflags) $(CPPFLAGS) $(CFLAGS) $(filter-out %.h,$^) \
 	  $(helpers_ldflags) $(LDFLAGS) -o $@
 
 test/tmp:
