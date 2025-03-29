@@ -22,27 +22,29 @@ def _fanbits():
 fanbits = _fanbits
 
 def splitter(files, *, progress=None, keep_boundaries=False, blobbits=None,
-             fanbits=None):
+             fanbits=None, mode=None):
     return HashSplitter(files,
                         keep_boundaries=keep_boundaries,
                         progress=progress,
                         bits=blobbits or BUP_BLOBBITS,
-                        fanbits=fanbits or _fanbits())
+                        fanbits=fanbits or _fanbits(),
+                        mode=mode)
 
 
-_method_rx = br'legacy:(13|14|15|16|17|18|19|20|21)'
+_method_rx = br'(legacy|seq):(13|14|15|16|17|18|19|20|21)'
 
 def configuration(config_get):
     """Return a hashsplitter configuration map based on information
     provided by config_get."""
     method = config_get(b'bup.split.files')
     if method is None:
-        return {}
+        return {}#'mode': 'legacy'}
     m = re.fullmatch(_method_rx, method)
     if not m:
         raise ConfigError(f'invalid bup.split.files setting {method}')
-    blobbits = int(m.group(1))
-    return {'blobbits': blobbits}
+    mode = m.group(1)
+    blobbits = int(m.group(2))
+    return {'blobbits': blobbits, 'mode': mode}
 
 def from_config(files, split_config):
     """Return a hashsplitter for the given split_config."""
