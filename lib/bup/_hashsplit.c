@@ -68,6 +68,7 @@ enum bup_splitter_mode {
     SPLIT_MODE_FASTCDC,
     SPLIT_MODE_AE,
     SPLIT_MODE_JC,
+    SPLIT_MODE_ULTRACDC,
 };
 
 /*
@@ -367,6 +368,8 @@ static int HashSplitter_init(HashSplitter *self, PyObject *args, PyObject *kwds)
         self->mode = SPLIT_MODE_AE;
     } else if (!strcmp(mode, "jc")) {
         self->mode = SPLIT_MODE_JC;
+    } else if (!strcmp(mode, "ultracdc")) {
+        self->mode = SPLIT_MODE_ULTRACDC;
     } else {
         PyErr_Format(PyExc_ValueError, "invalid mode %s", mode);
         goto error;
@@ -1092,6 +1095,91 @@ HashSplitter_find_offs_jc(unsigned int nbits,
     return 0;
 }
 
+static size_t
+HashSplitter_find_offs_ultracdc(unsigned int nbits,
+                                const unsigned char *buf,
+                                const size_t len,
+                                unsigned int *extrabits)
+{
+    const uint64_t pattern = 0xaaaaaaaaaaaaaaaaULL;
+    uint64_t mask_s = 0x2f;
+    uint64_t mask_l = 0x2c;
+    size_t min_size = 1 << (nbits - 2);
+    size_t normal_size = 1 << nbits;
+    uint32_t lest = 64;
+    uint64_t out_buf_win;
+    uint32_t dist;
+    uint32_t cnt = 0;
+    static const uint8_t hamming_to_aa[] = {
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        5, 6, 4, 5, 6, 7, 5, 6, 4, 5, 3, 4, 5, 6, 4, 5,
+        3, 4, 2, 3, 4, 5, 3, 4, 2, 3, 1, 2, 3, 4, 2, 3,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        5, 6, 4, 5, 6, 7, 5, 6, 4, 5, 3, 4, 5, 6, 4, 5,
+        6, 7, 5, 6, 7, 8, 6, 7, 5, 6, 4, 5, 6, 7, 5, 6,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        5, 6, 4, 5, 6, 7, 5, 6, 4, 5, 3, 4, 5, 6, 4, 5,
+        3, 4, 2, 3, 4, 5, 3, 4, 2, 3, 1, 2, 3, 4, 2, 3,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        2, 3, 1, 2, 3, 4, 2, 3, 1, 2, 0, 1, 2, 3, 1, 2,
+        3, 4, 2, 3, 4, 5, 3, 4, 2, 3, 1, 2, 3, 4, 2, 3,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        5, 6, 4, 5, 6, 7, 5, 6, 4, 5, 3, 4, 5, 6, 4, 5,
+        3, 4, 2, 3, 4, 5, 3, 4, 2, 3, 1, 2, 3, 4, 2, 3,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+    };
+
+    if (len < min_size + 8)
+        return 0;
+
+    // As in the paper, the first candidate is min_size + 8, whose
+    // window is buf[min_size..min_size+8). The candidate at k is the
+    // window buf[k-8..k), so a mask hit cuts at k (the right edge of
+    // that window). The paper's "return i + 8" there doesn't match its
+    // own window; the independent ultracdc implementation at
+    // github.com/sleepybishop/ultracdc returns i + j, which is k here.
+    // The LEST return below is i + 8 in both.
+    memcpy(&out_buf_win, buf + min_size, sizeof(out_buf_win));
+    dist = __builtin_popcountll(out_buf_win ^ pattern);
+    for (size_t i = min_size + 8; i < len; i += 8) {
+        if (i + 8 > len) {
+            // not enough bytes left for a full window
+            for (size_t k = i; k < len; k++) {
+                if (!(dist & (k < normal_size ? mask_s : mask_l))) {
+                    *extrabits = 0; // FIXME
+                    return k;
+                }
+                dist += hamming_to_aa[buf[k]];
+                dist -= hamming_to_aa[buf[k - 8]];
+            }
+            break;
+        }
+        uint64_t in_buf_win;
+        memcpy(&in_buf_win, buf + i, sizeof(in_buf_win));
+        if (out_buf_win == in_buf_win) {
+            cnt++;
+            if (cnt == lest) {
+                *extrabits = 0;
+                // assumes min_size % 8 == 0!
+                return i + 8;
+            }
+            continue;
+        }
+        cnt = 0;
+        for (size_t k = i; k < i + 8; k++) {
+            if (!(dist & (k < normal_size ? mask_s : mask_l))) {
+                *extrabits = 0; // FIXME
+                return k;
+            }
+            dist += hamming_to_aa[buf[k]];
+            dist -= hamming_to_aa[buf[k - 8]];
+        }
+        out_buf_win = in_buf_win;
+    }
+
+    return 0;
+}
+
 static size_t HashSplitter_find_offs(enum bup_splitter_mode mode,
                                      unsigned int nbits,
                                      const unsigned char *buf,
@@ -1107,6 +1195,8 @@ static size_t HashSplitter_find_offs(enum bup_splitter_mode mode,
         return HashSplitter_find_offs_ae(nbits, buf, len, extrabits);
     case SPLIT_MODE_JC:
         return HashSplitter_find_offs_jc(nbits, buf, len, extrabits);
+    case SPLIT_MODE_ULTRACDC:
+        return HashSplitter_find_offs_ultracdc(nbits, buf, len, extrabits);
     default:
         assert(0);
     }
@@ -1275,6 +1365,8 @@ static int RecordHashSplitter_init(RecordHashSplitter *self, PyObject *args, PyO
         self->mode = SPLIT_MODE_AE;
     } else if (!strcmp(mode, "jc")) {
         self->mode = SPLIT_MODE_JC;
+    } else if (!strcmp(mode, "ultracdc")) {
+        self->mode = SPLIT_MODE_ULTRACDC;
     } else {
         PyErr_Format(PyExc_ValueError, "invalid mode %s", mode);
         return -1;

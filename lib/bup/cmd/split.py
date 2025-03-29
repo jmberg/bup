@@ -269,8 +269,10 @@ def main(argv):
             except ConfigError as ex:
                 opt_parser.fatal(ex)
             if opt.mode:
-                if opt.mode not in ('legacy', 'fastcdc', 'ae', 'jc'):
-                    opt_parser.fatal('invalid --mode, use legacy, fastcdc, ae or jc')
+                if opt.mode not in ('legacy', 'fastcdc', 'ae', 'jc',
+                                    'ultracdc'):
+                    opt_parser.fatal('invalid --mode, use legacy, fastcdc, '
+                                     'ae, jc or ultracdc')
                 split_cfg['mode'] = opt.mode
             if opt.bits:
                 try:

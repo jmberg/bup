@@ -231,5 +231,40 @@ WVPASS diff -u oids-exp oids
 WVPASS rm -r bup oids
 
 
+for mode in fastcdc jc ultracdc; do
+    WVSTART "split and join round-trip with $mode:14 from config"
+    WVPASS bup init
+    WVPASS git config -f "$BUP_DIR/config" bup.split.files "$mode:14"
+    tree="$(WVPASS bup split -t data)" || exit $?
+    WVPASS bup join "$tree" > data.joined
+    WVPASS cmp data data.joined
+    WVPASS rm -r bup data.joined
+done
+
+
+for mode in fastcdc jc ultracdc; do
+    WVSTART "split --mode $mode --bits 14 round-trip"
+    WVPASS bup init
+    tree="$(WVPASS bup split --mode "$mode" --bits 14 -t data)" || exit $?
+    WVPASS bup join "$tree" > data.joined
+    WVPASS cmp data data.joined
+    WVPASS rm -r bup data.joined
+done
+
+
+WVSTART "split --mode rejects unknown modes"
+WVPASS bup init
+WVFAIL bup split --mode bogus -t data
+WVPASS rm -r bup
+
+
+WVSTART "split --bits rejects out-of-range values"
+WVPASS bup init
+WVFAIL bup split --mode ultracdc --bits 12 -t data
+WVFAIL bup split --mode jc --bits 22 -t data
+WVFAIL bup split --mode fastcdc --bits abc -t data
+WVPASS rm -r bup
+
+
 WVPASS cd "$top"
 WVPASS rm -rf "$tmpdir"

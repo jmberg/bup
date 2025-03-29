@@ -58,17 +58,18 @@ bup.split.files (default `legacy:13`)
 
     This determines the "granularity" of the deduplication, with
     larger values producing, on average, larger chunks. The value must
-    be a string like `MODE:N` where `MODE` is one of `legacy` or `ae`,
-    and the integer `N` must be greater than 12 and less than 22. The
-    default of `legacy:13` provides backward compatibility, but it is
-    recommended to increase `N` for larger repositories.
+    be a string like `MODE:N` where `MODE` is one of `legacy`,
+    `fastcdc`, `ae`, `jc` or `ultracdc`, and the integer `N` must be
+    greater than 12 and less than 22. The default of `legacy:13`
+    provides backward compatibility, but it is recommended to increase
+    `N` for larger repositories.
 
-    `MODE` selects the algorithm used to find chunk boundaries. The
-    `legacy` mode is the original rolling-hash splitter. `ae` is a
-    content-defined chunker with different boundary rules; it produces
-    different chunks from `legacy`, so changing `MODE` on an existing
-    repository will not deduplicate against data stored under another
-    mode.
+    `MODE` selects the algorithm used to find chunk boundaries.
+    `legacy` is the original rolling-hash splitter. `fastcdc`, `ae`,
+    `jc` and `ultracdc` are content-defined chunkers with different
+    boundary rules; they produce different chunks from `legacy`, so
+    changing `MODE` on an existing repository will not deduplicate
+    against data stored under another mode.
 
     `ae` (Asymmetric Extremum) uses a window of 2^N - 256, which gives
     an average chunk size of about 2^N.

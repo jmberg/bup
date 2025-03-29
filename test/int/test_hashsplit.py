@@ -256,7 +256,7 @@ def test_recordhashsplitter_cdc_modes():
     max_chunk = 1 << (BUP_BLOBBITS + 2)
     max_rec = max(len(l) for l in lines)
 
-    for mode in ('fastcdc', 'ae', 'jc'):
+    for mode in ('fastcdc', 'ae', 'jc', 'ultracdc'):
         file_chunks = [len(b) for b, _ in HashSplitter([BytesIO(data)],
                                                        bits=BUP_BLOBBITS,
                                                        fanbits=1,
@@ -317,7 +317,7 @@ def test_recordhashsplitter_ae_level_from_chunk_length():
         WVPASSEQ(bits - BUP_BLOBBITS, _trailing_zeros(ofs - prev))
         prev = ofs
 
-_chunk_modes = ('legacy', 'ae')
+_chunk_modes = ('legacy', 'fastcdc', 'ae', 'jc', 'ultracdc')
 
 class _TrickleIO:
     """Return at most step bytes per read."""
