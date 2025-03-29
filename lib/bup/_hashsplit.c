@@ -789,30 +789,35 @@ HashSplitter_find_offs_fastcdc(unsigned int nbits,
     };
     uint64_t fp = 0;
     size_t i = 1 << (nbits - 2);  // skip min block size
-    size_t avg_block_size = 1 << nbits;
-    uint64_t small_mask = (1 << (nbits + 2)) - 1;
-    uint64_t large_mask = (1 << (nbits - 2)) - 1;
+    const uint64_t tmask_c = 0x575d590003570000; // 21 bits set - max nbits
+    const uint64_t tmask_j = 0x575d590003560000;
 
-    if (len < i) {
+    unsigned int tmp = nbits, pos = 0;
+    while (tmp) {
+        if (tmask_c & (1ULL << pos))
+           tmp--;
+        pos += 1;
+    }
+    // don't need mask_c since the below uses tmask_c-tmask_j
+    uint64_t mask_j = tmask_j & ~(~0ULL << pos);
+
+    uint64_t jump_length = 585; // j=9
+
+    if (len <= i) {
         *extrabits = 0;
         return len;
     }
 
-    size_t first_phase = len < avg_block_size ? len : avg_block_size;
-
-    for (; i < first_phase; i++) {
-        fp = (fp << 1) + GEAR_TABLE[(int)buf[i]];
-        if ((fp & small_mask) == 0) {
-            *extrabits = __builtin_ctz(fp >> nbits);
-            return i;
-        }
-    }
-
     for (; i < len; i++) {
         fp = (fp << 1) + GEAR_TABLE[(int)buf[i]];
-        if ((fp & large_mask) == 0) {
-            *extrabits = __builtin_ctz(fp >> nbits);
-            return i;
+        if ((fp & mask_j) == 0) {
+            if ((fp & (tmask_c - tmask_j)) == 0) { // eqivalent to "& mask_c"
+                *extrabits = __builtin_popcountll(~(fp & tmask_c)) - nbits;
+                return i;
+            }
+            i += jump_length;
+            if (i > len)
+                return 0;
         }
     }
 
