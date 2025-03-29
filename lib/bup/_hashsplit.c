@@ -67,6 +67,7 @@ enum bup_splitter_mode {
     SPLIT_MODE_LEGACY,
     SPLIT_MODE_FASTCDC,
     SPLIT_MODE_AE,
+    SPLIT_MODE_JC,
 };
 
 /*
@@ -364,6 +365,8 @@ static int HashSplitter_init(HashSplitter *self, PyObject *args, PyObject *kwds)
         self->mode = SPLIT_MODE_FASTCDC;
     } else if (!strcmp(mode, "ae")) {
         self->mode = SPLIT_MODE_AE;
+    } else if (!strcmp(mode, "jc")) {
+        self->mode = SPLIT_MODE_JC;
     } else {
         PyErr_Format(PyExc_ValueError, "invalid mode %s", mode);
         goto error;
@@ -911,25 +914,8 @@ HashSplitter_find_offs_ae(unsigned int nbits,
 }
 
 
-/*
- * __builtin_ctz() is undefined for 0, which the (32-bit truncated)
- * value can be when the masked-out bits above nbits are all zero.
- */
-static inline unsigned int fastcdc_extrabits(uint64_t fp, unsigned int nbits)
-{
-    unsigned int v = (unsigned int)(fp >> nbits);
-
-    return v ? __builtin_ctz(v) : 32;
-}
-
-static size_t
-HashSplitter_find_offs_fastcdc(unsigned int nbits,
-                               const unsigned char *buf,
-                               const size_t len,
-                               unsigned int *extrabits)
-{
-    /* https://github.dev/UWASL/dedup-bench/blob/main/dedup/src/chunking/fastcdc.cpp */
-    static const uint64_t GEAR_TABLE[256] = {
+/* https://github.dev/UWASL/dedup-bench/blob/main/dedup/src/chunking/fastcdc.cpp */
+static const uint64_t GEAR_TABLE[256] = {
         0x651748f5a15f8222, 0xd6eda276c877d8ea, 0x66896ef9591b326b,
         0xcd97506b21370a12, 0x8c9c5c9acbeb2a05, 0xb8b9553ee17665ef,
         0x1784a989315b1de6, 0x947666c9c50df4bd, 0xb3f660ea7ff2d6a4,
@@ -1016,7 +1002,25 @@ HashSplitter_find_offs_fastcdc(unsigned int nbits,
         0xc875ab077f66cf23, 0xa68b83d8d69b97ee, 0xb967199139f9a0a6,
         0x8a3a1a4d3de036b7, 0xdf3c5c0c017232a4, 0x8e60e63156990620,
         0xd31b4b03145f02fa
-    };
+};
+
+/*
+ * __builtin_ctz() is undefined for 0, which the (32-bit truncated)
+ * value can be when the masked-out bits above nbits are all zero.
+ */
+static inline unsigned int fastcdc_extrabits(uint64_t fp, unsigned int nbits)
+{
+    unsigned int v = (unsigned int)(fp >> nbits);
+
+    return v ? __builtin_ctz(v) : 32;
+}
+
+static size_t
+HashSplitter_find_offs_fastcdc(unsigned int nbits,
+                               const unsigned char *buf,
+                               const size_t len,
+                               unsigned int *extrabits)
+{
     uint64_t fp = 0;
     size_t i = 1 << (nbits - 2);  // skip min block size
     size_t avg_block_size = 1 << nbits;
@@ -1047,6 +1051,47 @@ HashSplitter_find_offs_fastcdc(unsigned int nbits,
     return 0;
 }
 
+static size_t
+HashSplitter_find_offs_jc(unsigned int nbits,
+                          const unsigned char *buf,
+                          const size_t len,
+                          unsigned int *extrabits)
+{
+    uint64_t fp = 0;
+    size_t i = 1 << (nbits - 2);  // skip min block size
+    const uint64_t tmask_c = 0x575d590003570000; // 21 bits set - max nbits
+    const uint64_t tmask_j = 0x575d590003560000;
+
+    unsigned int tmp = nbits, pos = 0;
+    while (tmp) {
+        if (tmask_c & (1ULL << pos))
+           tmp--;
+        pos += 1;
+    }
+    // don't need mask_c since the below uses tmask_c-tmask_j
+    uint64_t mask_j = tmask_j & ~(~0ULL << pos);
+
+    uint64_t jump_length = 585; // j=9
+
+    if (len <= i)
+        return 0;
+
+    for (; i < len; i++) {
+        fp = (fp << 1) + GEAR_TABLE[(int)buf[i]];
+        if ((fp & mask_j) == 0) {
+            if ((fp & (tmask_c - tmask_j)) == 0) { // eqivalent to "& mask_c"
+                *extrabits = __builtin_popcountll(~fp & tmask_c) - nbits;
+                return i;
+            }
+            i += jump_length;
+            if (i > len)
+                return 0;
+        }
+    }
+
+    return 0;
+}
+
 static size_t HashSplitter_find_offs(enum bup_splitter_mode mode,
                                      unsigned int nbits,
                                      const unsigned char *buf,
@@ -1060,6 +1105,8 @@ static size_t HashSplitter_find_offs(enum bup_splitter_mode mode,
         return HashSplitter_find_offs_fastcdc(nbits, buf, len, extrabits);
     case SPLIT_MODE_AE:
         return HashSplitter_find_offs_ae(nbits, buf, len, extrabits);
+    case SPLIT_MODE_JC:
+        return HashSplitter_find_offs_jc(nbits, buf, len, extrabits);
     default:
         assert(0);
     }
@@ -1226,6 +1273,8 @@ static int RecordHashSplitter_init(RecordHashSplitter *self, PyObject *args, PyO
         self->mode = SPLIT_MODE_FASTCDC;
     } else if (!strcmp(mode, "ae")) {
         self->mode = SPLIT_MODE_AE;
+    } else if (!strcmp(mode, "jc")) {
+        self->mode = SPLIT_MODE_JC;
     } else {
         PyErr_Format(PyExc_ValueError, "invalid mode %s", mode);
         return -1;

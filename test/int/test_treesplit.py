@@ -361,7 +361,7 @@ def test_expected_depth_2_split(tmpdir):
     stderr.writelines(diff)
     assert not diff
 
-@pytest.mark.parametrize('trees', [b'legacy:14', b'fastcdc:13', b'ae:13'])
+@pytest.mark.parametrize('trees', [b'legacy:14', b'fastcdc:13', b'ae:13', b'jc:13'])
 def test_split_tree_method_keeps_all_entries(tmpdir, trees):
     # High-entropy names, so that every mode is forced to split the tree.
     names = [hashlib.sha1(str(i).encode('ascii')).hexdigest()

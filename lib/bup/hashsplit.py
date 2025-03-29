@@ -36,7 +36,7 @@ def splitter(files, *, progress=None, keep_boundaries=False, blobbits=None,
                         mode=mode)
 
 
-_method_rx = br'(?P<mode>legacy|fastcdc|ae):(?P<bits>13|14|15|16|17|18|19|20|21)'
+_method_rx = br'(?P<mode>legacy|fastcdc|ae|jc):(?P<bits>13|14|15|16|17|18|19|20|21)'
 
 def configuration(config_get):
     """Return a splitting configuration map based on information

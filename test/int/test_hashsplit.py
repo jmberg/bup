@@ -256,17 +256,17 @@ def test_recordhashsplitter_cdc_modes():
     max_chunk = 1 << (BUP_BLOBBITS + 2)
     max_rec = max(len(l) for l in lines)
 
-    for mode in ('fastcdc', 'ae'):
+    for mode in ('fastcdc', 'ae', 'jc'):
         file_chunks = [len(b) for b, _ in HashSplitter([BytesIO(data)],
                                                        bits=BUP_BLOBBITS,
                                                        fanbits=1,
                                                        mode=mode)]
         file_cuts = list(itertools.accumulate(file_chunks))[:-1]
 
-        # The fastcdc finder does not test the last buffer position, so
-        # its record cuts land one byte after the file splitter's.  AE
-        # matches exactly.
-        shift = 1 if mode == 'fastcdc' else 0
+        # The fastcdc and jc finders do not test the last buffer
+        # position, so their record cuts land one byte after the file
+        # splitter's.  AE matches exactly.
+        shift = 0 if mode == 'ae' else 1
         cuts = _record_cuts(bytes_1, mode)
         WVPASSEQ([ofs for ofs, _ in cuts],
                  [ofs + shift for ofs in file_cuts[:len(cuts)]])
