@@ -61,6 +61,7 @@ static size_t max_bits;
 enum bup_splitter_mode {
     SPLIT_MODE_LEGACY,
     SPLIT_MODE_FASTCDC,
+    SPLIT_MODE_ULTRACDC,
 };
 
 /*
@@ -356,6 +357,8 @@ static int HashSplitter_init(HashSplitter *self, PyObject *args, PyObject *kwds)
         self->mode = SPLIT_MODE_LEGACY;
     } else if (!strcmp(mode, "fastcdc")) {
         self->mode = SPLIT_MODE_FASTCDC;
+    } else if (!strcmp(mode, "ultracdc")) {
+        self->mode = SPLIT_MODE_ULTRACDC;
     } else {
         PyErr_Format(PyExc_ValueError, "invalid mode %s", mode);
         goto error;
@@ -825,6 +828,97 @@ HashSplitter_find_offs_fastcdc(unsigned int nbits,
     return 0;
 }
 
+static size_t
+HashSplitter_find_offs_ultracdc(unsigned int nbits,
+                                const unsigned char *buf,
+                                const size_t len,
+                                unsigned int *extrabits)
+{
+    const uint64_t pattern = 0xaaaaaaaaaaaaaaaaULL;
+    uint64_t mask_s = 0x2f;
+    uint64_t mask_l = 0x2c;
+    size_t min_size = 1 << (nbits - 2);
+    size_t normal_size = 1 << nbits;
+    uint32_t lest = 64;
+    uint64_t out_buf_win;
+    uint32_t dist;
+    uint32_t cnt = 0;
+    static const uint8_t hamming_to_aa[] = {
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        5, 6, 4, 5, 6, 7, 5, 6, 4, 5, 3, 4, 5, 6, 4, 5,
+        3, 4, 2, 3, 4, 5, 3, 4, 2, 3, 1, 2, 3, 4, 2, 3,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        5, 6, 4, 5, 6, 7, 5, 6, 4, 5, 3, 4, 5, 6, 4, 5,
+        6, 7, 5, 6, 7, 8, 6, 7, 5, 6, 4, 5, 6, 7, 5, 6,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        5, 6, 4, 5, 6, 7, 5, 6, 4, 5, 3, 4, 5, 6, 4, 5,
+        3, 4, 2, 3, 4, 5, 3, 4, 2, 3, 1, 2, 3, 4, 2, 3,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        2, 3, 1, 2, 3, 4, 2, 3, 1, 2, 0, 1, 2, 3, 1, 2,
+        3, 4, 2, 3, 4, 5, 3, 4, 2, 3, 1, 2, 3, 4, 2, 3,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+        5, 6, 4, 5, 6, 7, 5, 6, 4, 5, 3, 4, 5, 6, 4, 5,
+        3, 4, 2, 3, 4, 5, 3, 4, 2, 3, 1, 2, 3, 4, 2, 3,
+        4, 5, 3, 4, 5, 6, 4, 5, 3, 4, 2, 3, 4, 5, 3, 4,
+    };
+
+    if (len <= min_size)
+        return 0;
+
+    if (normal_size > len)
+        normal_size = len;
+
+    // FIXME - only correct on little endian
+    out_buf_win = *(uint64_t *)(buf + min_size);
+    dist = __builtin_popcountll(out_buf_win ^ pattern);
+    for (size_t i = min_size; i < normal_size; i += 8) {
+        uint64_t in_buf_win = *(uint64_t *)(buf + i);
+        if (out_buf_win == in_buf_win) {
+            cnt++;
+            if (cnt == lest) {
+                *extrabits = 0;
+                // assumes min_size % 8 == 0!
+                return i + 8;
+            }
+            continue;
+        }
+        cnt = 0;
+        for (int j = 0; j < 8; j++) {
+            if (!(dist & mask_s)) {
+                *extrabits = 0; // FIXME
+                return i + j; // paper says i+8 but that seems wrong
+            }
+            dist += hamming_to_aa[buf[i + j]];
+            dist -= hamming_to_aa[buf[i + j - 8]];
+        }
+        out_buf_win = in_buf_win;
+    }
+    for (size_t i = normal_size; i < len; i += 8) {
+        uint64_t in_buf_win = *(uint64_t *)(buf + i);
+        if (out_buf_win == in_buf_win) {
+            cnt++;
+            if (cnt == lest) {
+                *extrabits = 0;
+                // assumes min_size % 8 == 0!
+                return i + 8;
+            }
+            continue;
+        }
+        cnt = 0;
+        for (int j = 0; j < 8 && i + j < len; j++) {
+            if (!(dist & mask_l)) {
+                *extrabits = 0; // FIXME
+                return i + j; // paper says i+8 but that seems wrong
+            }
+            dist += hamming_to_aa[buf[i + j]];
+            dist -= hamming_to_aa[buf[i + j - 8]];
+        }
+        out_buf_win = in_buf_win;
+    }
+
+    return 0;
+}
+
 static PyObject *HashSplitter_iternext(HashSplitter *self)
 {
     unsigned int nbits = self->bits;
@@ -866,6 +960,10 @@ static PyObject *HashSplitter_iternext(HashSplitter *self)
         case SPLIT_MODE_FASTCDC:
             ofs = HashSplitter_find_offs_fastcdc(nbits, buf + self->start,
                                                  maxlen, &extrabits);
+            break;
+        case SPLIT_MODE_ULTRACDC:
+            ofs = HashSplitter_find_offs_ultracdc(nbits, buf + self->start,
+                                                  maxlen, &extrabits);
             break;
         default:
             assert(0);
@@ -959,6 +1057,8 @@ static int RecordHashSplitter_init(RecordHashSplitter *self, PyObject *args, PyO
 // TODO
 //    } else if (!strcmp(mode, "fastcdc")) {
 //        self->mode = SPLIT_MODE_FASTCDC;
+//    } else if (!strcmp(mode, "ultracdc")) {
+//        self->mode = SPLIT_MODE_ULTRACDC;
     } else {
         PyErr_Format(PyExc_ValueError, "invalid mode %s", mode);
         return -1;

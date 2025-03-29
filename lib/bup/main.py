@@ -198,7 +198,7 @@ def run_subcmd(module, args):
                 return module.main(args)
             import cProfile
             f = compile('module.main(args)', __file__, 'exec')
-            return cProfile.runctx(f, globals(), locals())
+            return cProfile.runctx(f, globals(), locals(), sort='cumtime')
         finally:
             try:
                 # clear before exit so next process won't intermingle

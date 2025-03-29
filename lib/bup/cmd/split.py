@@ -134,12 +134,14 @@ def split(opt, files, parent, out, split_cfg, *,
         tree = new_tree(shalist)
     else:
         last = 0
+        copy = opt.copy
+        quiet = opt.quiet
         for blob, level in hashsplit.from_config(files, split_cfg):
             hashsplit.total_split += len(blob)
-            if opt.copy:
+            if copy:
                 out.write(blob)
             megs = hashsplit.total_split // 1024 // 1024
-            if not opt.quiet and last != megs:
+            if not quiet and last != megs:
                 last = megs
 
     if opt.verbose:
