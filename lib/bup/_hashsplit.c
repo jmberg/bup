@@ -595,13 +595,82 @@ static inline size_t HashSplitter_roll(Rollsum *r, unsigned int nbits,
     return 0;
 }
 
+static inline int split_found(uint32_t v, unsigned int nbits,
+                              unsigned int *extrabits)
+{
+    /* compiler should lift this out/up */
+    const uint32_t mask = (1 << nbits) - 1;
+
+    /* empirically, this masking is faster than __builtin_ctz() */
+    if ((v & mask) == mask) {
+        v >>= nbits;
+        /*
+         * See the DESIGN document, the bit counting loop used to
+         * be written in a way that shifted rsum *before* checking
+         * the lowest bit, make that explicit now so the code is a
+         * bit easier to understand.
+         */
+        v >>= 1;
+#if defined(__has_builtin)
+#if   __has_builtin(__builtin_ctz)
+#define USE_BUILTIN_CTZ 1
+#endif
+#endif
+#ifdef USE_BUILTIN_CTZ
+        *extrabits = __builtin_ctz(~v);
+#else
+        *extrabits = 0;
+        while (v & 1) {
+            (*extrabits)++;
+            v >>= 1;
+        }
+#endif
+#undef USE_BUILTIN_CTZ
+        return 1;
+    }
+    return 0;
+}
+
 static size_t HashSplitter_find_offs(unsigned int nbits,
                                      const unsigned char *buf, const size_t len,
                                      unsigned int *extrabits)
 {
-    Rollsum r;
-    rollsum_init(&r);
-    return HashSplitter_roll(&r, nbits, buf, len, extrabits);
+    struct {
+        uint32_t s1, s2;
+    } state = {
+        .s1 = (BUP_WINDOWSIZE * ROLLSUM_CHAR_OFFSET),
+        .s2 = (BUP_WINDOWSIZE * (BUP_WINDOWSIZE-1) * ROLLSUM_CHAR_OFFSET),
+    };
+
+    /* first part without any dropped bytes */
+    for (size_t pos = 0; pos < BUP_WINDOWSIZE; pos++) {
+        uint32_t s;
+        uint8_t add = buf[pos];
+        uint8_t drop = 0;
+
+        state.s1 += add - drop;
+        state.s2 += state.s1 - BUP_WINDOWSIZE * (drop + ROLLSUM_CHAR_OFFSET);
+
+        s = (state.s1 << 16) | (state.s2 & 0xffff);
+        if (split_found(s, nbits, extrabits))
+            return pos + 1;
+    }
+
+    /* main loop with dropping from behind */
+    for (size_t pos = BUP_WINDOWSIZE; pos < len; pos++) {
+        uint32_t s;
+        uint8_t add = buf[pos];
+        uint8_t drop = buf[pos - BUP_WINDOWSIZE];
+
+        state.s1 += add - drop;
+        state.s2 += state.s1 - BUP_WINDOWSIZE * (drop + ROLLSUM_CHAR_OFFSET);
+
+        s = (state.s1 << 16) | (state.s2 & 0xffff);
+        if (split_found(s, nbits, extrabits))
+            return pos + 1;
+    }
+
+    return 0;
 }
 
 static PyObject *HashSplitter_iternext(HashSplitter *self)
