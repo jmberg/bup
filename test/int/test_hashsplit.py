@@ -1,7 +1,9 @@
 
 from io import BytesIO
 from binascii import unhexlify
+import itertools
 import os
+import random
 
 from wvpytest import *
 
@@ -228,6 +230,178 @@ def test_hashsplitter_object():
     data = b''.join([b'%.10x\n' % x for x in range(10000)])
     WVPASSEQ(list(_splitbuf(data)),
              list(_splitbuf_rhs(data)))
+
+
+def _record_cuts(records, mode):
+    """Return the cumulative offsets where RecordHashSplitter cut."""
+    s = RecordHashSplitter(bits=BUP_BLOBBITS, mode=mode)
+    cuts = []
+    ofs = 0
+    for rec in records:
+        ofs += len(rec)
+        offs, bits = s.feed(rec)
+        if offs:
+            cuts.append((ofs, bits))
+    return cuts
+
+def test_recordhashsplitter_cdc_modes():
+    rng = random.Random(1)
+    data = bytes(rng.getrandbits(8) for _ in range(200000))
+    bytes_1 = [data[i:i+1] for i in range(len(data))]
+
+    # Determinism for a given record sequence, plus bounded chunks and
+    # valid bits for record-sized feeds.  Forced splits report no bits.
+    lines = data.split(b'\n')
+    lines = [l + b'\n' for l in lines[:-1]] + [lines[-1]]
+    max_chunk = 1 << (BUP_BLOBBITS + 2)
+    max_rec = max(len(l) for l in lines)
+
+    for mode in ('fastcdc', 'ae'):
+        file_chunks = [len(b) for b, _ in HashSplitter([BytesIO(data)],
+                                                       bits=BUP_BLOBBITS,
+                                                       fanbits=1,
+                                                       mode=mode)]
+        file_cuts = list(itertools.accumulate(file_chunks))[:-1]
+
+        # The fastcdc finder does not test the last buffer position, so
+        # its record cuts land one byte after the file splitter's.  AE
+        # matches exactly.
+        shift = 1 if mode == 'fastcdc' else 0
+        cuts = _record_cuts(bytes_1, mode)
+        WVPASSEQ([ofs for ofs, _ in cuts],
+                 [ofs + shift for ofs in file_cuts[:len(cuts)]])
+        WVPASS(len(cuts) >= len(file_cuts) - 1)
+
+        a = _record_cuts(lines, mode)
+        WVPASSEQ(a, _record_cuts(lines, mode))
+        prev = 0
+        for ofs, bits in a:
+            WVPASS(ofs - prev <= max_chunk + max_rec)
+            if bits is not None:
+                WVPASS(bits >= BUP_BLOBBITS)
+            prev = ofs
+        WVPASS(len(a) > 1)
+
+def test_recordhashsplitter_ae_matches_file_cuts():
+    # AE cuts after the byte the file splitter cuts at, so a record
+    # stream ends the chunk at the first record end at or after each
+    # file cut.
+    rng = random.Random(2)
+    data = bytes(rng.getrandbits(8) for _ in range(200000))
+    recs, i = [], 0
+    while i < len(data):
+        n = rng.randint(1, 50)
+        recs.append(data[i:i+n])
+        i += n
+    file_chunks = [len(b) for b, _ in HashSplitter([BytesIO(data)],
+                                                   bits=BUP_BLOBBITS,
+                                                   fanbits=1,
+                                                   mode='ae')]
+    file_cuts = list(itertools.accumulate(file_chunks))[:-1]
+    rec_ends = list(itertools.accumulate(len(r) for r in recs))
+    expected = [next(e for e in rec_ends if e >= c) for c in file_cuts]
+    WVPASSEQ([ofs for ofs, _ in _record_cuts(recs, 'ae')], expected)
+
+def test_recordhashsplitter_ae_level_from_chunk_length():
+    rng = random.Random(8)
+    data = bytes(rng.getrandbits(8) for _ in range(200000))
+    recs, i = [], 0
+    while i < len(data):
+        n = rng.randint(1, 50)
+        recs.append(data[i:i+n])
+        i += n
+    cuts = _record_cuts(recs, 'ae')
+    WVPASS(len(cuts) > 1)
+    prev = 0
+    for ofs, bits in cuts:
+        WVPASSEQ(bits - BUP_BLOBBITS, _trailing_zeros(ofs - prev))
+        prev = ofs
+
+_chunk_modes = ('legacy', 'ae')
+
+class _TrickleIO:
+    """Return at most step bytes per read."""
+    def __init__(self, data, step):
+        self._f = BytesIO(data)
+        self._step = step
+    def read(self, size=None):
+        if size is None or size > self._step:
+            size = self._step
+        return self._f.read(size)
+
+def _split_items(files, mode):
+    hs = HashSplitter(files, bits=BUP_BLOBBITS, fanbits=1, mode=mode)
+    return list(hs)
+
+def _chunk_test_data():
+    rnd = random.Random(1234)
+    return [rnd.randbytes(1 << 20),
+            bytes(1 << 19),
+            b'\xaa' * (1 << 18) + rnd.randbytes(1 << 18)]
+
+def test_hashsplit_modes_trickle_reads():
+    for data in _chunk_test_data():
+        for mode in _chunk_modes:
+            whole = _split_items([BytesIO(data)], mode)
+            for step in (7, 37):
+                WVPASSEQ(_split_items([_TrickleIO(data, step)], mode), whole)
+
+def test_hashsplit_modes_differ():
+    data = _chunk_test_data()[0]
+    items = {mode: _split_items([BytesIO(data)], mode) for mode in _chunk_modes}
+    for a in _chunk_modes:
+        for b in _chunk_modes:
+            if a < b:
+                WVPASS(items[a] != items[b])
+
+def _ae_reference_lengths(data, bits):
+    """Chunk lengths from a direct transcription of AE's Algorithm 1."""
+    w = (1 << bits) - 256
+    max_blob = 1 << (bits + 2)
+    lengths = []
+    start = 0
+    while start < len(data):
+        buf = data[start:start + max_blob]
+        cut = None
+        max_val, max_pos = buf[0], 0
+        for i in range(1, len(buf)):
+            if buf[i] > max_val:
+                max_val, max_pos = buf[i], i
+            elif i == max_pos + w:
+                cut = i + 1
+                break
+        if cut is None:
+            cut = len(buf)
+        lengths.append(cut)
+        start += cut
+    return lengths
+
+def test_hashsplit_ae_matches_reference():
+    for data in _chunk_test_data():
+        expected = _ae_reference_lengths(data, BUP_BLOBBITS)
+        items = _split_items([BytesIO(data)], 'ae')
+        WVPASSEQ([len(blob) for blob, _level in items], expected)
+
+def test_hashsplit_ae_mean_chunk_size():
+    data = random.Random(5).randbytes(4 << 20)
+    leaves = [len(blob) for blob, level in _split_items([BytesIO(data)], 'ae')
+              if level == 0]
+    mean = sum(leaves) / len(leaves)
+    WVPASS(abs(mean / (1 << BUP_BLOBBITS) - 1) < 0.1)
+
+def _trailing_zeros(n):
+    t = 0
+    while not (n >> t) & 1:
+        t += 1
+    return t
+
+def test_hashsplit_ae_level_from_chunk_length():
+    data = random.Random(6).randbytes(1 << 22)
+    items = _split_items([BytesIO(data)], 'ae')
+    # The final chunk is not a cut, so it isn't given a level from its length
+    for blob, level in items[:-1]:
+        WVPASSEQ(level, _trailing_zeros(len(blob)))
+    WVPASS(any(level for _blob, level in items))
 
 def test_hashsplitter_short_read():
     class DataObj:

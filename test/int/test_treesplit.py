@@ -1,4 +1,5 @@
 from difflib import unified_diff
+import hashlib
 from os import environb
 from pathlib import Path
 from sys import stderr
@@ -330,7 +331,7 @@ def pruned_ls_files(parent, output):
         files.append(line.decode('ascii'))
     return files
 
-def split_tree_for_filenames(names, tmpdir):
+def split_tree_for_filenames(names, tmpdir, trees=b'1'):
     environb[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
     src = tmpdir + b'/src'
     hashsize = 32 if environb.get(b'BUP_TEST_SHA256', b'') == b'1' else 20
@@ -338,7 +339,7 @@ def split_tree_for_filenames(names, tmpdir):
     mkdirp(src)
     for name in names:
         Path(src.decode('ascii'), name).touch()
-    ex((b'git', b'--git-dir', bupdir, b'config', b'bup.split.trees', b'1'))
+    ex((b'git', b'--git-dir', bupdir, b'config', b'bup.split.trees', trees))
     ex((b'./bup', b'index', src))
     ex((b'./bup', b'save', b'-n', b'src', src))
     ls_tree = exo((b'git', b'--git-dir', bupdir,
@@ -359,3 +360,14 @@ def test_expected_depth_2_split(tmpdir):
     diff = diff_split(split_2, split_tree_for_filenames(split_src, tmpdir))
     stderr.writelines(diff)
     assert not diff
+
+@pytest.mark.parametrize('trees', [b'legacy:14', b'fastcdc:13', b'ae:13'])
+def test_split_tree_method_keeps_all_entries(tmpdir, trees):
+    # High-entropy names, so that every mode is forced to split the tree.
+    names = [hashlib.sha1(str(i).encode('ascii')).hexdigest()
+             for i in range(2000)]
+    listing = split_tree_for_filenames(names, tmpdir, trees)
+    leaves = [line.rstrip('\n').rsplit('/', 1)[-1]
+              for line in listing if not line.endswith('.bupm\n')]
+    WVPASSEQ(sorted(leaves), sorted(names))
+    assert any('.bupd/' in line for line in listing)
