@@ -48,6 +48,8 @@ max-pack-objects=  maximum number of objects in a single pack
 fanout=    average number of blobs in a single tree
 bwlimit=   maximum bytes/sec to transmit to server
 #,compress=  set compression level to # (0-9, 9 is highest)
+mode=      hashsplit mode (overrides repo)
+bits=      hashsplit bits (overrides repo)
 """
 
 
@@ -253,7 +255,9 @@ def main(argv):
                 split_cfg = hashsplit.configuration(null_config_get)
         except ConfigError as ex:
             opt_parser.fatal(ex)
+        split_cfg['mode'] = opt.mode
         split_cfg['keep_boundaries'] = opt.keep_boundaries
+        if opt.bits: split_cfg['blobbits'] = int(opt.bits)
         if opt.name and writing:
             refname = opt.name and b'refs/heads/%s' % opt.name
             oldref = repo.read_ref(refname)
