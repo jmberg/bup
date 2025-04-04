@@ -236,5 +236,36 @@ else
     WVPASSEQ 7 $obj_n_after
 fi
 
+WVSTART "gc (split trees)"
+# Override the hash-splitter so we can create multiple levels
+# regardless the data.
+mkdir "$tmpdir/mod"
+cat > "$tmpdir/mod/record_hashsplitter_override.py" << EOF
+from bup import _helpers
+
+class RecordHashSplitter:
+    def __init__(self, bits=None):
+        self.idx = 0
+    def feed(self, name):
+        self.idx += 1
+        return self.idx % 5 == 0, 20 # second value is ignored
+_helpers.RecordHashSplitter = RecordHashSplitter
+EOF
+
+cat > "$tmpdir/bup-save" << EOF
+#!/bin/sh
+
+PYTHONPATH="$tmpdir/mod/" \
+    $top/bup --import-py-module record_hashsplitter_override save "\$@"
+EOF
+chmod +x "$tmpdir/bup-save"
+
+WVPASS rm -rf "$BUP_DIR"
+WVPASS bup init
+WVPASS git config -f "$BUP_DIR/config" bup.split.trees true
+WVPASS bup index "$top/test/sampledata"
+WVPASS $tmpdir/bup-save -n gc-test --strip-path="$top" "$top/test/sampledata"
+WVPASS bup gc $GC_OPTS -v
+
 WVPASS cd "$top"
 WVPASS rm -rf "$tmpdir"
