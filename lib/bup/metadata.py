@@ -1044,6 +1044,7 @@ def summary_bytes(meta, numeric_ids = False, classification = None,
                   human_readable = False):
     """Return bytes containing the "ls -l" style listing for meta.
     Classification may be "all", "type", or None."""
+    if meta is None: return b'<NONE ENTRY>'
     user_str = group_str = size_or_dev_str = b'?'
     symlink_target = None
     mode_str = b'?' * 10
@@ -1093,6 +1094,7 @@ def summary_bytes(meta, numeric_ids = False, classification = None,
 
 
 def detailed_bytes(meta, fields = None):
+    if meta is None: return b'<NONE ENTRY>'
     # FIXME: should optional fields be omitted, or empty i.e. "rdev:
     # 0", "link-target:", etc.
     if not fields:
@@ -1174,6 +1176,9 @@ def display_archive(file, out):
             out.write(b'\n')
     elif verbose == 0:
         for meta in _ArchiveIterator(file):
+            if meta is None:
+                out.write(b'<NONE ENTRY>\n')
+                continue
             if not meta.path:
                 log('bup: no metadata path, but asked to only display path'
                     ' (increase verbosity?)')
