@@ -26,6 +26,7 @@ def _write_tree(repo, dir_meta, items, add_meta=True):
         metalist.sort(key = lambda x: x[0])
         metadata = BytesIO(b''.join(m[1].encode() for m in metalist))
         mode, oid = split_to_blob_or_tree(repo.write_bupm, repo.write_tree,
+                                          # FIXME: use repo config
                                           splitter([metadata],
                                                    keep_boundaries=False))
         shalist.append((mode, b'.bupm', oid))
