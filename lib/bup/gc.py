@@ -129,7 +129,7 @@ def find_live_objects(existing_count, cat_pipe, idx_list, refs=None,
 _pack_stem_rx = re.compile(br'pack-[0-9a-fA-F]{40}')
 
 def sweep(live_objects, live_trees, existing_count, cat_pipe, threshold,
-          compression, verbosity):
+          compression, verbosity, collect_small):
     """Traverse all the packs, saving the (probably) live data."""
 
     stale_packs = [] # stems like /some/where/pack-OIDX (no suffix)
@@ -191,6 +191,12 @@ def sweep(live_objects, live_trees, existing_count, cat_pipe, threshold,
                     stale_packs.append(idx_name[:-4])
                     continue
 
+                def pack_size(idx_name):
+                    return os.stat(idx_name[:-4] + b'.pack').st_size
+
+                if collect_small and pack_size(idx_name) < collect_small:
+                    must_rewrite = True
+
                 live_frac = idx_live_count / float(len(idx))
                 if not must_rewrite and live_frac > ((100 - threshold) / 100.0):
                     if verbosity:
@@ -235,7 +241,8 @@ def sweep(live_objects, live_trees, existing_count, cat_pipe, threshold,
                / float(existing_count) * 100))
 
 
-def bup_gc(threshold=10, compression=1, verbosity=0, ignore_missing=False):
+def bup_gc(threshold=10, compression=1, verbosity=0, ignore_missing=False,
+           collect_small=None):
     cat_pipe = git.cp()
     existing_count = count_objects(git.repo(b'objects/pack'), verbosity)
     if verbosity:
@@ -278,7 +285,7 @@ def bup_gc(threshold=10, compression=1, verbosity=0, ignore_missing=False):
                 if verbosity: log('removing unreachable data\n')
                 sweep(live_objects, live_trees, existing_count, cat_pipe,
                       threshold, compression,
-                      verbosity)
+                      verbosity, collect_small)
             except BaseException as ex:
                 log('WARNING: Collection interrupted.  Run gc (again) to completion before\n'
                     'WARNING: adding any new data to the repository (e.g. via save or get).\n')

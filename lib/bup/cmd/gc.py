@@ -2,7 +2,7 @@
 
 from bup import git, options
 from bup.gc import bup_gc
-from bup.helpers import die_if_errors
+from bup.helpers import die_if_errors, parse_num
 
 
 optspec = """
@@ -13,6 +13,7 @@ threshold=     only rewrite a packfile if it's over this percent garbage [10]
 #,compress=    set compression level to # (0-9, 9 is highest) [1]
 ignore-missing don't halt halt for missing objects
 unsafe         use the command even though it may be DANGEROUS
+collect-small= rewrite packs below this size
 """
 
 # FIXME: server mode?
@@ -36,11 +37,15 @@ def main(argv):
         if opt.threshold < 0 or opt.threshold > 100:
             o.fatal('threshold must be an integer percentage value')
 
+    if opt.collect_small:
+        opt.collect_small = parse_num(opt.collect_small)
+
     git.check_repo_or_die()
 
     bup_gc(threshold=opt.threshold,
            compression=opt.compress,
            verbosity=opt.verbose,
-           ignore_missing=opt.ignore_missing)
+           ignore_missing=opt.ignore_missing,
+           collect_small=opt.collect_small)
 
     die_if_errors()
