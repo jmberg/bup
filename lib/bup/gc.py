@@ -142,7 +142,7 @@ def find_live_objects(repo, existing_count, cat_pipe, refs=None, *,
         return live_blobs, live_trees
 
 def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
-          compression, verbosity):
+          compression, verbosity, collect_small):
     """Traverse all the packs, saving the (probably) live data."""
 
     stale_packs = [] # stems like /some/where/pack-OIDX (no suffix)
@@ -203,6 +203,12 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
                     stale_packs.append(idx_name[:-4])
                     continue
 
+                def pack_size(idx_name):
+                    return os.stat(idx_name[:-4] + b'.pack').st_size
+
+                if collect_small and pack_size(idx_name) < collect_small:
+                    must_rewrite = True
+
                 live_frac = idx_live_count / float(len(idx))
                 if not must_rewrite and live_frac > ((100 - threshold) / 100.0):
                     if verbosity:
@@ -248,7 +254,7 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
 
 
 def bup_gc(repo, threshold=10, compression=1, verbosity=0,
-           ignore_missing=False):
+           ignore_missing=False, collect_small=None):
     cat_pipe = git.catpipe(repo.repo_dir)
     existing_count = count_objects(repo.packdir(), repo.hashsize, verbosity)
     if verbosity:
@@ -294,7 +300,7 @@ def bup_gc(repo, threshold=10, compression=1, verbosity=0,
                 if verbosity: log('removing unreachable data\n')
                 sweep(repo, live_objects, live_trees, existing_count, cat_pipe,
                       threshold, compression,
-                      verbosity)
+                      verbosity, collect_small)
             except BaseException as ex:
                 log('WARNING: Collection interrupted.  Run gc (again) to completion before\n'
                     'WARNING: adding any new data to the repository (e.g. via save or get).\n')
