@@ -620,7 +620,16 @@ struct sha {
     unsigned char bytes[20];
 };
 
+struct sha256 {
+    unsigned char bytes[32];
+};
+
 static inline int _cmp_sha(const struct sha *sha1, const struct sha *sha2)
+{
+    return memcmp(sha1->bytes, sha2->bytes, sizeof(sha1->bytes));
+}
+
+static inline int _cmp_sha256(const struct sha256 *sha1, const struct sha256 *sha2)
 {
     return memcmp(sha1->bytes, sha2->bytes, sizeof(sha1->bytes));
 }
@@ -634,6 +643,15 @@ struct idx {
     Py_ssize_t bytes;
     int name_base;
     const char *name;
+};
+
+struct idx256 {
+    unsigned char *map;
+    struct sha256 *cur;
+    struct sha256 *end;
+    uint32_t *cur_name;
+    Py_ssize_t bytes;
+    int name_base;
 };
 
 static void _fix_idx_order(struct idx **idxs, Py_ssize_t *last_i)
@@ -801,6 +819,160 @@ static PyObject *merge_into(PyObject *self, PyObject *args)
     return result;
 }
 
+static void _fix_idx_order_256(struct idx256 **idxs, Py_ssize_t *last_i)
+{
+    struct idx256 *idx;
+    Py_ssize_t low, mid, high;
+    int c = 0;
+
+    idx = idxs[*last_i];
+    if (idxs[*last_i]->cur >= idxs[*last_i]->end)
+    {
+	idxs[*last_i] = NULL;
+	PyMem_Free(idx);
+	--*last_i;
+	return;
+    }
+    if (*last_i == 0)
+	return;
+
+    low = *last_i-1;
+    mid = *last_i;
+    high = 0;
+    while (low >= high)
+    {
+	mid = (low + high) / 2;
+	c = _cmp_sha256(idx->cur, idxs[mid]->cur);
+	if (c < 0)
+	    high = mid + 1;
+	else if (c > 0)
+	    low = mid - 1;
+	else
+	    break;
+    }
+    if (c < 0)
+	++mid;
+    if (mid == *last_i)
+	return;
+    memmove(&idxs[mid+1], &idxs[mid], (*last_i-mid)*sizeof(struct idx256 *));
+    idxs[mid] = idx;
+}
+
+
+static uint32_t _get_idx_i_256(struct idx256 *idx)
+{
+    if (idx->cur_name == NULL)
+	return idx->name_base;
+    return ntohl(*idx->cur_name) + idx->name_base;
+}
+
+static PyObject *merge_into_sha256(PyObject *self, PyObject *args)
+{
+    struct sha256 *sha_ptr, *sha_start = NULL;
+    uint32_t *table_ptr, *name_ptr, *name_start;
+    int i;
+    unsigned int total;
+    uint32_t count, prefix;
+
+    Py_buffer fmap;
+    int bits;
+    PyObject *py_total, *ilist = NULL;
+    if (!PyArg_ParseTuple(args, wbuf_argf "iOO",
+                          &fmap, &bits, &py_total, &ilist))
+	return NULL;
+
+    PyObject *result = NULL;
+    struct idx256 **idxs = NULL;
+    Py_ssize_t num_i = 0;
+    int *idx_buf_init = NULL;
+    Py_buffer *idx_buf = NULL;
+
+    if (!bup_uint_from_py(&total, py_total, "total"))
+        goto clean_and_return;
+
+    num_i = PyList_Size(ilist);
+
+    if (!(idxs = checked_malloc(num_i, sizeof(struct idx256 *))))
+        goto clean_and_return;
+    if (!(idx_buf_init = checked_calloc(num_i, sizeof(int))))
+        goto clean_and_return;
+    if (!(idx_buf = checked_malloc(num_i, sizeof(Py_buffer))))
+        goto clean_and_return;
+
+    for (i = 0; i < num_i; i++)
+    {
+	long len, sha_ofs, name_map_ofs;
+	if (!(idxs[i] = checked_malloc(1, sizeof(struct idx256))))
+            goto clean_and_return;
+	PyObject *itup = PyList_GetItem(ilist, i);
+	if (!PyArg_ParseTuple(itup, wbuf_argf "llli",
+                              &(idx_buf[i]), &len, &sha_ofs, &name_map_ofs,
+                              &idxs[i]->name_base))
+	    return NULL;
+        idx_buf_init[i] = 1;
+        idxs[i]->map = idx_buf[i].buf;
+        idxs[i]->bytes = idx_buf[i].len;
+	idxs[i]->cur = (struct sha256 *)&idxs[i]->map[sha_ofs];
+	idxs[i]->end = &idxs[i]->cur[len];
+	if (name_map_ofs)
+	    idxs[i]->cur_name = (uint32_t *)&idxs[i]->map[name_map_ofs];
+	else
+	    idxs[i]->cur_name = NULL;
+    }
+    table_ptr = (uint32_t *) &((unsigned char *) fmap.buf)[MIDX4_HEADERLEN];
+    sha_start = sha_ptr = (struct sha256 *)&table_ptr[1<<bits];
+    name_start = name_ptr = (uint32_t *)&sha_ptr[total];
+
+    Py_ssize_t last_i = num_i - 1;
+    count = 0;
+    prefix = 0;
+    while (last_i >= 0)
+    {
+	struct idx256 *idx;
+	uint32_t new_prefix;
+	if (count % 102424 == 0 && get_state(self)->istty2)
+	    fprintf(stderr, "midx: writing %.2f%% (%d/%d)\r",
+		    count*100.0/total, count, total);
+	idx = idxs[last_i];
+	new_prefix = _extract_bits((unsigned char *)idx->cur, bits);
+	while (prefix < new_prefix)
+	    table_ptr[prefix++] = htonl(count);
+	memcpy(sha_ptr++, idx->cur, sizeof(struct sha256));
+	*name_ptr++ = htonl(_get_idx_i_256(idx));
+	++idx->cur;
+	if (idx->cur_name != NULL)
+	    ++idx->cur_name;
+	_fix_idx_order_256(idxs, &last_i);
+	++count;
+    }
+    while (prefix < ((uint32_t) 1 << bits))
+	table_ptr[prefix++] = htonl(count);
+    assert(count == total);
+    assert(prefix == ((uint32_t) 1 << bits));
+    assert(sha_ptr == sha_start+count);
+    assert(name_ptr == name_start+count);
+
+    result = PyLong_FromUnsignedLong(count);
+
+ clean_and_return:
+    if (idx_buf_init)
+    {
+        for (i = 0; i < num_i; i++)
+            if (idx_buf_init[i])
+                PyBuffer_Release(&(idx_buf[i]));
+        free(idx_buf_init);
+        free(idx_buf);
+    }
+    if (idxs)
+    {
+        for (i = 0; i < num_i; i++)
+            free(idxs[i]);
+        free(idxs);
+    }
+    PyBuffer_Release(&fmap);
+    return result;
+}
+
 #define FAN_ENTRIES 256
 
 static PyObject *write_idx(PyObject *self, PyObject *args)
@@ -877,6 +1049,105 @@ static PyObject *write_idx(PyObject *self, PyObject *args)
 	    if (sha_len != sizeof(struct sha))
                 goto clean_and_return;
 	    memcpy(sha_ptr++, sha, sizeof(struct sha));
+	    *crc_ptr++ = htonl(crc);
+	    if (ofs > 0x7fffffff)
+	    {
+                *ofs64_ptr++ = htonll(ofs);
+		ofs = 0x80000000 | ofs64_count++;
+	    }
+	    *ofs_ptr++ = htonl((uint32_t)ofs);
+	}
+    }
+
+    int rc = msync(fmap.buf, fmap.len, MS_ASYNC);
+    if (rc != 0)
+    {
+        result = PyErr_SetFromErrnoWithFilename(PyExc_IOError, filename);
+        goto clean_and_return;
+    }
+
+    result = PyLong_FromUnsignedLong(count);
+
+ clean_and_return:
+    PyBuffer_Release(&fmap);
+    return result;
+}
+
+
+static PyObject *write_idx_sha256(PyObject *self, PyObject *args)
+{
+    char *filename = NULL;
+    PyObject *py_total, *idx = NULL;
+    PyObject *part;
+    unsigned int total = 0;
+    uint32_t count;
+    int i;
+    uint32_t *fan_ptr, *crc_ptr, *ofs_ptr;
+    uint64_t *ofs64_ptr;
+    struct sha256 *sha_ptr;
+
+    Py_buffer fmap;
+    if (!PyArg_ParseTuple(args, cstr_argf wbuf_argf "OO",
+                          &filename, &fmap, &idx, &py_total))
+	return NULL;
+
+    PyObject *result = NULL;
+
+    if (!bup_uint_from_py(&total, py_total, "total"))
+        goto clean_and_return;
+
+    if (PyList_Size (idx) != FAN_ENTRIES) // Check for list of the right length.
+    {
+        result = PyErr_Format (PyExc_TypeError, "idx must contain %d entries",
+                               FAN_ENTRIES);
+        goto clean_and_return;
+    }
+
+    const char idx_header[] = "\377tOc\0\0\0\002";
+    memcpy (fmap.buf, idx_header, sizeof(idx_header) - 1);
+
+    fan_ptr = (uint32_t *)&((unsigned char *)fmap.buf)[sizeof(idx_header) - 1];
+    sha_ptr = (struct sha256 *)&fan_ptr[FAN_ENTRIES];
+    crc_ptr = (uint32_t *)&sha_ptr[total];
+    ofs_ptr = (uint32_t *)&crc_ptr[total];
+    ofs64_ptr = (uint64_t *)&ofs_ptr[total];
+
+    count = 0;
+    uint32_t ofs64_count = 0;
+    for (i = 0; i < FAN_ENTRIES; ++i)
+    {
+	part = PyList_GET_ITEM(idx, i);
+	PyList_Sort(part);
+        uint32_t plen;
+        if (!INTEGRAL_ASSIGNMENT_FITS(&plen, PyList_GET_SIZE(part))
+            || UINT32_MAX - count < plen) {
+            PyErr_Format(PyExc_OverflowError, "too many objects in index part");
+            goto clean_and_return;
+        }
+        count += plen;
+	*fan_ptr++ = htonl(count);
+        uint32_t j;
+        for (j = 0; j < plen; ++j)
+	{
+	    unsigned char *sha = NULL;
+	    Py_ssize_t sha_len = 0;
+            PyObject *crc_py, *ofs_py;
+	    unsigned int crc;
+            unsigned PY_LONG_LONG ofs_ull;
+	    uint64_t ofs;
+	    if (!PyArg_ParseTuple(PyList_GET_ITEM(part, j), rbuf_argf "OO",
+				  &sha, &sha_len, &crc_py, &ofs_py))
+                goto clean_and_return;
+            if(!bup_uint_from_py(&crc, crc_py, "crc"))
+                goto clean_and_return;
+            if(!bup_ullong_from_py(&ofs_ull, ofs_py, "ofs"))
+                goto clean_and_return;
+            assert(crc <= UINT32_MAX);
+            assert(ofs_ull <= UINT64_MAX);
+	    ofs = ofs_ull;
+	    if (sha_len != sizeof(struct sha256))
+                goto clean_and_return;
+	    memcpy(sha_ptr++, sha, sizeof(struct sha256));
 	    *crc_ptr++ = htonl(crc);
 	    if (ofs > 0x7fffffff)
 	    {
@@ -2025,7 +2296,11 @@ static PyMethodDef helper_methods[] = {
 	"Take the first 'nbits' bits from 'buf' and return them as an int." },
     { "merge_into", merge_into, METH_VARARGS,
 	"Merges a bunch of idx and midx files into a single midx." },
+    { "merge_into_sha256", merge_into_sha256, METH_VARARGS,
+	"Merges a bunch of idx and midx files into a single midx." },
     { "write_idx", write_idx, METH_VARARGS,
+	"Write a PackIdxV2 file from an idx list of lists of tuples" },
+    { "write_idx_sha256", write_idx_sha256, METH_VARARGS,
 	"Write a PackIdxV2 file from an idx list of lists of tuples" },
     { "write_random", write_random, METH_VARARGS,
 	"Write random bytes to the given file descriptor" },
