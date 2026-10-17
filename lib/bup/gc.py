@@ -51,7 +51,7 @@ from bup.repo import LocalRepo
 # FIXME: add a bloom filter tuning parameter?
 
 
-def count_objects(dir, verbosity):
+def count_objects(dir, hashsize, verbosity):
     # For now we'll just use open_idx(), but we could probably be much
     # more efficient since all we need is a single integer (the last
     # fanout entry) from each index.
@@ -62,7 +62,7 @@ def count_objects(dir, verbosity):
             qprogress('found %d objects (%d/%d %s)\r'
                       % (object_count, i + 1, len(indexes),
                          path_msg(basename(idx_name))))
-        with git.open_idx(idx_name) as idx:
+        with git.open_idx(idx_name, hashsize) as idx:
             object_count += len(idx)
     return object_count
 
@@ -141,22 +141,21 @@ def find_live_objects(repo, existing_count, cat_pipe, refs=None, *,
         maybe_close_bloom.pop_all()
         return live_blobs, live_trees
 
-_pack_stem_rx = re.compile(br'pack-[0-9a-fA-F]{40}')
-
 def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
           compression, verbosity):
     """Traverse all the packs, saving the (probably) live data."""
 
     stale_packs = [] # stems like /some/where/pack-OIDX (no suffix)
+    pack_stem_rx = re.compile(br'pack-[0-9a-fA-F]{%d}' % (2 * repo.hashsize))
 
     def remove_stale_packs(new_pack_prefix):
         nonlocal stale_packs
         if new_pack_prefix:
-            assert _pack_stem_rx.fullmatch(basename(new_pack_prefix))
+            assert pack_stem_rx.fullmatch(basename(new_pack_prefix))
             if verbosity:
                 log('created ' + path_msg(basename(new_pack_prefix)) + '\n')
         for stem in stale_packs:
-            assert _pack_stem_rx.fullmatch(basename(stem))
+            assert pack_stem_rx.fullmatch(basename(stem))
             if stem == new_pack_prefix:
                 continue  # Don't remove the new pack file
             for p in glob.glob(stem + b'.*'):
@@ -179,7 +178,7 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
             if verbosity:
                 qprogress('preserving live data (%d%% complete)\r'
                           % ((float(collect_count) / existing_count) * 100))
-            with git.open_idx(idx_name) as idx:
+            with git.open_idx(idx_name, repo.hashsize) as idx:
                 idx_live_count = 0
                 must_rewrite = False
                 live_in_this_pack = set()
@@ -243,14 +242,15 @@ def sweep(repo, live_objects, live_trees, existing_count, cat_pipe, threshold,
 
     if verbosity:
         log('discarded %d%% of objects\n'
-            % ((existing_count - count_objects(pack_dir, verbosity))
+            % ((existing_count - count_objects(pack_dir, repo.hashsize,
+                                              verbosity))
                / float(existing_count) * 100))
 
 
 def bup_gc(repo, threshold=10, compression=1, verbosity=0,
            ignore_missing=False):
     cat_pipe = git.catpipe(repo.repo_dir)
-    existing_count = count_objects(repo.packdir(), verbosity)
+    existing_count = count_objects(repo.packdir(), repo.hashsize, verbosity)
     if verbosity:
         log('found %d objects\n' % existing_count)
         reprogress()
@@ -262,7 +262,7 @@ def bup_gc(repo, threshold=10, compression=1, verbosity=0,
             with ExitStack() as maybe_close_idxl:
                 for_item, idxl = None, None
                 if ignore_missing:
-                    idxl = git.PackIdxList(repo.packdir())
+                    idxl = git.PackIdxList(repo.packdir(), repo.hashsize)
                     maybe_close_idxl.enter_context(idxl)
                     for_item = report_missing
                 found = find_live_objects(repo, existing_count, cat_pipe,

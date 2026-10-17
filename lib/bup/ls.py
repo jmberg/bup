@@ -25,7 +25,7 @@ def item_hash(item, tree_for_commit):
         return item.coid
     return getattr(item, 'oid', None)
 
-def item_info(item, name,
+def item_info(item, name, hashsize,
               show_hash = False,
               commit_hash=False,
               long_fmt = False,
@@ -42,7 +42,7 @@ def item_info(item, name,
         if oid:
             result.extend([hexlify(oid), b' '])
         else:
-            result.append(b'0000000000000000000000000000000000000000 ')
+            result.append(b'0' * (2 * hashsize) + b' ')
     if long_fmt:
         meta = deepcopy(item.meta).thaw()
         meta.path = name
@@ -138,7 +138,7 @@ def within_repo(repo, opt, out, pwd=b'', paths=None, prefix=b''):
     should_columnate = not opt.recursive and not opt.long_listing and istty1
 
     def item_line(item, name):
-        return item_info(item, prefix + name,
+        return item_info(item, prefix + name, repo.hashsize,
                          show_hash=opt.hash,
                          commit_hash=opt.commit_hash,
                          long_fmt=opt.long_listing,

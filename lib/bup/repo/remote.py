@@ -7,10 +7,10 @@ from bup.protocol import valid_config_opts
 from bup.repo.base import _make_base, RepoProtocol
 
 
-_oidx_rx = re.compile(br'[0-9a-fA-F]{40}')
+_hex_rx = re.compile(br'[0-9a-fA-F]+')
 
 class RemoteRepo(RepoProtocol):
-    def __init__(self, location, create=False, compression_level=None,
+    def __init__(self, location, create=None, compression_level=None,
                  max_pack_size=None, max_pack_objects=None):
         # The location must be a URL or a client.Config, and Client()
         # handles the validation.
@@ -36,6 +36,7 @@ class RemoteRepo(RepoProtocol):
         self.refs = self.client.refs
         self.resolve = self.client.resolve
         self._packwriter = None
+        self.hashsize = self.client.hashsize
 
     def __repr__(self):
         cls = self.__class__
@@ -88,7 +89,7 @@ class RemoteRepo(RepoProtocol):
         # an oid, and verify that the data provided by the remote
         # actually has that oid.  If not, throw.
         def hash_checked_data(kind, size, it, expected, batch):
-            actual_oid = git.start_sha1(kind, size)
+            actual_oid = git.start_hash(kind, size, self.hashsize)
             for data in it:
                 actual_oid.update(data)
                 yield data
@@ -102,7 +103,7 @@ class RemoteRepo(RepoProtocol):
         oidx, typ, size, it = items = next(batch, None) # cannot return None
         if not oidx:
             return items
-        if not _oidx_rx.fullmatch(ref):
+        if len(ref) != 2 * self.hashsize or not _hex_rx.fullmatch(ref):
             return items
         return *items[:-1], hash_checked_data(typ, size, it, ref, batch)
 

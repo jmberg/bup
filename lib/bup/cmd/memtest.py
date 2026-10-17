@@ -82,13 +82,13 @@ def main(argv):
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
 
-    report(-1, out)
-    os.urandom(20)
-    report(0, out)
-
     with LocalRepo() as repo, \
-         git.PackIdxList(repo.packdir(),
+         git.PackIdxList(repo.packdir(), repo.hashsize,
                          ignore_midx=opt.ignore_midx) as m:
+
+        report(-1, out)
+        os.urandom(repo.hashsize)
+        report(0, out)
 
         if opt.existing:
             def foreverit(mi):
@@ -102,7 +102,7 @@ def main(argv):
                     bin = next(objit)
                     assert(m.exists(bin))
                 else:
-                    bin = os.urandom(20)
+                    bin = os.urandom(repo.hashsize)
 
                     # technically, a randomly generated object id might exist.
                     # but the likelihood of that is the likelihood of finding

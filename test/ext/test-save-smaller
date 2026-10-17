@@ -10,7 +10,12 @@ tmpdir="$(WVPASS wvmktempdir)" || exit $?
 export BUP_DIR="$tmpdir/bup"
 
 bup() { "$top/bup" "$@"; }
-sha1sum() { "$top/dev/checksum" -t sha1 "$@"; }
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    alg=sha256
+else
+    alg=sha1
+fi
+shasum() { "$top/dev/checksum" -t $alg "$@"; }
 
 WVPASS cd "$tmpdir"
 
@@ -20,7 +25,7 @@ WVPASS bup init
 WVPASS mkdir "$tmpdir/save"
 WVPASS echo small0 > "$tmpdir/save/small"
 WVPASS echo bigbigbigbigbig01 > "$tmpdir/save/big1"
-big1sha="$(sha1sum < "$tmpdir/save/big1")"
+big1sha="$(shasum < "$tmpdir/save/big1")"
 WVPASS bup index "$tmpdir/save"
 WVPASS bup save -vv -n test "$tmpdir/save"
 WVPASS mkdir "$tmpdir/restore1"
@@ -52,7 +57,7 @@ WVPASS bup save -vv -n test "$tmpdir/save"
 WVPASS mkdir "$tmpdir/restore3"
 WVPASS bup restore -v --outdir="$tmpdir/restore3/" "/test/latest$tmpdir/save/"
 WVPASS cmp "$tmpdir/restore3/small" "$tmpdir/save/small"
-WVPASSEQ "$(sha1sum < "$tmpdir/restore3/big1")" "$big1sha"
+WVPASSEQ "$(shasum < "$tmpdir/restore3/big1")" "$big1sha"
 WVPASS cmp "$tmpdir/restore3/big2" "$tmpdir/save/big2"
 
 WVPASS cd "$top"

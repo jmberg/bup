@@ -1,5 +1,6 @@
 
 from os import chdir, mkdir, symlink, unlink
+import os
 from subprocess import PIPE
 from time import localtime, strftime, tzset
 import re
@@ -12,6 +13,7 @@ from bup.helpers import unlink as unlink_if_exists
 import bup.path
 
 bup_cmd = bup.path.exe()
+hexsize = 64 if os.environb.get(b'BUP_TEST_SHA256', b'') == b'1' else 40
 
 # pylint: disable-next=function-redefined
 def bup(*args, **kwargs):

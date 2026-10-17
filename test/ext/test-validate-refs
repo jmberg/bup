@@ -69,7 +69,12 @@ WVPASS bup validate-refs --links 2>&1 | tee validate.log
 WVPASS grep -vE '^missing ' validate.log
 for args in --bupm ''; do
     WVEXPRC 1 err-to validate.log bup validate-refs $args
-    WVPASSEQ 1 "$(grep -cE "abridged-bupm refs/heads/src [0-9a-f]{40}:\.bupm" validate.log)"
+    if [ "$BUP_TEST_SHA256" = "1" ] ; then
+        hexlen=64
+    else
+        hexlen=40
+    fi
+    WVPASSEQ 1 "$(grep -cE "abridged-bupm refs/heads/src [0-9a-f]{$hexlen}:\.bupm" validate.log)"
 done
 
 

@@ -9,6 +9,7 @@ import bup.path
 
 
 bup_cmd = bup.path.exe()
+hexsize = 64 if os.environb.get(b'BUP_TEST_SHA256', b'') == b'1' else 40
 
 
 def make_repo(tmpdir):
@@ -38,7 +39,7 @@ def show(repo, access, *args, check=True):
 
 
 def tree_of_commit(out):
-    m = re.search(rb'^tree ([0-9a-f]{40})$', out, re.M)
+    m = re.search(rb'^tree ([0-9a-f]{%d})$' % hexsize, out, re.M)
     assert m, out
     return m.group(1)
 
@@ -67,7 +68,7 @@ def test_show_commit_by_oid(tmpdir, access):
     repo = make_repo(tmpdir)
     populate(tmpdir)
     out = show(repo, 'local', b'src').out
-    m = re.search(rb'^commit ([0-9a-f]{40})$', out, re.M)
+    m = re.search(rb'^commit ([0-9a-f]{%d})$' % hexsize, out, re.M)
     assert m, out
     assert show(repo, access, m.group(1)).out == out
 
@@ -109,7 +110,7 @@ def test_show_blob(tmpdir):
     assert show(repo, 'local', blob.encode()).out == b'hello\n'
 
 
-@pytest.mark.parametrize('ref', [b'nosuchref', b'0' * 40])
+@pytest.mark.parametrize('ref', [b'nosuchref', b'0' * hexsize])
 def test_show_invalid_ref(tmpdir, ref):
     repo = make_repo(tmpdir)
     populate(tmpdir)
@@ -139,7 +140,7 @@ def test_show_exists_marks_missing(tmpdir):
     tree = tree_of_commit(show(repo, 'local', b'src').out)
     blob = entry_oid(show(repo, 'local', tree).out.decode(), 'a.txt')
     tree = exo((b'git', b'--git-dir', repo, b'mktree', b'--missing'),
-               input=b'040000 tree ' + b'1' * 40 + b'\tgone\n'
+               input=b'040000 tree ' + b'1' * hexsize + b'\tgone\n'
                b'100644 blob ' + blob.encode() + b'\ta.txt\n').out.strip()
 
     listing = show(repo, 'local', b'-e', tree).out.decode().splitlines()
@@ -155,7 +156,7 @@ def test_show_recursive_missing_fails(tmpdir):
     blob = entry_oid(show(repo, 'local', tree_of_commit(
         show(repo, 'local', b'src').out)).out.decode(), 'a.txt')
     tree = exo((b'git', b'--git-dir', repo, b'mktree', b'--missing'),
-               input=b'040000 tree ' + b'1' * 40 + b'\tgone\n'
+               input=b'040000 tree ' + b'1' * hexsize + b'\tgone\n'
                b'100644 blob ' + blob.encode() + b'\ta.txt\n').out.strip()
 
     cp = show(repo, 'local', b'-R', tree, check=False)

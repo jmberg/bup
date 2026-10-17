@@ -19,14 +19,24 @@ from bup.helpers import \
      slashappend)
 from bup.io import path_msg
 from bup.metadata import empty_metadata
+from bup.compat import environ
 
 
-EMPTY_SHA = b'\0' * 20
-FAKE_SHA = b'\x01' * 20
+# HACK HACK HACK HACK HACK HACK HACK
+if environ.get(b'BUP_TEST_SHA256', None) == b'1':
+    EMPTY_SHA = b'\0' * 32
+    FAKE_SHA = b'\x01' * 32
+    SHA_FMT = '32s'
+    INDEX_SIG_V7 = b'B256\0\0\0\x07'
+    INDEX_SIG = b'B256\0\0\0\x08'
+else:
+    EMPTY_SHA = b'\0' * 20
+    FAKE_SHA = b'\x01' * 20
+    SHA_FMT = '20s'
 
-INDEX_SIG_V7 = b'BUPI\0\0\0\x07'
-INDEX_SIG = b'BUPI\0\0\0\x08'
-assert len(INDEX_SIG_V7) == len (INDEX_SIG)
+    INDEX_SIG_V7 = b'BUPI\0\0\0\x07'
+    INDEX_SIG = b'BUPI\0\0\0\x08'
+    assert len(INDEX_SIG_V7) == len (INDEX_SIG)
 
 # Time values are handled as integer nanoseconds since the epoch in
 # memory, but are written as xstat/metadata timespecs.  This behavior
@@ -56,8 +66,8 @@ ENTRY_SIG_V7 = ('!'
                 'qQ'  # atime_s, atime_ns
                 'Q'   # size
                 'I'   # mode
-                'I'   # gitmode
-                '20s' # sha
+                'I',  # gitmode
+                SHA_FMT, # sha
                 'H'   # flags
                 'Q'   # children_ofs
                 'I'   # children_n
@@ -73,7 +83,7 @@ ENTRY_SIG = ''.join(('!',
                      'Q',   # size
                      'i' if c_type_signed_size['mode_t'] < 0 else 'I', # mode
                      'i' if c_type_signed_size['mode_t'] < 0 else 'I', # gitmode
-                     '20s' # sha
+                     SHA_FMT, # sha
                      'H'   # flags
                      'Q'   # children_ofs
                      'I'   # children_n

@@ -156,7 +156,7 @@ def get_oidx(repo, oidx, *, throw_missing=True):
     false, otherwise yield (None, None, None, None).
 
     """
-    assert len(oidx) == 40
+    assert len(oidx) == 2 * repo.hashsize
     result = get_ref(repo, oidx)
     if not result[0] and throw_missing:
         raise MissingObject(unhexlify(oidx))
@@ -168,13 +168,13 @@ def _normal_or_chunked_file_size(repo, oid):
     _, obj_t, _, it = get_oidx(repo, hexlify(oid))
     ofs = 0
     while obj_t == b'tree':
-        mode_, name, last_oid = last_tree_entry(b''.join(it))
+        mode_, name, last_oid = last_tree_entry(b''.join(it), repo.hashsize)
         ofs += int(name, 16)
         _, obj_t, _, it = get_oidx(repo, hexlify(last_oid))
     return ofs + sum(len(b) for b in it)
 
-def _skip_chunks_before_offset(tree_data, offset):
-    entries = tree_entries(tree_data)
+def _skip_chunks_before_offset(tree_data, offset, hashsize):
+    entries = tree_entries(tree_data, hashsize=hashsize)
     for i, entry in enumerate(entries):
         ent_ofs = int(entry[1], 16)
         if ent_ofs > offset:
@@ -186,7 +186,8 @@ def _skip_chunks_before_offset(tree_data, offset):
 def _tree_chunks(repo, tree_data, startofs):
     assert(startofs >= 0)
     # name is the chunk's hex offset in the original file
-    for mode, name, oid in _skip_chunks_before_offset(tree_data, startofs):
+    for mode, name, oid in _skip_chunks_before_offset(tree_data, startofs,
+                                                      repo.hashsize):
         ofs = int(name, 16)
         skipmore = max(0, startofs - ofs)
         _, obj_t, _, it = get_oidx(repo, hexlify(oid))
@@ -245,7 +246,7 @@ class _ChunkReader:
 
 class _FileReader:
     def __init__(self, repo, oid):
-        assert len(oid) == 20
+        assert len(oid) == repo.hashsize
         self.closed = False
         self.oid = oid
         self.ofs = 0
@@ -362,7 +363,8 @@ def is_valid_cache_key(x):
     # Suspect we may eventually add "(container_oid, name) -> ...", and others.
     if isinstance(x, bytes):
         tag = x[:4]
-        if tag in (b'itm:', b'rvl:') and len(x) == 24:
+        # accept both sizes - could be any repo
+        if tag in (b'itm:', b'rvl:') and len(x) in (20 + 4, 32 + 4):
             return True
         if tag == b'res:':
             return True
@@ -446,7 +448,7 @@ def _read_dir_meta(bupm):
     return m
 
 def _treeish_tree_data(repo, oid):
-    assert len(oid) == 20
+    assert len(oid) == repo.hashsize
     _, item_t, _, it = get_oidx(repo, hexlify(oid))
     data = b''.join(it)
     if item_t == b'commit':
@@ -464,7 +466,7 @@ def tree_data_and_bupm(repo, oid):
 
     """
     data = _treeish_tree_data(repo, oid)
-    for _, mangled_name, sub_oid in tree_entries(data):
+    for _, mangled_name, sub_oid in tree_entries(data, hashsize=repo.hashsize):
         if mangled_name == b'.bupm':
             return data, sub_oid
         if mangled_name > b'.bupm':
@@ -476,7 +478,8 @@ def _find_treeish_oid_metadata(repo, oid):
     has no metadata (i.e. older bup save, or non-bup tree).
 
     """
-    bupm_ent = find_tree_entry(b'.bupm', _treeish_tree_data(repo, oid))
+    bupm_ent = find_tree_entry(b'.bupm', _treeish_tree_data(repo, oid),
+                               hashsize=repo.hashsize)
     if bupm_ent:
         with _FileReader(repo, bupm_ent[2]) as meta_stream:
             return _read_dir_meta(meta_stream)
@@ -710,7 +713,6 @@ def _tree_items_except_dot(oid, entries, names=None, bupm=None, *, repair=False)
         return Item(oid=ent_oid, meta=meta)
 
     assert isinstance(names, (set, frozenset)) or names is None
-    assert len(oid) == 20
     if not names:
         for name, mangled_name, kind, gitmode, ent_oid in tree_ents:
             if mangled_name == b'.bupm':
@@ -761,7 +763,7 @@ def _split_subtree_items(repo, level, oid, entries, names, want_meta, root=True)
     the real items (at the leaves).
 
     """
-    assert len(oid) == 20
+    assert len(oid) == repo.hashsize
     assert isinstance(level, int)
     assert level >= 0
     if level == 0:
@@ -785,7 +787,8 @@ def _split_subtree_items(repo, level, oid, entries, names, want_meta, root=True)
 #            assert name.endswith(validate), \
 #                f'found {path_msg(name)} in split subtree but should end with {validate}'
             yield from _split_subtree_items(repo, level - 1, sub_oid,
-                                            tree_entries(_get_tree_object(repo, sub_oid)),
+                                            tree_entries(_get_tree_object(repo, sub_oid),
+                                                         hashsize=repo.hashsize),
                                             names, want_meta, False)
 
 _tree_depth_rx = re.compile(br'.*\.([0-9]+)\.bupd')
@@ -815,7 +818,7 @@ def tree_items(repo, oid, tree_data, names, *, want_meta=True, repair=False):
     # For now, the .bupm order doesn't quite match git's, and we don't
     # load the tree data incrementally anyway, so we just work in RAM
     # via tree_data.
-    assert len(oid) == 20
+    assert len(oid) == repo.hashsize
 
     # Assumes the tree is properly formed, i.e. there are no
     # duplicates, and entries will be in git tree order.
@@ -823,7 +826,7 @@ def tree_items(repo, oid, tree_data, names, *, want_meta=True, repair=False):
         names = frozenset(names)
     dot_requested = not names or b'.' in names
 
-    entries = tree_entries(tree_data)
+    entries = tree_entries(tree_data, hashsize=repo.hashsize)
     depth = None
     bupm_oid = None
 #    split_or_not_known = False
@@ -949,7 +952,7 @@ def cache_commit(repo, oid, require_meta=True):
     return entries
 
 def revlist_items(repo, oid, names, require_meta=True):
-    assert len(oid) == 20
+    assert len(oid) == repo.hashsize
 
     # Special case '.' instead of caching the whole history since it's
     # the only way to get the metadata for the commit.
@@ -987,7 +990,7 @@ def tags_items(repo, names):
     global _tags
 
     def tag_item(oid, ref):
-        assert len(oid) == 20
+        assert len(oid) == repo.hashsize
         cached = cache_get_commit_item(oid, need_meta=False)
         if cached:
             return cached
@@ -1367,7 +1370,8 @@ def join(repo, ref):
         if typ == b'blob':
             yield from it
         elif typ == b'tree':
-            for ent_mode_, ent_name, ent_oid in tree_iter(b''.join(it)):
+            for ent_mode_, ent_name, ent_oid in tree_iter(b''.join(it),
+                                                          hashsize=repo.hashsize):
                 yield from _join(*get_oidx(repo, hexlify(ent_oid)), path + [ent_name])
         elif typ == b'commit':
             treeline = b''.join(it).split(b'\n', maxsplit=1)[0]

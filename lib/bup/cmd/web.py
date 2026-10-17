@@ -266,7 +266,7 @@ class BupRequestHandler(tornado.web.RequestHandler):
     def _set_header(self, path, file_item):
         meta = file_item.meta
         ctype = self._guess_type(path)
-        assert len(file_item.oid) == 20
+        assert len(file_item.oid) == self.repo.hashsize
         if meta.mtime is not None:
             self.set_header("Last-Modified", http_date_from_utc_ns(meta.mtime))
         self.set_header("Content-Type", ctype)

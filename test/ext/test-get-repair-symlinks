@@ -78,7 +78,11 @@ WVPASS rm -rf bup
 
 ### symlinks with no metadata (e.g. git or older bup)
 
-WVPASS git init --bare -b src bup
+SHA256_ARGS=
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    SHA256_ARGS="--object-format sha256"
+fi
+WVPASS git init $SHA256_ARGS --bare -b src bup
 WVPASS git --work-tree src add .
 WVPASS git --work-tree src commit -am commit
 WVPASS git gc --aggressive # ensure no loose objects (for perforate)
