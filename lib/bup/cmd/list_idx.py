@@ -24,8 +24,8 @@ def main(argv):
     if not extra:
         o.fatal('you must provide at least one filename')
 
-    if len(opt.find) > 40:
-        o.fatal('--find parameter must be <= 40 chars long')
+    if len(opt.find) > 64:
+        o.fatal('--find parameter must be <= 64 chars long')
     else:
         if len(opt.find) % 2:
             s = opt.find + b'0'

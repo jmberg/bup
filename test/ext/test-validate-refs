@@ -69,7 +69,7 @@ WVPASS bup validate-refs --links 2>&1 | tee validate.log
 WVPASS grep -vE '^missing ' validate.log
 for args in --bupm ''; do
     WVEXPRC 1 err-to validate.log bup validate-refs $args
-    WVPASSEQ 1 "$(grep -cE "abridged-bupm refs/heads/src [0-9a-f]{40}:\.bupm" validate.log)"
+    WVPASSEQ 1 "$(grep -cE "abridged-bupm refs/heads/src [0-9a-f]{40,64}:\.bupm" validate.log)"
 done
 
 

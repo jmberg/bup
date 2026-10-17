@@ -141,7 +141,7 @@ def find_live_objects(existing_count, cat_pipe, refs=None, *,
         maybe_close_bloom.pop_all()
         return live_blobs, live_trees
 
-_pack_stem_rx = re.compile(br'pack-[0-9a-fA-F]{40}')
+_pack_stem_rx = re.compile(br'pack-[0-9a-fA-F]{40,64}')
 
 def sweep(live_objects, live_trees, existing_count, cat_pipe, threshold,
           compression, verbosity):

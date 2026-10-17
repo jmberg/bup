@@ -23,9 +23,13 @@ s3 = randbytes(10000)
 
 IDX_PAT = b'/*.idx'
 
+hashsize = 32 if os.environb.get(b'BUP_TEST_SHA256', b'') == b'1' else 20
 
 def local_writer():
-    return git.PackWriter(store=git.LocalPackStore())
+    return git.PackWriter(store=git.LocalPackStore(hashsize=hashsize))
+
+def init_repo(bupdir):
+    git.init_repo(bupdir, objectformat='sha256' if hashsize == 32 else 'sha1')
 
 def subproc_client(path, **kwargs):
     return client.Client(URL(scheme=b'ssh', path=path), **kwargs)
@@ -33,7 +37,7 @@ def subproc_client(path, **kwargs):
 
 def test_server_split_with_indexes(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     with local_writer() as lw:
         lw.new_blob(s1)
     with subproc_client(bupdir, create=True) as c, \
@@ -45,7 +49,7 @@ def test_server_split_with_indexes(tmpdir):
 
 def test_multiple_suggestions(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
-    git.init_repo(bupdir)
+    init_repo(bupdir)
 
     with local_writer() as lw:
         lw.new_blob(s1)
@@ -104,7 +108,7 @@ def test_multiple_suggestions(tmpdir):
 def test_dumb_client_server_conflict(tmpdir):
     environ[b'GIT_DIR'] = bupdir = tmpdir
     environ[b'BUP_DIR'] = bupdir = tmpdir
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     with open(git.repo(b'bup-dumb-server'), 'wb'): pass
     ex((b'git', b'config', b'bup.server.deduplicate-writes', b'true'))
     # FIXME: propagate server ConfigError to Client()
@@ -119,7 +123,7 @@ def test_dumb_client_server_conflict(tmpdir):
 def test_server_deduplicate_writes(deduplicate_mode, tmpdir):
     environ[b'GIT_DIR'] = bupdir = tmpdir
     environ[b'BUP_DIR'] = bupdir = tmpdir
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     if deduplicate_mode == 'file':
         with open(git.repo(b'bup-dumb-server'), 'wb'): pass
     elif deduplicate_mode == 'config':
@@ -141,7 +145,7 @@ def test_server_deduplicate_writes(deduplicate_mode, tmpdir):
 
 def test_midx_refreshing(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     with subproc_client(bupdir, create=True) as c, \
          c.new_packwriter() as rw:
         rw.new_blob(s1)
@@ -220,7 +224,7 @@ def test_legacy_cache_ids():
 def test_config(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
     environ[b'GIT_DIR'] = bupdir = tmpdir
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     with subproc_client(bupdir, create=True) as c:
         assert c.config_get(b'bup.split.trees') is None
         assert c.config_get(b'bup.split.trees', opttype='int') is None

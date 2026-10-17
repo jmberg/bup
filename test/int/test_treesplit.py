@@ -333,7 +333,8 @@ def pruned_ls_files(parent, output):
 def split_tree_for_filenames(names, tmpdir):
     environb[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
     src = tmpdir + b'/src'
-    git.init_repo(bupdir)
+    hashsize = 32 if environb.get(b'BUP_TEST_SHA256', b'') == b'1' else 20
+    git.init_repo(bupdir, objectformat='sha256' if hashsize == 32 else 'sha1')
     mkdirp(src)
     for name in names:
         Path(src.decode('ascii'), name).touch()

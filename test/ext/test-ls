@@ -315,6 +315,7 @@ else
     echo src/some-longer-name-{1..3000} | WVPASS xargs touch
     WVPASS bup index src
     WVPASS bup save -n src --strip src
+    with-tty "$top/bup" ls -l src/latest/ > /tmp/xyz
     WVPASS with-tty "$top/bup" ls -l src/latest/ | WVPASS wc -l > ls-rows
     WVPASSEQ 3000 $(<ls-rows)
 fi

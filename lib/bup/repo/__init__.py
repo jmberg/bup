@@ -50,8 +50,9 @@ def main_repo_location(remote, die: Callable[[str], NoReturn]):
 
 def repo_for_url(url, **kwargs):
     if url.scheme == b'file':
-        if kwargs.pop('create', None):
-            LocalRepo.create(url.path)
+        create_opts = kwargs.pop('create', None)
+        if create_opts is not None:
+            LocalRepo.create(url.path, **create_opts)
         return LocalRepo(repo_dir=url.path, **kwargs)
     if url.scheme in (b'ssh', b'bup', b'bup-rev'):
         return RemoteRepo(url, **kwargs)

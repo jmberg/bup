@@ -15,13 +15,19 @@ WVPASS cd "$tmpdir"
 
 WVPASS bup init
 
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    SHA256_OPT=--sha256
+else
+    SHA256_OPT=
+fi
+
 WVSTART "split --noop"
-WVPASS bup split --noop <"$top/test/testfile1" >noop.tmp
+WVPASS bup split --noop $SHA256_OPT <"$top/test/testfile1" >noop.tmp
 WVPASSEQ '' "$(<noop.tmp)"
-WVPASS bup split --noop -b <"$top/test/testfile1" >tags1n.tmp
-WVPASS bup split --noop -t <"$top/test/testfile2" >tags2tn.tmp
+WVPASS bup split --noop $SHA256_OPT -b <"$top/test/testfile1" >tags1n.tmp
+WVPASS bup split --noop $SHA256_OPT -t <"$top/test/testfile2" >tags2tn.tmp
 # Check ESPIPE handling (must be > _hashsplit.c advise_chunk)
-WVPASS bup random 10m | WVPASS bup split --noop -t
+WVPASS bup random 10m | WVPASS bup split --noop $SHA256_OPT -t
 WVPASSEQ $(find "$BUP_DIR/objects/pack" -name '*.pack' | wc -l) 0
 
 WVSTART 'split --copy'
@@ -34,7 +40,7 @@ WVPASSEQ $(find "$BUP_DIR/objects/pack" -name '*.pack' | wc -l) 0
 WVSTART "split short reads"
 WVPASS mkfifo "$tmpdir/fifo"
 ( for i in $(seq 10) ; do echo asdf ; sleep 0.1 ; done ) > "$tmpdir/fifo" &
-WVPASSEQ $(WVPASS bup split --noop -b < "$tmpdir/fifo" | wc -l) 1
+WVPASSEQ $(WVPASS bup split --noop $SHA256_OPT -b < "$tmpdir/fifo" | wc -l) 1
 
 WVSTART "split"
 WVPASS echo a >a.tmp

@@ -107,7 +107,7 @@ def bup_rm(repo, paths, compression=6, verbosity=None):
         updated_refs[ref] = (branchitem.oid, None)
 
     if dead_saves:
-        writer = PackWriter(store=LocalPackStore(),
+        writer = PackWriter(store=LocalPackStore(hashsize=repo.hashsize),
                             compression_level=compression)
         try:
             for branch, saves in dead_saves.items():

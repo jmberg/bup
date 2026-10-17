@@ -327,8 +327,8 @@ def _rewrite_link(path, item_mode, srcrepo, dstrepo, stack, repairs):
     stack.append_to_current(name, item_mode, git_mode, oid, item.meta)
 
 def _remember_file_rewrite(from_oid, to_oid, chunked, size, wdbc, mapping):
-    assert len(from_oid) == 20, from_oid
-    assert len(to_oid) == 20, to_oid
+    assert len(from_oid) in (20, 32), from_oid
+    assert len(to_oid) in (20, 32), to_oid
     wdbc.execute(f'select src, dst, chunked, size from {mapping} where src = ?',
                  (from_oid,))
     row = wdbc.fetchone()
@@ -436,8 +436,8 @@ def _rewrite_save_item(path, replacement_dir, srcrepo, dstrepo, split_cfg,
         if len(stack) == 1:
             return # We're at the top level -- keep the current root dir
         newtree = stack.pop()
-        assert len(item.oid) == 20, item.oid
-        assert len(newtree) == 20, newtree
+        assert len(item.oid) in (20, 32), item.oid
+        assert len(newtree) in (20, 32), newtree
         # Don't remember any trees when we're making destructive
         # repairs because walk will skip the contents for a tree that
         # has missing objects when it encounters it a second time (for
@@ -553,7 +553,7 @@ class Rewriter:
         # Strict for now
         assert isinstance(parent, (bytes, type(None))), parent
         if parent:
-            assert len(parent) == 20, parent
+            assert len(parent) in (20, 32), parent
         assert all(isinstance(x, Pattern) for x in excludes)
         assert isinstance(repair_info, RepairInfo), repair_info
         assert len(save_path) == 3, (len(save_path), save_path)

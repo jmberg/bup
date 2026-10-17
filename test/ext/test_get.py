@@ -158,15 +158,16 @@ def _get_save_coid(save):
     if exr.rc: return False
     if not exr.out.endswith(b'/latest\n'):
         coid = exr.out.split()[0]
-        assert len(coid) == 40, exr.out
+        assert len(coid) in (40, 64), exr.out
         return coid
     exr = exo((bup_cmd, b'-d', b'get-dest', b'ls', b'--commit-hash', save))
     if exr.rc: return False
     lines = exr.out.splitlines()
     # Is save branch or branch/latest?
-    if lines[-1].rsplit(maxsplit=2) == b'0' * 40:
+    last_rsplit = lines[-1].rsplit(maxsplit=2)
+    if len(last_rsplit) in (40, 64) and last_rsplit == b'0' * len(last_rsplit):
         coid = exr.out.splitlines()[-2].split()[0]
-        assert len(coid) == 40, exr.out
+        assert len(coid) in (40, 64), exr.out
         return coid
     assert save.endswith(b'/latest'), save
     return _get_save_coid(save[:-7])

@@ -22,9 +22,9 @@ links      report missing objects referred to by REFs
 v,verbose  increase log output (can be used more than once)
 """
 
-def expected_bup_entry_count_for_tree(tree_data):
+def expected_bup_entry_count_for_tree(tree_data, hashsize):
     exp_n = 1 # for the parent dir
-    for mode, mangled_name, oid_ in tree_iter(tree_data):
+    for mode, mangled_name, oid_ in tree_iter(tree_data, hashsize):
         if mangled_name.endswith(b'.bupd'):
             return 1
         if mangled_name == b'.bupm':
@@ -111,7 +111,8 @@ def main(argv):
             parent = item_path[-2]
             info = vfs.get_ref(repo, hexlify(parent.oid))
             assert info[0], info
-            exp_n = expected_bup_entry_count_for_tree(b''.join(info[3]))
+            exp_n = expected_bup_entry_count_for_tree(b''.join(info[3]),
+                                                      hashsize=len(info[0])//2)
             if bupm_n == exp_n:
                 return True
             if bupm_n > exp_n:

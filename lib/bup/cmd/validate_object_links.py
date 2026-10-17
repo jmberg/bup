@@ -103,7 +103,7 @@ def main(argv):
                         reprogress()
                         continue
                     if tp == b'tree':
-                        shalist = (x[2] for x in tree_iter(data))
+                        shalist = (x[2] for x in tree_iter(data, len(oid)))
                     elif tp == b'commit':
                         commit = git.parse_commit(data)
                         shalist = map(unhexlify, commit.parents + [commit.tree])

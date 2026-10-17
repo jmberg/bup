@@ -291,7 +291,7 @@ class Client:
             shutil.move(legacy, new)
         return new
 
-    def __init__(self, location, create=False):
+    def __init__(self, location, create=None):
         """Construct a Client.  The location can be either a URL or a
         Client.Config.  The latter must be provided when the original
         source is a REMOTE OPTION (bup(1)) so that we can be sure to
@@ -332,10 +332,23 @@ class Client:
                 bad_c = pm(invalid.group())
                 rem = pm(self.path)
                 raise Exception(f'Invalid {bad_c} in remote path {rem}')
-            if create:
-                self._require_command(b'init-dir')
-                self.conn.write(b'init-dir %s\n' % self.path)
-                self.check_ok()
+            if create is not None:
+                if create is True:
+                    create = {}
+                assert set(create.keys()) <= {'objectformat'}
+                if create.get('objectformat', 'sha1') != 'sha1':
+                    self._require_command(b'init-dir-ext')
+                    self.conn.write(b'init-dir-ext\n')
+                    args = {
+                        'path': self.path,
+                        'objectformat': create.get('objectformat'),
+                    }
+                    vint.send(self.conn, 'j', args)
+                    self.check_ok()
+                else:
+                    self._require_command(b'init-dir')
+                    self.conn.write(b'init-dir %s\n' % self.path)
+                    self.check_ok()
             elif self.path:
                 self._require_command(b'set-dir')
                 self.conn.write(b'set-dir %s\n' % self.path)
@@ -347,6 +360,15 @@ class Client:
             else: # use the decoded path
                 legacy_id = _legacy_cache_id_for_host_path(url.host, self.path)
             self.cachedir = self._prep_cache(legacy_id)
+            objectformat = b'sha1'
+            if b'config-get' in self._available_commands:
+                try:
+                    objectformat = self.config_get(b'extensions.objectformat')
+                except PermissionError:
+                    objectformat = b'sha1'
+                assert objectformat in {None, b'sha1', b'sha256'}, \
+                    f'unsupported remote repo object format: {objectformat}'
+            self.hashsize = 32 if objectformat == b'sha256' else 20
             ctx.pop_all()
         self.closed = False
 
@@ -510,7 +532,8 @@ class Client:
                                 suggest_packs=self._suggest_packs,
                                 onopen=set_busy,
                                 onclose=unset_busy,
-                                ensure_busy=self.ensure_busy)
+                                ensure_busy=self.ensure_busy,
+                                hashsize=self.hashsize)
         return PackWriter(store=store,
                           compression_level=compression_level,
                           max_pack_size=max_pack_size,
@@ -521,7 +544,7 @@ class Client:
             r = self.conn.readline().strip()
             if not r:
                 return None
-            assert len(r) == 40, f"invalid ref {r}"
+            assert len(r) in (40, 64), f"invalid ref {r}"
             return unhexlify(r)
 
     def update_ref(self, refname, newval, oldval):
@@ -575,7 +598,7 @@ class Client:
             self.conn.write(b'\n')
             for line in call.lines():
                 oidx, name = line.split(b' ')
-                if len(oidx) != 40:
+                if len(oidx) != 2 * self.hashsize:
                     raise ClientError('Invalid object fingerprint in %r' % line)
                 if not name:
                     raise ClientError('Invalid reference name in %r' % line)
@@ -611,14 +634,14 @@ class Client:
             if not format:
                 for line in call.lines():
                     line = line.strip()
-                    assert len(line) == 40
+                    assert len(line) in (40, 64)
                     yield line
             else:
                 for line in call.lines():
                     if not line.startswith(b'commit '):
                         raise ClientError('unexpected line ' + repr(line))
                     cmt_oidx = line[7:].strip()
-                    assert len(cmt_oidx) == 40
+                    assert len(cmt_oidx) in (40, 64)
                     yield cmt_oidx, parse(self.conn)
 
     def resolve(self, path, parent=None, want_meta=True, follow=True):
@@ -667,7 +690,7 @@ class Client:
 
 class RemotePackStore:
     def __init__(self, conn, *, cache, suggest_packs, onopen, onclose,
-                 ensure_busy):
+                 ensure_busy, hashsize):
         self._closed = False
         self._bwcount = 0
         self._bwtime = time.time()
@@ -679,6 +702,7 @@ class RemotePackStore:
         self._onopen = onopen
         self._packopen = False
         self._suggest_packs = suggest_packs
+        self.hashsize = hashsize
 
     def __del__(self): assert self._closed
 
@@ -706,7 +730,7 @@ class RemotePackStore:
         assert(data)
         assert(sha)
         crc = zlib.crc32(data) & 0xffffffff
-        outbuf = b''.join((struct.pack('!I', len(data) + 20 + 4),
+        outbuf = b''.join((struct.pack('!I', len(data) + len(sha) + 4),
                            sha,
                            struct.pack('!I', crc),
                            data))
