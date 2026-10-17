@@ -549,6 +549,7 @@ static PyObject *bloom_contains(PyObject *self, PyObject *args)
 
     PyObject *result = NULL;
 
+    // don't know what size the filter file is
     if (len != 20 && len != 32)
         goto clean_and_return;
 

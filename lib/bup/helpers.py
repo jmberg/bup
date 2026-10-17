@@ -1127,6 +1127,7 @@ def grafted_path_components(graft_points, path):
 
 
 Sha1 = hashlib.sha1
+Sha256 = hashlib.sha256
 
 
 def utc_offset_str(t):

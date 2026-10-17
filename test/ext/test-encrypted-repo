@@ -154,6 +154,11 @@ for f in $(ls $cachedir/*.idx | sort) ; do
 done
 WVPASSEQ "$sha1_before" "$sha1_after"
 
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    WVSKIP "no sha256 index support"
+    exit 0
+fi
+
 WVSTART dedup worked
 for f in $(seq 200 300) ; do echo 100 > $tmpdir/src/$f ; done
 WVPASS bup index $tmpdir/src

@@ -1,5 +1,6 @@
 
 from os.path import abspath
+from os import environb
 
 from bup import git, options
 from bup.compat import argv_bytes
@@ -7,11 +8,15 @@ from bup.helpers import EXIT_FAILURE, log
 from bup.url import URL
 from bup.repo import main_repo_location, repo_for_location
 
+_sha256_default = ""
+if environb.get(b'BUP_TEST_SHA256', b'') == b'1':
+    _sha256_default = " [1]"
 
-optspec = """
-[BUP_DIR=directory] bup init [-r host:path] [directory]
+optspec = f"""
+[BUP_DIR=directory] bup init [-r host:path] [--sha256] [directory]
 --
 r,remote=  remote repository path
+sha256     use sha256 object format{_sha256_default}
 """
 
 def main(argv):
@@ -26,7 +31,10 @@ def main(argv):
     else:
         loc = main_repo_location(opt.remote and argv_bytes(opt.remote), o.fatal)
     try:
-        with repo_for_location(loc, create=True): pass
+        opts = {}
+        if opt.sha256:
+            opts['objectformat'] = 'sha256'
+        with repo_for_location(loc, create=opts): pass
     except git.GitError as ex:
         log(f'error: could not init repository: {ex}\n')
         return EXIT_FAILURE

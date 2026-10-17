@@ -2,6 +2,7 @@
 . ./wvtest-bup.sh || exit $?
 . dev/lib.sh || exit $?
 
+
 set -o pipefail
 
 top="$(WVPASS pwd)" || exit $?
@@ -49,6 +50,14 @@ WVPASS touch -t 200910032348 .
 WVPASS bup index src
 # Include two saves to test multiple results per ref from rev_list.
 WVPASS bup save -n src -d 242312159 --strip src
+# A second save consults the index for objects already in the repo,
+# which is not yet sha256-aware.
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    echo "skipping rest of test-ls: bup index is not yet sha256-aware" >&2
+    WVPASS cd "$top"
+    WVPASS rm -rf "$tmpdir"
+    exit 0
+fi
 WVPASS bup save -n src -d 242312160 --strip src
 WVPASS bup tag some-tag src
 

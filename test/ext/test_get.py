@@ -14,6 +14,8 @@ from bup.helpers import EXIT_FAILURE, bquote, unlink
 from bup.io import byte_stream
 import bup.path
 
+hexsize = 64 if os.environb.get(b'BUP_TEST_SHA256', b'') == b'1' else 40
+
 
 def getcwd():
     return os.fsencode(os.getcwd())
@@ -158,15 +160,15 @@ def _get_save_coid(save):
     if exr.rc: return False
     if not exr.out.endswith(b'/latest\n'):
         coid = exr.out.split()[0]
-        assert len(coid) == 40, exr.out
+        assert len(coid) == hexsize, exr.out
         return coid
     exr = exo((bup_cmd, b'-d', b'get-dest', b'ls', b'--commit-hash', save))
     if exr.rc: return False
     lines = exr.out.splitlines()
     # Is save branch or branch/latest?
-    if lines[-1].rsplit(maxsplit=2) == b'0' * 40:
+    if lines[-1].split()[0] == b'0' * hexsize:
         coid = exr.out.splitlines()[-2].split()[0]
-        assert len(coid) == 40, exr.out
+        assert len(coid) == hexsize, exr.out
         return coid
     assert save.endswith(b'/latest'), save
     return _get_save_coid(save[:-7])

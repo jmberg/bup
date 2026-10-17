@@ -85,16 +85,18 @@ def main(argv):
     sys.stdout.flush()
     out = byte_stream(sys.stdout)
     ret = EXIT_TRUE
-    with LocalRepo() as repo, git.PackIdxList(repo.packdir()) as mi:
+    with LocalRepo() as repo, \
+         git.PackIdxList(repo.packdir(), repo.hashsize) as mi:
         cp = git.catpipe(repo.repo_dir)
         idxlist = glob.glob(path.join(repo.packdir(), b'*.idx'))
         obj_n = 0
         for idxname in idxlist:
-            with git.open_idx(idxname) as idx:
+            with git.open_idx(idxname, repo.hashsize) as idx:
                 obj_n += idx.nsha
         obj_i = 0
         for idxname in idxlist:
-            with git.open_idx(idxname) as idx, Pack(idx, cp) as pack:
+            with git.open_idx(idxname, repo.hashsize) as idx, \
+                 Pack(idx, cp) as pack:
                 for oid, tp, data in pack:
                     # bup doesn't generate tag objects
                     if tp == b'tag':
@@ -104,7 +106,7 @@ def main(argv):
                         reprogress()
                         continue
                     if tp == b'tree':
-                        shalist = (x[2] for x in tree_iter(data))
+                        shalist = (x[2] for x in tree_iter(data, len(oid)))
                     elif tp == b'commit':
                         commit = git.parse_commit(data)
                         shalist = map(unhexlify, commit.parents + [commit.tree])

@@ -219,9 +219,15 @@ WVPASS bup save -n src --strip src
 last_save="$(WVPASS bup ls -s src | tail -n -2 | head -n 1 | cut -d ' ' -f 2)" || exit $?
 WVPASS bup rm --unsafe src/"$last_save"
 
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    oidlen=64
+else
+    oidlen=40
+fi
+
 # Drop the victim tree
 WVPASS git ls-tree src | grep victim | WVPASS cut -d' ' -f 3 \
-    | WVPASS cut -b -40 > victim-oid
+    | WVPASS cut -b -$oidlen > victim-oid
 WVPASS test -n "$(<victim-oid)"
 WVPASS "$top/dev/perforate-repo" --drop-oids "$BUP_DIR" < victim-oid
 

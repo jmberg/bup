@@ -4,6 +4,8 @@ from os import environb, unlink
 from subprocess import run
 from sys import stderr
 
+import pytest
+
 from bup import path
 
 bup_exe = path.exe()
@@ -17,6 +19,8 @@ def bupc(*args, **kwargs):
     print(cmd, file=stderr)
     run(cmd, *args[1:], check=True, **kwargs)
 
+@pytest.mark.skipif(environb.get(b'BUP_TEST_SHA256', b'') == b'1',
+                    reason='need sha256 index')
 def test_missing_midx(tmpdir):
     bup_dir = tmpdir + b'/bup'
     environb[b'GIT_DIR'] = bup_dir

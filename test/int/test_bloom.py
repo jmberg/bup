@@ -7,16 +7,16 @@ from bup.bloom import BloomReader, BloomWriter
 from bup.compat import dataclass
 
 
-@pytest.mark.parametrize('oidsize', (20, 32))
+@pytest.mark.parametrize('hashsize', (20, 32))
 @pytest.mark.parametrize('k', (4, 5))
-def test_bloom(tmpdir, oidsize, k):
-    hashes = [os.urandom(oidsize) for i in range(100)]
+def test_bloom(tmpdir, hashsize, k):
+    hashes = [os.urandom(hashsize) for i in range(100)]
     @dataclass(slots=True)
     class Idx:
         name: bytes
         shatable: bytes
-        sha256: bool
-    ix = Idx(name=b'dummy.idx', shatable=b''.join(hashes), sha256=oidsize==32)
+        hashsize: int
+    ix = Idx(name=b'dummy.idx', shatable=b''.join(hashes), hashsize=hashsize)
     with BloomWriter(tmpdir + b'/pybuptest.bloom', 'w+b', expected=100, k=k) as b:
         b.add_idx(ix)
         assert b.pfalse_positive() < .1
@@ -26,7 +26,7 @@ def test_bloom(tmpdir, oidsize, k):
             all_present &= (b.exists(h) or False)
         assert all_present
         false_positives = 0
-        for h in [os.urandom(oidsize) for i in range(1000)]:
+        for h in [os.urandom(hashsize) for i in range(1000)]:
             if b.exists(h):
                 false_positives += 1
         assert false_positives < 10

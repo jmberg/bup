@@ -51,6 +51,7 @@ max-pack-objects=  maximum number of objects in a single pack
 fanout=    average number of blobs in a single tree
 bwlimit=   maximum bytes/sec to transmit to server
 #,compress=  set compression level to # (0-9, 9 is highest)
+sha256     use sha256 for --noop
 """
 
 
@@ -180,6 +181,8 @@ def main(argv):
     if opt.bwlimit:
         client.bwlimit = opt.bwlimit
 
+    hashsize = 32 if opt.sha256 else 20
+
     start_time = time.time()
 
     sys.stdout.flush()
@@ -279,9 +282,10 @@ def main(argv):
             else:
                 assert not refname
                 def null_write_data(content):
-                    return git.calc_hash(b'blob', content)
+                    return git.calc_hash(b'blob', content, hashsize=hashsize)
                 def null_write_tree(shalist):
-                    return git.calc_hash(b'tree', git.tree_encode(shalist))
+                    return git.calc_hash(b'tree', git.tree_encode(shalist),
+                                         hashsize=hashsize)
                 split(opt, files, oldref, out, split_cfg,
                       new_blob=null_write_data, new_tree=null_write_tree)
 

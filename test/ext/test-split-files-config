@@ -18,6 +18,18 @@ WVPASS cd "$tmpdir"
 size="$(WVPASS bup-python -c 'import random; print(random.randrange(0,1024*1024))')" || exit $?
 WVPASS bup random --seed "$RANDOM" "$size" > data
 
+if [ "$BUP_TEST_SHA256" = "1" ]; then
+    legacy13_tree1=f6cd76f9315d74a4a7a344e911163fb9c54d4fbefa83e570165be1da61f1f31a
+    legacy13_tree2=7e4a53d74812b6881fdc4260c80510da3523ce9bf8a31194df074e935f4e783b
+    legacy16_tree1=84810f2c7feb1d19094d6d562097d647bbe24e3eb763ea71460f7dd6796212c2
+    legacy16_tree2=e233b5f6bf9babebdc4ada7ba437bc71eec3b357c3fca9e7aa77fc93156b5c5b
+else
+    legacy13_tree1=83bb4c45bbb0aa511f52bdda99c42a853a7a80f2
+    legacy13_tree2=f5fa3217473711e003ccc4271e6af48ffa3cb990
+    legacy16_tree1=0ab731edb8e0f1b32a378daf7d99d9a1239c99f1
+    legacy16_tree2=84eb6ce37ce75fffd5db8472f7667b1361c5c776
+fi
+
 WVSTART "split with no setting is the same as legacy:13"
 WVPASS bup init
 WVEXPRC 5 git config -f "$BUP_DIR/config" --unset bup.split.files
@@ -71,8 +83,8 @@ WVPASS bup init
 WVPASS git config -f "$BUP_DIR/config" bup.split.files legacy:13
 tree1="$(WVPASS bup split -t "$top/test/testfile1")" || exit $?
 tree2="$(WVPASS bup split -t "$top/test/testfile2")" || exit $?
-WVPASSEQ 83bb4c45bbb0aa511f52bdda99c42a853a7a80f2 "$tree1"
-WVPASSEQ f5fa3217473711e003ccc4271e6af48ffa3cb990 "$tree2"
+WVPASSEQ "$legacy13_tree1" "$tree1"
+WVPASSEQ "$legacy13_tree2" "$tree2"
 WVPASS rm -r bup
 
 
@@ -81,8 +93,8 @@ WVPASS bup init
 WVPASS git config -f "$BUP_DIR/config" bup.split.files legacy:16
 tree1="$(WVPASS bup split -t "$top/test/testfile1")" || exit $?
 tree2="$(WVPASS bup split -t "$top/test/testfile2")" || exit $?
-WVPASSEQ 0ab731edb8e0f1b32a378daf7d99d9a1239c99f1 "$tree1"
-WVPASSEQ 84eb6ce37ce75fffd5db8472f7667b1361c5c776 "$tree2"
+WVPASSEQ "$legacy16_tree1" "$tree1"
+WVPASSEQ "$legacy16_tree2" "$tree2"
 WVPASS rm -r bup
 
 WVSTART 'split legacy:21 regression'
@@ -90,8 +102,8 @@ WVPASS bup init
 WVPASS git config -f "$BUP_DIR/config" bup.split.files legacy:21
 tree1="$(WVPASS bup split -t "$top/test/testfile1")" || exit $?
 tree2="$(WVPASS bup split -t "$top/test/testfile2")" || exit $?
-WVPASSEQ 0ab731edb8e0f1b32a378daf7d99d9a1239c99f1 "$tree1"
-WVPASSEQ 84eb6ce37ce75fffd5db8472f7667b1361c5c776 "$tree2"
+WVPASSEQ "$legacy16_tree1" "$tree1"
+WVPASSEQ "$legacy16_tree2" "$tree2"
 WVPASS rm -r bup
 
 
@@ -104,6 +116,47 @@ WVPASS git --git-dir bup ls-tree -r save \
     | WVPASS grep -vE $'(\t|/)\.bupm(/|$)' \
     | WVPASS cut -f1 \
     | WVPASS cut -d' ' -f3 > oids
+if [ "$BUP_TEST_SHA256" = "1" ]; then
+WVPASS cat > oids-exp <<EOF
+d371de9217f1a5a8e9e423b0cd693f2251b5cbc1e631b09ddb6a07e8675b1bfc
+2dcbfa974237e24d8d371dc274322ee5569d5656df97b254a66ff7a7b6b4169d
+f1f8957175e6c5fefc6d9c5307a2f21c09d1f6b06344875e7a5e1f2cee569af1
+5f145c8b8949d55fb55b7c4799a79b879f3908b44b4b1e1613f59b161d3a993d
+912068d2c9f549350e2a894383673a822fb4d38935f6e81edf632dffb6096bd8
+21c25a8518865428d9b8e3eebff34af7acac9c76553e5e53da7a67b25bed9c4e
+ef200142b8c9675b8084dec338f6d4f9134a2e1fe2511cc196b16fce23bf6290
+aa8d13e8b783844a8b8dc9763706ea40653cb734827a877eb194dbf6e5dcc70d
+a1853df6aab6a7bcd7ec054230369652f6c7cfbf484c9ae612a3033692189d94
+da4b5a081242e5d2db08dee9aee4750b749057de0a3f4f7c302b19b182ee8c24
+2dcbfa974237e24d8d371dc274322ee5569d5656df97b254a66ff7a7b6b4169d
+f1f8957175e6c5fefc6d9c5307a2f21c09d1f6b06344875e7a5e1f2cee569af1
+5f145c8b8949d55fb55b7c4799a79b879f3908b44b4b1e1613f59b161d3a993d
+912068d2c9f549350e2a894383673a822fb4d38935f6e81edf632dffb6096bd8
+21c25a8518865428d9b8e3eebff34af7acac9c76553e5e53da7a67b25bed9c4e
+ef200142b8c9675b8084dec338f6d4f9134a2e1fe2511cc196b16fce23bf6290
+aa8d13e8b783844a8b8dc9763706ea40653cb734827a877eb194dbf6e5dcc70d
+a1853df6aab6a7bcd7ec054230369652f6c7cfbf484c9ae612a3033692189d94
+da4b5a081242e5d2db08dee9aee4750b749057de0a3f4f7c302b19b182ee8c24
+2dcbfa974237e24d8d371dc274322ee5569d5656df97b254a66ff7a7b6b4169d
+f1f8957175e6c5fefc6d9c5307a2f21c09d1f6b06344875e7a5e1f2cee569af1
+5f145c8b8949d55fb55b7c4799a79b879f3908b44b4b1e1613f59b161d3a993d
+912068d2c9f549350e2a894383673a822fb4d38935f6e81edf632dffb6096bd8
+21c25a8518865428d9b8e3eebff34af7acac9c76553e5e53da7a67b25bed9c4e
+ef200142b8c9675b8084dec338f6d4f9134a2e1fe2511cc196b16fce23bf6290
+aa8d13e8b783844a8b8dc9763706ea40653cb734827a877eb194dbf6e5dcc70d
+a1853df6aab6a7bcd7ec054230369652f6c7cfbf484c9ae612a3033692189d94
+c132a17c45b13bc07e9e1f4772b94a10695f9d6b4c5edd430b7783fe094cb66b
+d4d9fbcc24a92f7223ebd97cb34f8cd776145ef00467890573f9372a3e24bea9
+bbe5d948e668ac62505c7649a9a4a4bbff09914bf6e7c8fa134ee0a88955f591
+4211cd32a73aa952396491b826e205ff257224e6f3049493d5471056ea94b881
+ea324d1bb74bc919b0b78883bd8cdef175e87caa86d7989250a525b1d07c876c
+a7d4092c45dfce0ded3d460110e688c16dd2b573633fd83a9e45257e20759912
+4eb77f85c38d5ff286acdcf3cecb5283854f4559c584b0d94c4c0fea8e7eee15
+db498e984c28cbe1ad4c8d8022a1056f5242db40c745b116540adab0ee19f7cf
+45ee845e5d7e4f7401c6182525f130e2972db7e404226583c18cf5086bee9b55
+b2143b646354b552d74d00c39ee09aeba0e0a428b96de0fa03e770a661683577
+EOF
+else
 WVPASS cat > oids-exp <<EOF
 2d236959613b9796350dd270632e6e840d2320dd
 baec1b3aa358bcffef2e9baf542d9aaa6d605e69
@@ -143,6 +196,7 @@ f1a41183602f7dfeb0f39ed406729f9b224c4659
 32b41bc7318e9d135e372ee6267a5c253f14b82e
 cbc26696acb0ba0484305a56d09752a14cd232dc
 EOF
+fi
 WVPASS diff -u oids-exp oids
 WVPASS rm -r bup oids
 
@@ -156,6 +210,15 @@ WVPASS git --git-dir bup ls-tree -r save \
     | WVPASS grep -vE $'(\t|/)\.bupm(/|$)' \
     | WVPASS cut -f1 \
     | WVPASS cut -d' ' -f3 > oids
+if [ "$BUP_TEST_SHA256" = "1" ]; then
+WVPASS cat > oids-exp <<EOF
+bb4cd61d39ac83f0c2d32ecd6db75ee6a858f3d5b1933d13444958778eec0f90
+346ab781644981ec62dabf0493f1280adce11d5a80a2469c14a25393b6414cca
+5f4b6be1665dea0776e2021a601f08b78bdc9b53aaca17a87a4e4f425ab2b17f
+f80df201c16a718e226c19067a5a4cb52f698ed7ef3267485c6e0cd139ed130e
+628cb66f63e5fa8d13009dabb18b80cf83c9bb91e56fc22c81de5608870ef17b
+EOF
+else
 WVPASS cat > oids-exp <<EOF
 31ee97900d92f636c55bbfdba7f00fb0174095eb
 5dbf3ec3057bf3f95674608c8849a7e38af34332
@@ -163,6 +226,7 @@ da6c9a168a0b4f692b199731d1a2bf4ca2525260
 5bb3dfb00be14795b7a7995bbaac8c2766a064e2
 57acf7c5ea9623290f8bc699f471d92612419a57
 EOF
+fi
 WVPASS diff -u oids-exp oids
 WVPASS rm -r bup oids
 

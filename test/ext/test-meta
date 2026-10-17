@@ -219,20 +219,26 @@ WVSTART 'metadata save/restore (using index metadata)'
     WVPASS test -d src-restore-1/src
     WVPASS "$top/dev/compare-trees" -c src/ src-restore-1/src/
 
-    WVPASS echo "blarg" > src/volatile/1
-    WVPASS cp -pP src/volatile/1 src-restore-1/src/volatile/
-    WVPASS bup index src
+    if [ "$BUP_TEST_SHA256" = "1" ] ; then
+        # Reusing index metadata across saves doesn't yet work for
+        # sha256 repositories, since bup index isn't sha256-aware.
+        echo "skipping index metadata reuse check: bup index is not yet sha256-aware" >&2
+    else
+        WVPASS echo "blarg" > src/volatile/1
+        WVPASS cp -pP src/volatile/1 src-restore-1/src/volatile/
+        WVPASS bup index src
 
-    # Bup should *not* pick up these metadata changes.
-    WVPASS touch src/volatile/2
+        # Bup should *not* pick up these metadata changes.
+        WVPASS touch src/volatile/2
 
-    WVPASS bup save -t -n src src
+        WVPASS bup save -t -n src src
 
-    WVPASS force-delete src-restore-2
-    WVPASS mkdir src-restore-2
-    WVPASS bup restore -C src-restore-2 "/src/latest$(pwd)/"
-    WVPASS test -d src-restore-2/src
-    WVPASS "$top/dev/compare-trees" -c src-restore-1/src/ src-restore-2/src/
+        WVPASS force-delete src-restore-2
+        WVPASS mkdir src-restore-2
+        WVPASS bup restore -C src-restore-2 "/src/latest$(pwd)/"
+        WVPASS test -d src-restore-2/src
+        WVPASS "$top/dev/compare-trees" -c src-restore-1/src/ src-restore-2/src/
+    fi
 
     WVPASS rm -r "$tmpdir"
 

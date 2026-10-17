@@ -21,7 +21,8 @@ writable_opts = \
                b'bup.split.files',
                b'pack.packsizelimit',
                b'core.compression',
-               b'pack.compression'))
+               b'pack.compression',
+               b'extensions.objectformat'))
 
 
 valid_config_opts = \
@@ -80,7 +81,8 @@ def write_item(port, item):
     meta = item.meta
     has_meta = 1 if isinstance(meta, Metadata) else 0
     if kind in (Item, Chunky, RevList):
-        assert len(item.oid) == 20
+        # we don't know the size here, but this is things we produced
+        assert len(item.oid) in (20, 32)
         if has_meta:
             vint.send(port, 'sVs', name, has_meta, item.oid)
             Metadata.write(meta, port, include_path=False)
@@ -93,8 +95,9 @@ def write_item(port, item):
         else:
             vint.send(port, 'sVV', name, has_meta, item.meta)
     elif kind == Commit:
-        assert len(item.oid) == 20
-        assert len(item.coid) == 20
+        # we don't know the size here, but this is things we produced
+        assert len(item.oid) in (20, 32)
+        assert len(item.coid) in (20, 32)
         if has_meta:
             vint.send(port, 'sVss', name, has_meta, item.oid, item.coid)
             Metadata.write(meta, port, include_path=False)
@@ -252,6 +255,15 @@ class Server:
         self.conn.ok()
 
     @_command
+    def init_dir_ext(self, junk_):
+        args = vint.recv(self.conn, 't')[0]
+        path = args['path']
+        if self._vet_init_dir: self._vet_init_dir(self.repo, path)
+        self._backend.create(path, objectformat=args.get('objectformat', 'sha1'))
+        self.init_session(path)
+        self.conn.ok()
+
+    @_command
     def set_dir(self, path):
         if self._vet_set_dir: self._vet_set_dir(self.repo, path)
         self.init_session(path)
@@ -319,9 +331,10 @@ class Server:
                 self.conn.ok()
                 return
 
-            shar = self.conn.read(20)
+            oidsz = self.repo.hashsize
+            shar = self.conn.read(oidsz)
             crcr = struct.unpack('!I', self.conn.read(4))[0]
-            n -= 20 + 4
+            n -= oidsz + 4
             buf = self.conn.read(n)  # object sizes in bup are reasonably small
             #debug2('read %d bytes\n' % n)
             self._check(n, len(buf), 'object read: expected %d bytes, got %d\n')

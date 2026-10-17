@@ -50,6 +50,10 @@ WVPASS bup memtest -c1 -n100
 WVPASS bup memtest -c1 -n100 --existing
 
 
+# The sections up to "import-rsnapshot" save via the index, which is not
+# yet sha256-aware.
+if [ "$BUP_TEST_SHA256" != "1" ] ; then
+
 WVSTART "save/git-fsck"
 (
     WVPASS cd "$BUP_DIR"
@@ -154,6 +158,8 @@ mid"
 WVPASSEQ "$(echo 'ls lsrec/latest/a' | bup ftp -r -:"$PWD/$D/.bup")" "b
 mid"
 WVPASS force-delete $D
+
+fi
 
 
 WVSTART "import-rsnapshot"

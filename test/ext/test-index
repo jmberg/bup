@@ -4,6 +4,12 @@
 . ./dev/lib.sh || exit $?
 . ./test/lib/btl.sh || exit $?
 
+# bup index is not yet sha256-aware; this file only tests index-based saves.
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    WVSKIP "need sha256 capable index" >&2
+    exit 0
+fi
+
 set -o pipefail
 
 top="$(WVPASS pwd)" || exit $?

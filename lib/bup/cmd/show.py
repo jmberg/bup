@@ -98,7 +98,7 @@ def _show_commit(out, oid, content):
 def _show_tree(out, opt, repo, content, indent=b''):
     # similar to "git ls-tree"
     rc = EXIT_SUCCESS
-    for mode, name, oid in git.tree_iter(content):
+    for mode, name, oid in git.tree_iter(content, repo.hashsize):
         if opt.exists:
             exists = b'  ' if repo.exists(oid) else b'! '
         else:

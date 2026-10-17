@@ -158,6 +158,9 @@ WVPASS rm -r restore
 WVPASS bup restore --sparse -C restore "src/latest/$(pwd)/"
 WVPASS "$top/dev/compare-trees" -c src/ restore/src/
 
+# need sha256 index
+if [ "$BUP_TEST_SHA256" != "1" ] ; then
+
 WVSTART "sparse file restore --sparse (short zero runs around boundary)"
 WVPASS bup-cfg-py > src/foo <<EOF
 from sys import stdout
@@ -172,6 +175,8 @@ WVPASS bup save -n src src
 WVPASS rm -r restore
 WVPASS bup restore --sparse -C restore "src/latest/$(pwd)/"
 WVPASS "$top/dev/compare-trees" -c src/ restore/src/
+
+fi
 
 
 WVPASS cd "$top"

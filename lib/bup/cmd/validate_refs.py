@@ -22,9 +22,9 @@ links      report missing objects referred to by REFs
 v,verbose  increase log output (can be used more than once)
 """
 
-def expected_bup_entry_count_for_tree(tree_data):
+def expected_bup_entry_count_for_tree(tree_data, hashsize):
     exp_n = 1 # for the parent dir
-    for mode, mangled_name, oid_ in tree_iter(tree_data):
+    for mode, mangled_name, oid_ in tree_iter(tree_data, hashsize):
         if mangled_name.endswith(b'.bupd'):
             return 1
         if mangled_name == b'.bupm':
@@ -110,7 +110,8 @@ def main(argv):
             parent = item_path[-2]
             info = vfs.get_ref(repo, hexlify(parent.oid))
             assert info[0], info
-            exp_n = expected_bup_entry_count_for_tree(b''.join(info[3]))
+            exp_n = expected_bup_entry_count_for_tree(b''.join(info[3]),
+                                                      hashsize=repo.hashsize)
             if bupm_n == exp_n:
                 return True
             if bupm_n > exp_n:
@@ -125,14 +126,15 @@ def main(argv):
 
         # Wanted all refs, or at least some specified weren't missing
         if not extra or (extra and ref_info):
-            existing_count = count_objects(repo.packdir(), verbosity)
+            existing_count = count_objects(repo.packdir(), repo.hashsize,
+                                           verbosity)
             if verbosity:
                 log(f'found {existing_count} objects\n')
             if existing_count:
                 with ExitStack() as maybe_close_idxl:
                     idxl = None
                     if opt.links:
-                        idxl = git.PackIdxList(repo.packdir())
+                        idxl = git.PackIdxList(repo.packdir(), repo.hashsize)
                         maybe_close_idxl.enter_context(idxl)
                     live_objs, live_trees_ = \
                         find_live_objects(repo, existing_count, cat_pipe,
