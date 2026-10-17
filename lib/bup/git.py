@@ -422,6 +422,7 @@ class PackIdx:
     def __init__(self):
         self.name = None
         self.fanout = b''
+        self.hashsize = 20
 
     @notimplemented
     def _ofs_from_idx(self, idx): pass
