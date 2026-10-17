@@ -492,13 +492,18 @@ static PyObject *bloom_add(PyObject *self, PyObject *args)
 {
     Py_buffer bloom, sha;
     int nbits = 0, k = 0;
-    if (!PyArg_ParseTuple(args, wbuf_argf wbuf_argf "ii",
-                          &bloom, &sha, &nbits, &k))
+    int hashsize = 20;
+
+    if (!PyArg_ParseTuple(args, wbuf_argf wbuf_argf "iii",
+                          &bloom, &sha, &nbits, &k, &hashsize))
         return NULL;
 
     PyObject *result = NULL;
 
-    if (bloom.len < 16+(1<<nbits) || sha.len % 20 != 0)
+    if (hashsize != 20 && hashsize != 32)
+        goto clean_and_return;
+
+    if (bloom.len < 16+(1<<nbits) || sha.len % hashsize != 0)
         goto clean_and_return;
 
     if (k == 5)
@@ -506,9 +511,10 @@ static PyObject *bloom_add(PyObject *self, PyObject *args)
         if (nbits > 29)
             goto clean_and_return;
         unsigned char *cur = sha.buf;
-        unsigned char *end;
-        for (end = cur + sha.len; cur < end; cur += 20/k)
-            bloom_set_bit5(bloom.buf, cur, nbits);
+        unsigned char *end = cur + sha.len;
+        for (unsigned char *obj = cur; obj < end; obj += hashsize)
+            for (unsigned char *sub = obj; sub + 4 <= obj + hashsize; sub += 4)
+                bloom_set_bit5(bloom.buf, sub, nbits);
     }
     else if (k == 4)
     {
@@ -516,13 +522,14 @@ static PyObject *bloom_add(PyObject *self, PyObject *args)
             goto clean_and_return;
         unsigned char *cur = sha.buf;
         unsigned char *end = cur + sha.len;
-        for (; cur < end; cur += 20/k)
-            bloom_set_bit4(bloom.buf, cur, nbits);
+        for (unsigned char *obj = cur; obj < end; obj += hashsize)
+            for (unsigned char *sub = obj; sub + 5 <= obj + hashsize; sub += 5)
+                bloom_set_bit4(bloom.buf, sub, nbits);
     }
     else
         goto clean_and_return;
 
-    result = Py_BuildValue("n", sha.len / 20);
+    result = Py_BuildValue("n", sha.len / hashsize);
 
  clean_and_return:
     PyBuffer_Release(&bloom);
@@ -542,7 +549,7 @@ static PyObject *bloom_contains(PyObject *self, PyObject *args)
 
     PyObject *result = NULL;
 
-    if (len != 20)
+    if (len != 20 && len != 32)
         goto clean_and_return;
 
     if (k == 5)
@@ -551,7 +558,7 @@ static PyObject *bloom_contains(PyObject *self, PyObject *args)
             goto clean_and_return;
         int steps;
         unsigned char *end;
-        for (steps = 1, end = sha + 20; sha < end; sha += 20/k, steps++)
+        for (steps = 1, end = sha + len; sha + 4 <= end; sha += 4, steps++)
             if (!bloom_get_bit5(bloom.buf, sha, nbits))
             {
                 result = Py_BuildValue("Oi", Py_None, steps);
@@ -564,7 +571,7 @@ static PyObject *bloom_contains(PyObject *self, PyObject *args)
             goto clean_and_return;
         int steps;
         unsigned char *end;
-        for (steps = 1, end = sha + 20; sha < end; sha += 20/k, steps++)
+        for (steps = 1, end = sha + len; sha + 5 <= end; sha += 5, steps++)
             if (!bloom_get_bit4(bloom.buf, sha, nbits))
             {
                 result = Py_BuildValue("Oi", Py_None, steps);

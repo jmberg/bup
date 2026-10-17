@@ -344,16 +344,16 @@ class BloomWriter(_BloomBase):
     def __enter__(self): return self
     def __exit__(self, type, value, traceback): self.close(value)
 
-    def add(self, ids):
-        """Add the hashes in ids (packed binary 20-bytes) to the filter."""
+    def add(self, ids, hashsize):
+        """Add the hashes in ids (packed binary 20/32-bytes) to the filter."""
         if not self.map:
             raise Exception("Cannot add to closed bloom")
-        self.entries += bloom_add(self.map, ids, self.bits, self.k)
+        self.entries += bloom_add(self.map, ids, self.bits, self.k, hashsize)
 
     def add_idx(self, ix):
         """Add the object to the filter."""
         assert self.map
-        self.add(ix.shatable)
+        self.add(ix.shatable, ix.hashsize)
         self.idxnames.append(os.path.basename(ix.name))
 
 
