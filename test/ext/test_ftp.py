@@ -1,5 +1,6 @@
 
 from os import chdir, mkdir, symlink, unlink
+import os
 from subprocess import PIPE
 from time import localtime, strftime, tzset
 import re
@@ -12,6 +13,7 @@ from bup.helpers import unlink as unlink_if_exists
 import bup.path
 
 bup_cmd = bup.path.exe()
+hexsize = 64 if os.environb.get(b'BUP_TEST_SHA256', b'') == b'1' else 40
 
 # pylint: disable-next=function-redefined
 def bup(*args, **kwargs):
@@ -79,11 +81,11 @@ def test_ftp(tmpdir):
     wvpasseq(b'/src/.commit-%s/dir\n' % save_oidx,
              bup(b'ftp', input=jl(b'cd src latest dir-symlink', b'pwd')).out)
 
-    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{40}(/not-there\n/\n)',
+    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{%d}(/not-there\n/\n)' % hexsize,
                  (b'error: path does not exist: /src/', b'/not-there\n/\n'),
                  bup(b'ftp', input=jl(b'cd src/latest/bad-symlink', b'pwd')).out)
 
-    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{40}(/not-there\n/\n)',
+    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{%d}(/not-there\n/\n)' % hexsize,
                  (b'error: path does not exist: /src/', b'/not-there\n/\n'),
                  bup(b'ftp', input=jl(b'cd src/latest/not-there', b'pwd')).out)
 
@@ -110,11 +112,11 @@ def test_ftp(tmpdir):
         wvpasseq(b'excitement!\n', f.read())
     unlink(b'dest')
 
-    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{40}(/not-there\n)',
+    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{%d}(/not-there\n)' % hexsize,
                  (b'error: path does not exist: /src/', b'/not-there\n'),
                  bup(b'ftp', input=jl(b'get src/latest/bad-symlink dest')).out)
 
-    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{40}(/not-there\n)',
+    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{%d}(/not-there\n)' % hexsize,
                  (b'error: path does not exist: /src/', b'/not-there\n'),
                  bup(b'ftp', input=jl(b'get src/latest/not-there dest')).out)
 

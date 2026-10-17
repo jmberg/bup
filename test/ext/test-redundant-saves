@@ -13,6 +13,13 @@
 
 set -o pipefail
 
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    # The indexed directory's metadata changes after "bup index -m"
+    # for sha256 repositories, which bup index does not yet support.
+    echo "skipping test-redundant-saves: bup index is not yet sha256-aware" >&2
+    exit 0
+fi
+
 WVSTART 'all'
 
 top="$(pwd)"

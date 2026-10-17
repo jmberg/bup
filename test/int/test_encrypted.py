@@ -94,7 +94,7 @@ def test_encrypted_container(tmp_path):
 
 # pylint: disable-next=redefined-outer-name
 def test_encrypted_repo_roundtrip(enc_cfg):
-    repo = EncryptedRepo(enc_cfg, create=True)
+    repo = EncryptedRepo(enc_cfg, create={})
     content = b'hello encrypted world\n' * 10
     blob = repo.write_data(content)
     repo.finish_writing()
@@ -114,7 +114,7 @@ def test_encrypted_repo_roundtrip(enc_cfg):
 
 # pylint: disable-next=redefined-outer-name
 def test_encrypted_repo_deletes_ref(enc_cfg):
-    repo = EncryptedRepo(enc_cfg, create=True)
+    repo = EncryptedRepo(enc_cfg, create={})
     blob = repo.write_data(b'x')
     repo.finish_writing()
     repo.update_ref(b'refs/heads/gone', blob, None)

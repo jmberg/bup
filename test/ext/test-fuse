@@ -68,6 +68,13 @@ WVPASS echo content > src/pre-epoch
 WVPASS chmod 644 src/pre-epoch
 WVPASS touch -t 196907202018 src/pre-epoch
 WVPASS bup index src
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    WVSKIP "need sha256 capable bup index" >&2
+    WVPASS cd "$top"
+    WVPASS rm -rf "$tmpdir"
+    exit 0
+fi
+
 WVPASS bup save -n src -d "$savestamp1" --strip src
 
 WVSTART "basics"

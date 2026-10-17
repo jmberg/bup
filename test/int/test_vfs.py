@@ -182,7 +182,8 @@ def test_misc(tmpdir):
         wvpasseq(42, vfs.item_size(repo, fake_item))
 
         _, fakelink_item = vfs.resolve(repo, b'/test/latest', follow=False)[-1]
-        wvpasseq(len(b'.commit-') + 40, vfs.item_size(repo, fakelink_item))
+        wvpasseq(len(b'.commit-') + 2 * repo.hashsize,
+                 vfs.item_size(repo, fakelink_item))
 
         run_augment_item_meta_tests(repo,
                                     b'/test/latest/file', 7,
@@ -327,6 +328,8 @@ def test_contents_with_mismatched_bupm_git_ordering(tmpdir):
         name, item = next(((n, i) for n, i in contents if n == b'foo.'))
         wvpass(S_ISREG(item.meta.mode))
 
+@pytest.mark.skipif(os.environb.get(b'BUP_TEST_SHA256', b'') == b'1',
+                    reason='need sha256 index')
 def test_duplicate_save_dates(tmpdir):
     bup_dir = tmpdir + b'/bup'
     environ[b'GIT_DIR'] = bup_dir

@@ -10,11 +10,16 @@ D="$tmpdir/data"
 
 bup() { "$top/bup" "$@"; }
 
+WVPASS mkdir "$D"
+WVPASS bup init
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    # Saving after a file indexed with -ux has been removed fails for
+    # sha256 repositories, since bup index does not yet support them.
+    echo "skipping remove file section: bup index is not yet sha256-aware" >&2
+else
 WVSTART "remove file"
 # Fixed in commit 8585613c1f45f3e20feec00b24fc7e3a948fa23e ("Store
 # metadata in the index....")
-WVPASS mkdir "$D"
-WVPASS bup init
 WVPASS echo "content" > "$D"/foo
 WVPASS echo "content" > "$D"/bar
 WVPASS bup tick
@@ -39,10 +44,14 @@ WVPASS bup save -n save-fail-missing "$D"
 # now foo is gone:
 WVPASSEQ "$(bup ls -A save-fail-missing/latest/$TOP/$D/)" "bar
 baz"
+fi
 
 
 # TODO: Test for racecondition between reading a file and reading its metadata?
 
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    echo "skipping remove dir section: bup index is not yet sha256-aware" >&2
+else
 WVSTART "remove dir"
 WVPASS rm -r "$D"
 WVPASS mkdir "$D"
@@ -73,6 +82,7 @@ WVPASS bup save -n save-fail-missing "$D"
 # foo is now gone
 WVPASSEQ "$(bup ls -AF save-fail-missing/latest/$TOP/$D/)" "bar/
 baz/"
+fi
 
 WVPASS cd "$top"
 WVPASS rm -rf "$tmpdir"

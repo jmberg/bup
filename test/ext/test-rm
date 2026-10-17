@@ -41,6 +41,15 @@ wv-match-rx "$observed" \
 >f\+\+\+\+\+\+\+\+\+[ ]+packed-refs)?$'
 
 
+# A second save into a populated repo consults the index, which is not
+# yet sha256-aware.
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    echo "skipping rest of test-rm: bup index is not yet sha256-aware" >&2
+    WVPASS cd "$top"
+    WVPASS rm -rf "$tmpdir"
+    exit 0
+fi
+
 WVSTART "rm /foo (one of many)"
 WVPASS rm -rf bup
 WVPASS mv bup-baseline bup

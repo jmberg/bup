@@ -33,6 +33,9 @@ class RepoProtocol:
     # Subclassing just indicates intent.
     # Currently, the vfs relies on id(repo) for caching paths.
 
+    # Size in bytes of the binary oids in this repository (20 or 32)
+    hashsize: int
+
     @notimplemented
     def is_remote(self):
         """Return true if this is a "remote" repository."""
@@ -129,7 +132,7 @@ class RepoProtocol:
         if head:
             return head
 
-        if len(committish) == 40:
+        if len(committish) == 2 * self.hashsize:
             try:
                 oid = unhexlify(committish)
             except TypeError:

@@ -32,7 +32,7 @@ class ConfigRepo(RepoProtocol):
         return git.git_config_get(self.cfg_file, name, opttype=opttype)
 
 
-def _make_config_repo(url, create=False, **kwargs):
+def _make_config_repo(url, create=None, **kwargs):
     for arg, val in kwargs.items():
         if val is not None:
             raise Exception(f'{arg} is not supported for config:// repositories')
@@ -97,8 +97,9 @@ def main_repo_location(remote, die: Callable[[str], NoReturn]):
 
 def repo_for_url(url, **kwargs):
     if url.scheme == b'file':
-        if kwargs.pop('create', None):
-            LocalRepo.create(url.path)
+        create_opts = kwargs.pop('create', None)
+        if create_opts is not None:
+            LocalRepo.create(url.path, **create_opts)
         return LocalRepo(repo_dir=url.path, **kwargs)
     if url.scheme in (b'ssh', b'bup', b'bup-rev'):
         return RemoteRepo(url, **kwargs)

@@ -9,6 +9,7 @@ from bup import git, vfs
 from bup.config import ConfigError
 from bup.git import LocalPackStore, PackWriter
 from bup.helpers import stopped
+from bup.io import path_msg
 from bup.repo.base import _make_base, RepoProtocol
 
 
@@ -54,6 +55,10 @@ class LocalRepo(RepoProtocol):
                 self._deduplicate_writes = False
             else:
                 self._deduplicate_writes = True
+        objectformat = self.config_get(b'extensions.objectformat')
+        assert objectformat in {None, b'sha1', b'sha256'}, \
+            f'unsupported object format: {path_msg(objectformat)}'
+        self.hashsize = 32 if objectformat == b'sha256' else 20
         self.closed = False
 
     def __repr__(self):
@@ -73,10 +78,10 @@ class LocalRepo(RepoProtocol):
     def is_remote(self): return False
 
     @classmethod
-    def create(cls, repo_dir=None):
+    def create(cls, repo_dir=None, objectformat='sha1'):
         # FIXME: this is not ideal, we should somehow
         # be able to call the constructor instead?
-        git.init_repo(repo_dir)
+        git.init_repo(repo_dir, objectformat)
 
     def config_get(self, name, *, opttype=None):
         cfg = git.git_config_get(git.repo_config_file(self.repo_dir),
@@ -108,7 +113,8 @@ class LocalRepo(RepoProtocol):
         if not self._packwriter:
             store = LocalPackStore(repo_dir=self.repo_dir,
                                    on_pack_finish=self._on_pack_finish,
-                                   run_midx=self.run_midx)
+                                   run_midx=self.run_midx,
+                                   hashsize=self.hashsize)
             writer = PackWriter(store=store,
                                 compression_level=self._base.compression_level,
                                 max_pack_size=self._base.max_pack_size,
@@ -143,7 +149,8 @@ class LocalRepo(RepoProtocol):
 
     def send_index(self, name, conn, send_size):
         with git.open_idx(git.repo(b'objects/pack/%s' % name,
-                                   repo_dir=self.repo_dir)) as idx:
+                                   repo_dir=self.repo_dir),
+                          self.hashsize) as idx:
             send_size(len(idx.map))
             conn.write(idx.map)
 

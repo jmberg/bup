@@ -87,7 +87,7 @@ def main(argv):
     report(0, out)
 
     with LocalRepo() as repo, \
-         git.PackIdxList(repo.packdir(),
+         git.PackIdxList(repo.packdir(), repo.hashsize,
                          ignore_midx=opt.ignore_midx) as m:
 
         if opt.existing:

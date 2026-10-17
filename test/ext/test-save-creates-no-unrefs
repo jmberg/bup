@@ -16,6 +16,14 @@ WVPASS bup init
 WVPASS bup index "$tmpdir/src"
 WVPASS bup save -n src "$tmpdir/src"
 WVPASSEQ "$(git fsck --unreachable)" ""
+# A second save consults the index for objects already in the repo,
+# which is not yet sha256-aware.
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    echo "skipping rest of test-save-creates-no-unrefs: bup index is not yet sha256-aware" >&2
+    WVPASS cd "$top"
+    WVPASS rm -rf "$tmpdir"
+    exit 0
+fi
 WVPASS bup save -n src "$tmpdir/src"
 WVPASSEQ "$(git fsck --unreachable)" ""
 

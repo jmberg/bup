@@ -51,6 +51,13 @@ WVPASS bup split -n split < "$top/test/testfile1"
 WVPASS bup -d "$BUP_DIR2" get -s "$BUP_DIR" --append: split test
 WVPASS compare "$BUP_DIR" split "$BUP_DIR2" test
 
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    echo "skipping rest of test-rewrite: bup index is not yet sha256-aware" >&2
+    WVPASS cd "$top"
+    WVPASS rm -rf "$tmpdir"
+    exit 0
+fi
+
 WVSTART make multiple saves
 WVPASS bup index "$top/test/sampledata"
 WVPASS bup save -n save --strip "$top/test/sampledata"

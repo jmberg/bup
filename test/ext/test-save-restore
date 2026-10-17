@@ -12,6 +12,11 @@ export BUP_DIR="$tmpdir/bup"
 
 bup() { "$top/bup" "$@"; }
 
+if [ "$BUP_TEST_SHA256" = "1" ] ; then
+    WVSKIP 'no sha256 index support'
+    exit 0
+fi
+
 validate-local-and-remote-restore()
 {
     local src="$1" dest="$2" cmp_src="$3" cmp_dest="$4"

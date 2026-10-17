@@ -27,6 +27,7 @@ o,output=  output bloom filename (default: auto)
 d,dir=     input directory to look for idx files (default: auto)
 k,hashes=  number of hash functions to use (4 or 5) (default: auto)
 c,check=   check given *.idx or *.midx file against the bloom filter
+sha256     the idx files have sha256 objects (only with --dir)
 """
 
 
@@ -43,7 +44,7 @@ def ruin_bloom(bloomfilename):
     return EXIT_SUCCESS
 
 
-def check_bloom(path, bloomfilename, idx):
+def check_bloom(path, bloomfilename, idx, hashsize):
     rbloomfilename = git.repo_rel(bloomfilename)
     ridx = git.repo_rel(idx)
     try:
@@ -63,7 +64,7 @@ def check_bloom(path, bloomfilename, idx):
             idx = os.path.join(path, idx)
         log('bloom: bloom file: %s\n' % path_msg(rbloomfilename))
         log('bloom:   checking %s\n' % path_msg(ridx))
-        oids = git.open_object_idx(idx)
+        oids = git.open_object_idx(idx, hashsize)
         if not oids:
             note_error(f'bloom: ERROR: invalid index {path_msg(idx)}\n')
             return EXIT_FAILURE
@@ -77,7 +78,7 @@ def check_bloom(path, bloomfilename, idx):
 
 
 _first = None
-def do_bloom(path, outfilename, k, force):
+def do_bloom(path, outfilename, k, force, hashsize):
     global _first
     assert k in (None, 4, 5)
     b = None
@@ -96,7 +97,7 @@ def do_bloom(path, outfilename, k, force):
         rest_count = 0
         for i, name in enumerate(glob.glob(b'%s/*.idx' % path)):
             progress('bloom: counting: %d\r' % i)
-            with git.open_idx(name) as ix:
+            with git.open_idx(name, hashsize) as ix:
                 ixbase = os.path.basename(name)
                 if b is not None and (ixbase in b.idxnames):
                     rest.append(name)
@@ -152,7 +153,7 @@ def do_bloom(path, outfilename, k, force):
         count = 0
         icount = 0
         for name in add:
-            with git.open_idx(name) as ix:
+            with git.open_idx(name, hashsize) as ix:
                 qprogress('bloom: writing %.2f%% (%d/%d objects)\r'
                           % (icount*100.0/add_count, icount, add_count))
                 b.add_idx(ix)
@@ -184,16 +185,20 @@ def main(argv):
     output = argv_bytes(opt.output) if opt.output else None
     if opt.dir:
         path = argv_bytes(opt.dir)
+        hashsize = 32 if opt.sha256 else 20
     else:
+        if opt.sha256:
+            o.fatal('--sha256 is not valid with a repo')
         with LocalRepo() as repo:
             path = repo.packdir()
+            hashsize = repo.hashsize
     debug1('bloom: scanning %s\n' % path_msg(path))
     outfilename = output or os.path.join(path, b'bup.bloom')
     if opt.check:
-        rc = check_bloom(path, outfilename, opt.check)
+        rc = check_bloom(path, outfilename, opt.check, hashsize)
         if not rc and not saved_errors:
             log('All tests passed.\n')
         return rc
     if opt.ruin:
         return ruin_bloom(outfilename)
-    return do_bloom(path, outfilename, opt.k, opt.force)
+    return do_bloom(path, outfilename, opt.k, opt.force, hashsize)

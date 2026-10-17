@@ -23,7 +23,7 @@ def main(argv):
         o.fatal("no arguments expected")
 
     with LocalRepo() as repo, \
-         git.PackIdxList(repo.packdir(),
+         git.PackIdxList(repo.packdir(), repo.hashsize,
                          ignore_midx=opt.ignore_midx) as mi:
 
         def do_predict(ix, out):

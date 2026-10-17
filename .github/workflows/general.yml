@@ -49,6 +49,7 @@ jobs:
             dev/system-info
             make -j "$(($(nproc) + 1))" lint
             BUP_TEST_OTHER_BUP="$other_bup" make -j "$(($(nproc) + 1))" check
+            BUP_TEST_SHA256=1 make -j "$(($(nproc) + 1))" check
           EOF
   ubuntu-ssh:
     name: ubuntu 22 check (ssh)

@@ -509,7 +509,7 @@ class EncryptedRepo(ConfigRepo):
             assert self.readkey is not None, "at least one of 'readkey' or 'writekey' is required"
             self.writekey = self.readkey.pk
 
-        self.storage = get_storage(self, create=create)
+        self.storage = get_storage(self, create=create is not None)
 
         # don't need to access larger blobs for config
         self._blobsize = 1 << 15
@@ -546,6 +546,15 @@ class EncryptedRepo(ConfigRepo):
             bb = int(m.group(1))
         self._blobsize = 1 << (bb or hashsplit.BUP_BLOBBITS)
 
+        if create and create.get('objectformat', 'sha1') != 'sha1':
+            oformat = b'sha256'
+            self.config_write(b'extensions.objectformat', oformat)
+        else:
+            oformat = self.config_get(b'extensions.objectformat')
+        assert oformat in (None, b'sha1', b'sha256'), \
+            f'unsupported object format: {path_msg(oformat)}'
+        self.hashsize = 32 if oformat == b'sha256' else 20
+
     def _synchronize_idxes(self):
         if self.idxlist is not None:
             return
@@ -578,18 +587,18 @@ class EncryptedRepo(ConfigRepo):
             os.unlink(os.path.join(self.cachedir, local_idx))
 
         if changes:
-            git.auto_midx(self.cachedir)
+            git.auto_midx(self.cachedir, self.hashsize)
 
-        self.idxlist = git.PackIdxList(self.cachedir)
+        self.idxlist = git.PackIdxList(self.cachedir, self.hashsize)
 
     def _create_new_pack(self, kind):
-        fakesha = libnacl.randombytes(20)
+        fakesha = libnacl.randombytes(self.hashsize)
         hexsha = hexlify(fakesha)
         return fakesha, EncryptedContainer(self, self.storage,
                                            b'pack-%s.encpack' % hexsha, 'w',
                                            kind, self.compression,
                                            key=self.writekey,
-                                           idxwriter=git.PackIdxV2Writer(),
+                                           idxwriter=git.PackIdxV2Writer(self.hashsize),
                                            compressor=self.compressor)
 
     def _ensure_data_writer(self):
@@ -865,7 +874,7 @@ class EncryptedRepo(ConfigRepo):
         """
         self._synchronize_idxes()
 
-        if len(ref) == 40 and all(x in b'0123456789abcdefABCDEF' for x in ref):
+        if len(ref) == 2 * self.hashsize and all(x in b'0123456789abcdefABCDEF' for x in ref):
             oid = unhexlify(ref)
         else:
             oid = self.read_ref(ref)
@@ -900,7 +909,7 @@ class EncryptedRepo(ConfigRepo):
                            want_meta=want_meta, follow=follow)
 
     def _data_write(self, objtype, content):
-        sha = git.calc_hash(git._typermap[objtype], content)
+        sha = git.calc_hash(git._typermap[objtype], content, self.hashsize)
         if not self.exists(sha):
             self._ensure_data_writer()
             self.data_writer.write(objtype, sha, content)
@@ -908,7 +917,7 @@ class EncryptedRepo(ConfigRepo):
         return sha
 
     def _meta_write(self, objtype, content):
-        sha = git.calc_hash(git._typermap[objtype], content)
+        sha = git.calc_hash(git._typermap[objtype], content, self.hashsize)
         if not self.exists(sha):
             self._ensure_meta_writer()
             self.meta_writer.write(objtype, sha, content)
@@ -968,7 +977,7 @@ class EncryptedRepo(ConfigRepo):
 
         # recreate bloom/midx if needed
         self.idxlist.close_temps()
-        git.auto_midx(self.cachedir)
+        git.auto_midx(self.cachedir, self.hashsize)
         self.idxlist.refresh()
 
         # and clear all the object lists in memory,
@@ -995,7 +1004,7 @@ class EncryptedRepo(ConfigRepo):
             self.data_writer = None
             have_written = True
         if run_midx and have_written:
-            git.auto_midx(self.cachedir)
+            git.auto_midx(self.cachedir, self.hashsize)
 
     def abort_writing(self):
         if self.meta_writer != self.data_writer and self.meta_writer is not None:

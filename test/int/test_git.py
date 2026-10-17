@@ -21,9 +21,16 @@ bup_exe = path.exe()
 def exc(*cmd): return buptest.exc(cmd)
 def exo(*cmd): return buptest.exo(cmd).out
 
+hashsize = 32 if os.environb.get(b'BUP_TEST_SHA256', b'') == b'1' else 20
+
+
+def init_repo(bupdir):
+    git.init_repo(bupdir, objectformat='sha256' if hashsize == 32 else 'sha1')
+
 
 def local_writer(repo_dir):
-    return git.PackWriter(store=git.LocalPackStore(repo_dir=repo_dir))
+    return git.PackWriter(store=git.LocalPackStore(repo_dir=repo_dir,
+                                                   hashsize=hashsize))
 
 
 def test_git_version_detection():
@@ -115,7 +122,7 @@ def test_encode():
 
 def test_packs(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     git.verbose = 1
 
     with local_writer(bupdir) as w:
@@ -134,29 +141,42 @@ def test_packs(tmpdir):
     WVPASS(os.path.exists(nameprefix + b'.pack'))
     WVPASS(os.path.exists(nameprefix + b'.idx'))
 
-    with git.open_idx(nameprefix + b'.idx') as r:
+    with git.open_idx(nameprefix + b'.idx', hashsize) as r:
         print(repr(r.fanout))
 
         for i in range(nobj):
             WVPASS(r.find_offset(hashes[i]) > 0)
         WVPASS(r.exists(hashes[99]))
-        WVFAIL(r.exists(b'\0'*20))
+        WVFAIL(r.exists(b'\0' * hashsize))
 
         pi = iter(r)
         for h in sorted(hashes):
             WVPASSEQ(hexlify(next(pi)), hexlify(h))
 
-        WVFAIL(r.find_offset(b'\0'*20))
+        WVFAIL(r.find_offset(b'\0' * hashsize))
 
-    with git.PackIdxList(bupdir + b'/objects/pack') as r:
+    with git.PackIdxList(bupdir + b'/objects/pack', hashsize) as r:
         WVPASS(r.exists(hashes[5]))
         WVPASS(r.exists(hashes[6]))
-        WVFAIL(r.exists(b'\0'*20))
+        WVFAIL(r.exists(b'\0' * hashsize))
+
+
+def test_git_sha256_version_detection():
+    for expected, ver in \
+        ((False, b'git version 1.9.0'),
+         (False, b'git version 2.28.0'),
+         (True, b'git version 2.29.0'),
+         (True, b'git version 2.29.0.windows.1'),
+         (True, b'git version 2.34.1'),
+         (True, b'git version 3.0.0')):
+        assert expected == git.git_sha256_supported(ver_str=ver)
+    with pytest.raises(git.GitError):
+        git.git_sha256_supported(ver_str=b'huh?')
 
 
 def test_pack_name_lookup(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     git.verbose = 1
     packdir = git.repo(b'objects/pack', repo_dir=bupdir)
 
@@ -170,7 +190,7 @@ def test_pack_name_lookup(tmpdir):
             log('\n')
             idxnames.append(os.path.basename(w.close() + b'.idx'))
 
-    with git.PackIdxList(packdir) as r:
+    with git.PackIdxList(packdir, hashsize) as r:
         WVPASSEQ(len(r.packs), 2)
         for e,idxname in enumerate(idxnames):
             for i in range(e*2, (e+1)*2):
@@ -179,22 +199,22 @@ def test_pack_name_lookup(tmpdir):
 
 def test_long_index(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
-    git.init_repo(bupdir)
-    idx = git.PackIdxV2Writer()
-    obj_bin = struct.pack('!IIIII',
+    init_repo(bupdir)
+    idx = git.PackIdxV2Writer(hashsize)
+    obj_bin = struct.pack(f'!IIIII{hashsize-20}x',
             0x00112233, 0x44556677, 0x88990011, 0x22334455, 0x66778899)
-    obj2_bin = struct.pack('!IIIII',
+    obj2_bin = struct.pack(f'!IIIII{hashsize-20}x',
             0x11223344, 0x55667788, 0x99001122, 0x33445566, 0x77889900)
-    obj3_bin = struct.pack('!IIIII',
+    obj3_bin = struct.pack(f'!IIIII{hashsize-20}x',
             0x22334455, 0x66778899, 0x00112233, 0x44556677, 0x88990011)
-    pack_bin = struct.pack('!IIIII',
+    pack_bin = struct.pack(f'!IIIII{hashsize-20}x',
             0x99887766, 0x55443322, 0x11009988, 0x77665544, 0x33221100)
     idx.add(obj_bin, 1, 0xfffffffff)
     idx.add(obj2_bin, 2, 0xffffffffff)
     idx.add(obj3_bin, 3, 0xff)
     name = tmpdir + b'/tmp.idx'
     idx.write(name, pack_bin)
-    with git.PackIdxV2(name, open(name, 'rb')) as i:
+    with git.PackIdxV2(name, open(name, 'rb'), hashsize=hashsize) as i:
         WVPASSEQ(i.find_offset(obj_bin), 0xfffffffff)
         WVPASSEQ(i.find_offset(obj2_bin), 0xffffffffff)
         WVPASSEQ(i.find_offset(obj3_bin), 0xff)
@@ -207,7 +227,7 @@ def check_establish_default_repo_variant(tmpdir, f, is_establish):
     orig_cwd = os.getcwd()
     try:
         os.chdir(tmpdir)
-        git.init_repo(bupdir)
+        init_repo(bupdir)
         if is_establish:
             WVPASSEQ(True, f(valid))
             WVPASSEQ(True, f(valid, must_exist=True))
@@ -254,12 +274,12 @@ def test_check_repo_or_die(tmpdir):
 
 def test_new_commit(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     git.verbose = 1
 
     with local_writer(bupdir) as w:
-        tree = os.urandom(20)
-        parent = os.urandom(20)
+        tree = os.urandom(hashsize)
+        parent = os.urandom(hashsize)
         author_name = b'Author'
         author_mail = b'author@somewhere'
         adate_sec = 1439657836
@@ -319,7 +339,7 @@ def test_list_refs(tmpdir):
         f.write(b'something\n')
     with open(src + b'/2', 'wb+') as f:
         f.write(b'something else\n')
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     list_refs = partial(git.list_refs, repo_dir=bupdir)
     emptyset = frozenset()
     WVPASSEQ(frozenset(list_refs()), emptyset)
@@ -369,7 +389,7 @@ def test_cat_pipe(tmpdir):
         f.write(b'something\n')
     with open(src + b'/2', 'wb+') as f:
         f.write(b'something else\n')
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     exc(bup_exe, b'index', src)
     oidx = exo(bup_exe, b'save', b'-cn', b'src', b'--strip',
                src).strip()
@@ -391,11 +411,12 @@ def test_cat_pipe(tmpdir):
 
 
 def _create_idx(d, i):
-    idx = git.PackIdxV2Writer()
+    idx = git.PackIdxV2Writer(hashsize)
     # add 255 vaguely reasonable entries
     for s in range(255):
-        idx.add(struct.pack('18xBB', i, s), s, 100 * s)
-    packbin = struct.pack('B19x', i)
+        oid = struct.pack(f'B{hashsize-10}xBxxxxxxBB', 0xff, 0xff, i, s)
+        idx.add(oid, s, 100 * s)
+    packbin = struct.pack(f'B{hashsize-1}x', i)
     packname = os.path.join(d, b'pack-%s.idx' % hexlify(packbin))
     idx.write(packname, packbin)
 
@@ -413,14 +434,15 @@ def test_midx_close(tmpdir):
                 pass
 
     environ[b'BUP_DIR'] = bupdir = tmpdir + b'/bup'
-    git.init_repo(bupdir)
+    init_repo(bupdir)
     # create a few dummy idxes
     for i in range(10):
         _create_idx(tmpdir, i)
-    git.auto_midx(tmpdir)
-    with git.PackIdxList(tmpdir) as l:
-    # this doesn't exist (yet)
-        WVPASSEQ(None, l.exists(struct.pack('18xBB', 10, 0)))
+    git.auto_midx(tmpdir, hashsize)
+    with git.PackIdxList(tmpdir, hashsize) as l:
+        # this doesn't exist (yet)
+        oid10 = struct.pack(f'B{hashsize-10}xBxxxxxxBB', 0xff, 0xff, 10, 0)
+        WVPASSEQ(None, l.exists(oid10))
         for i in range(10, 15):
             _create_idx(tmpdir, i)
         # delete the midx ...
@@ -429,9 +451,9 @@ def test_midx_close(tmpdir):
             if fn.endswith(b'.midx'):
                 os.unlink(os.path.join(tmpdir, fn))
         # and make a new one
-        git.auto_midx(tmpdir)
+        git.auto_midx(tmpdir, hashsize)
         # check it still doesn't exist - we haven't refreshed
-        WVPASSEQ(None, l.exists(struct.pack('18xBB', 10, 0)))
+        WVPASSEQ(None, l.exists(oid10))
         # check that we still have the midx open, this really
         # just checks more for the kernel API ('deleted' string)
         for fn in openfiles():
@@ -441,7 +463,7 @@ def test_midx_close(tmpdir):
         # refresh the PackIdxList
         l.refresh()
         # and check that an object in pack 10 exists now
-        WVPASSEQ(OBJECT_EXISTS, l.exists(struct.pack('18xBB', 10, 0)))
+        WVPASSEQ(OBJECT_EXISTS, l.exists(oid10))
         for fn in openfiles():
             if not b'midx-' in fn:
                 continue
@@ -454,8 +476,8 @@ def test_idx_exists_crc(tmpdir):
     git.init_repo(bupdir)
     for i in range(10):
         _create_idx(tmpdir, i)
-    oid = struct.pack('18xBB', 1, 7)
-    pack = b'pack-%s.idx' % hexlify(struct.pack('B19x', 1))
+    oid = struct.pack(f'B{hashsize-10}xBxxxxxxBB', 0xff, 0xff, 1, 7)
+    pack = b'pack-%s.idx' % hexlify(struct.pack(f'B{hashsize-1}x', 1))
 
     def check(l):
         loc = l.exists(oid, want_crc=True)
@@ -465,13 +487,15 @@ def test_idx_exists_crc(tmpdir):
         WVPASSEQ(loc.pack, pack)
         WVPASSEQ(loc.offset, 700)
         WVPASSEQ(loc.crc, 7)
-        WVPASSEQ(None, l.exists(struct.pack('18xBB', 1, 255), want_crc=True))
+        WVPASSEQ(None, l.exists(struct.pack(f'B{hashsize-10}xBxxxxxxBB',
+                                            0xff, 0xff, 1, 255),
+                                want_crc=True))
 
-    with git.PackIdxList(tmpdir) as l:
+    with git.PackIdxList(tmpdir, hashsize) as l:
         check(l)
-    git.auto_midx(tmpdir)
+    git.auto_midx(tmpdir, hashsize)
     WVPASS(any(fn.endswith(b'.midx') for fn in os.listdir(tmpdir)))
-    with git.PackIdxList(tmpdir) as l:
+    with git.PackIdxList(tmpdir, hashsize) as l:
         check(l)
 
     parse = git.parse_git_int
@@ -534,7 +558,7 @@ def test_config(tmpdir):
 
     # Make sure get_config respects the repo()
     git_dir = tmpdir + b'/repo'
-    git.init_repo(git_dir)
+    init_repo(git_dir)
     git.check_repo_or_die(git_dir)
     exc(b'git', b'--git-dir', git_dir, b'config', b'bup.foo', b'yep')
     assert b'yep' == git.git_config_get(git.repo_config_file(git_dir), b'bup.foo')

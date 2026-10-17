@@ -10,7 +10,7 @@ from bup import options
 from bup.compat import argv_bytes
 from bup.helpers \
     import (EXIT_FAILURE, EXIT_FALSE, EXIT_TRUE, EXIT_SUCCESS,
-            Sha1, chunkyreader, istty2, log, progress, temp_dir)
+            Sha1, Sha256, chunkyreader, istty2, log, progress, temp_dir)
 from bup.io import byte_stream, path_msg
 from bup.repo import LocalRepo
 
@@ -21,9 +21,10 @@ def debug(s):
     if opt.verbose > 1:
         log(s)
 
-def report_stray_pack_related_files(repo, pack_paths):
-    # For now only look for stray files we might have created (SHA1-related)
-    pack_rx = re.compile(br'(?:^|/)pack-([a-f0-9]{40})\.pack$')
+def report_stray_pack_related_files(repo, hashsize, pack_paths):
+    # For now only look for stray files we might have created (SHA1/256-related)
+    hexsize = 2 * hashsize
+    pack_rx = re.compile(br'(?:^|/)pack-([a-f0-9]{%d})\.pack$' % hexsize)
     pack_oidxs = set()
     for path in pack_paths:
         m = pack_rx.search(path)
@@ -31,8 +32,8 @@ def report_stray_pack_related_files(repo, pack_paths):
             continue
         pack_oidxs.add(m.group(1))
 
-    # Pack-related is currently pack-40HEX or pack-40HEX.*
-    pack_related_rx = re.compile(br'(?:^|/)pack-([a-f0-9]{40})(?:\..*)?$')
+    # Pack-related is currently pack-(40HEX|64HEX) or pack-(40HEX|64HEX).*
+    pack_related_rx = re.compile(br'(?:^|/)pack-([a-f0-9]{%d})(?:\..*)?$' % hexsize)
     for path in glob.glob(repo + b'/objects/pack/pack-*'):
         m = pack_related_rx.search(path)
         if not m or m.group(1) in pack_oidxs:
@@ -198,33 +199,40 @@ def par2_repair(base):
     return par2(b'repair', [b'--', base], verb_floor=2)
 
 
-def trailing_and_actual_checksum(path):
+def trailing_and_actual_checksum(path, hashsize):
     try:
         f = open(path, 'rb')
     except FileNotFoundError:
         return None, None
     with f:
-        f.seek(-20, SEEK_END)
-        trailing = f.read(20)
-        assert len(trailing) == 20
+        f.seek(-hashsize, SEEK_END)
+        trailing = f.read(hashsize)
+        assert len(trailing) == hashsize
         f.seek(0)
-        actual = Sha1()
-        for b in chunkyreader(f, os.fstat(f.fileno()).st_size - 20):
+        if hashsize == 32:
+            actual = Sha256()
+        else:
+            actual = Sha1()
+        for b in chunkyreader(f, os.fstat(f.fileno()).st_size - hashsize):
             actual.update(b)
         return trailing, actual.digest()
 
 
-def git_verify(stem, *, quick=False):
+def git_verify(stem, hashsize, *, quick=False):
     if not quick:
+        cmd = [b'git', b'verify-pack']
+        if hashsize == 32:
+            cmd += ['--object-format', 'sha256']
+        cmd += [b'--', stem]
         # assumes / isn't a git repo
-        rc = run([b'git', b'verify-pack', b'--', stem], cwd=b'/').returncode
+        rc = run(cmd, cwd=b'/').returncode
         if rc == 0:
             return True
         log(f'error: git verify-pack failed ({rc}) {path_msg(stem)}\n')
         return False
     result = True
     for path in (stem + b'.idx', stem + b'.pack'):
-        exp, act = trailing_and_actual_checksum(path)
+        exp, act = trailing_and_actual_checksum(path, hashsize)
         if act is None:
             log(f'error: missing {path_msg(path)}\n')
             result = False
@@ -234,8 +242,8 @@ def git_verify(stem, *, quick=False):
     return result
 
 
-def attempt_repair(stem, base, par2_exists, out, *, verbose=False):
-    if git_verify(stem, quick=opt.quick):
+def attempt_repair(stem, base, par2_exists, out, hashsize, *, verbose=False):
+    if git_verify(stem, hashsize, quick=opt.quick):
         if opt.verbose: out.write(base + b' ok\n')
         return EXIT_SUCCESS
     if not par2_exists:
@@ -249,7 +257,7 @@ def attempt_repair(stem, base, par2_exists, out, *, verbose=False):
         return EXIT_FAILURE
     log(f'{path_msg(base)} par2 repair: succeeded, checking .idx\n')
     try:
-        exp, act = trailing_and_actual_checksum(stem + b'.idx')
+        exp, act = trailing_and_actual_checksum(stem + b'.idx', hashsize)
         idx_ok = exp == act
         if not idx_ok:
             os.unlink(stem + b'.idx')
@@ -271,7 +279,7 @@ def attempt_repair(stem, base, par2_exists, out, *, verbose=False):
     return EXIT_FALSE
 
 
-def do_pack(mode, stem, par2_exists, out):
+def do_pack(mode, stem, par2_exists, out, hashsize):
     assert mode in ('verify', 'generate', 'repair')
     # Note that par2 validation only tells us that the pack file
     # hasn't changed since the par2 generation.
@@ -281,9 +289,10 @@ def do_pack(mode, stem, par2_exists, out):
     # backward-compatibility.
     base = os.path.basename(stem)
     if mode == 'repair':
-        return attempt_repair(stem, base, par2_exists, out, verbose=opt.verbose)
+        return attempt_repair(stem, base, par2_exists, out, hashsize,
+                              verbose=opt.verbose)
     if mode == 'verify':
-        if not git_verify(stem, quick=opt.quick) \
+        if not git_verify(stem, hashsize, quick=opt.quick) \
            or (par2_ok and par2_exists and not par2_verify(stem)):
             if opt.verbose: out.write(base + b' failed\n')
             return EXIT_FAILURE
@@ -315,6 +324,7 @@ quick       just check pack sha1sum, don't use git verify-pack
 j,jobs=     run 'n' jobs in parallel
 par2-ok     immediately return 0 if par2 is ok, 1 if not
 disable-par2  ignore par2 even if it is available
+sha256      pack files are sha256 format (only for packfile args)
 """
 
 
@@ -355,11 +365,16 @@ def main(argv):
             if not stem.endswith(b'.pack'):
                 o.fatal(f'packfile argument {path_msg(stem)} must end with .pack')
         pack_stems = [x[:-5] for x in pack_stems]
+        hashsize = 32 if opt.sha256 else 20
     else:
+        if opt.sha256:
+            o.fatal('--sha256 is not valid with a repo')
         debug('fsck: No filenames given: checking all packs.\n')
         with LocalRepo() as repo:
             pack_files = glob.glob(os.path.join(repo.packdir(), b'*.pack'))
-            report_stray_pack_related_files(repo.repo_dir, pack_files)
+            report_stray_pack_related_files(repo.repo_dir, repo.hashsize,
+                                            pack_files)
+            hashsize = repo.hashsize
         pack_stems = [x[:-5] for x in pack_files]
 
     sys.stdout.flush()
@@ -383,7 +398,8 @@ def main(argv):
 
         if not opt.jobs:
             assert par2_status is not False
-            code = merge_exits(code, do_pack(mode, stem, par2_status, out))
+            code = merge_exits(code, do_pack(mode, stem, par2_status, out,
+                                             hashsize))
             count += 1
         else:
             while len(outstanding) >= opt.jobs:
@@ -399,7 +415,7 @@ def main(argv):
             else: # child
                 try:
                     assert par2_status is not False
-                    sys.exit(do_pack(mode, stem, par2_status, out))
+                    sys.exit(do_pack(mode, stem, par2_status, out, hashsize))
                 # pylint: disable-next=broad-exception-caught
                 except Exception as e:
                     log(f'exception: {e}\n')

@@ -326,9 +326,10 @@ def _rewrite_link(path, item_mode, srcrepo, dstrepo, stack, repairs):
         assert change is None, change
     stack.append_to_current(name, item_mode, git_mode, oid, item.meta)
 
-def _remember_file_rewrite(from_oid, to_oid, chunked, size, wdbc, mapping):
-    assert len(from_oid) == 20, from_oid
-    assert len(to_oid) == 20, to_oid
+def _remember_file_rewrite(from_oid, to_oid, chunked, size, wdbc, mapping,
+                           from_hashsize, to_hashsize):
+    assert len(from_oid) == from_hashsize, from_oid
+    assert len(to_oid) == to_hashsize, to_oid
     wdbc.execute(f'select src, dst, chunked, size from {mapping} where src = ?',
                  (from_oid,))
     row = wdbc.fetchone()
@@ -436,8 +437,8 @@ def _rewrite_save_item(path, replacement_dir, srcrepo, dstrepo, split_cfg,
         if len(stack) == 1:
             return # We're at the top level -- keep the current root dir
         newtree = stack.pop()
-        assert len(item.oid) == 20, item.oid
-        assert len(newtree) == 20, newtree
+        assert len(item.oid) == srcrepo.hashsize, item.oid
+        assert len(newtree) == dstrepo.hashsize, newtree
         # Don't remember any trees when we're making destructive
         # repairs because walk will skip the contents for a tree that
         # has missing objects when it encounters it a second time (for
@@ -503,7 +504,8 @@ def _rewrite_save_item(path, replacement_dir, srcrepo, dstrepo, split_cfg,
 
     # Isn't and must not be dir or replacement (since we must not
     # remember those).
-    _remember_file_rewrite(item.oid, oid, chunked, item_size, wdbc, mapping)
+    _remember_file_rewrite(item.oid, oid, chunked, item_size, wdbc, mapping,
+                           srcrepo.hashsize, dstrepo.hashsize)
     git_mode = _maybe_exec_mode(git_mode, item.meta)
     stack.append_to_current(name, item_mode, git_mode, oid, item.meta)
 
@@ -553,7 +555,7 @@ class Rewriter:
         # Strict for now
         assert isinstance(parent, (bytes, type(None))), parent
         if parent:
-            assert len(parent) == 20, parent
+            assert len(parent) == dstrepo.hashsize, parent
         assert all(isinstance(x, Pattern) for x in excludes)
         assert isinstance(repair_info, RepairInfo), repair_info
         assert len(save_path) == 3, (len(save_path), save_path)

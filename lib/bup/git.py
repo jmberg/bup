@@ -23,7 +23,8 @@ from bup.config import ConfigError
 from bup.helpers import (EXIT_FAILURE,
                          OBJECT_EXISTS,
                          ObjectLocation,
-                         Sha1, add_error, chunkyreader, debug1, debug2,
+                         Sha1, Sha256,
+                         add_error, chunkyreader, debug1, debug2,
                          finalized,
                          fsync,
                          log,
@@ -210,9 +211,10 @@ def repo_rel(path):
     return shorten_hash(path)
 
 
-def auto_midx(objdir):
+def auto_midx(objdir, hashsize):
     with suspend_progress():
-        args = [bup.path.exe(), b'midx', b'--auto', b'--dir', objdir]
+        sha256_args = [b'--sha256'] if hashsize == 32 else []
+        args = [bup.path.exe(), b'midx', b'--auto', b'--dir', objdir] + sha256_args
         try:
             rv = subprocess.call(args, stdout=DEVNULL)
         except OSError as e:
@@ -222,7 +224,7 @@ def auto_midx(objdir):
         if rv:
             add_error('%r: returned %d' % (args, rv))
 
-        args = [bup.path.exe(), b'bloom', b'--dir', objdir]
+        args = [bup.path.exe(), b'bloom', b'--dir', objdir] + sha256_args
         try:
             rv = subprocess.call(args, stdout=DEVNULL)
         except OSError as e:
@@ -275,9 +277,23 @@ def start_sha1(kind, size):
     assert kind in (b'tree', b'commit', b'blob', b'tag'), kind
     return Sha1(b'%s %d\0' % (kind, size))
 
-def calc_hash(type, content):
+def start_sha256(kind, size):
+    assert kind in (b'tree', b'commit', b'blob', b'tag'), kind
+    return Sha256(b'%s %d\0' % (kind, size))
+
+def start_hash(kind, size, hashsize):
+    if hashsize == 32:
+        return start_sha256(kind, size)
+    assert hashsize == 20
+    return start_sha1(kind, size)
+
+def calc_hash(type, content, hashsize):
     """Calculate some content's hash in the Git fashion."""
-    sum = start_sha1(type, len(content))
+    if hashsize == 32:
+        sum = start_sha256(type, len(content))
+    else:
+        assert hashsize == 20
+        sum = start_sha1(type, len(content))
     sum.update(content)
     return sum.digest()
 
@@ -298,14 +314,15 @@ def tree_encode(shalist):
         assert(mode)
         assert(mode+0 == mode)
         assert(name)
-        assert(len(bin) == 20)
+        # accept both, we don't know what the repo is
+        assert(len(bin) in (20, 32))
         s = b'%o %s\0%s' % (mode,name,bin)
         assert not s.startswith(b'0'), 'git trees do not allow 0-padded octal'
         l.append(s)
     return b''.join(l)
 
 
-def tree_iter(tree_data):
+def tree_iter(tree_data, hashsize):
     """Yield (mode, name, hash) for each entry in the git tree_data."""
     ofs = 0
     while ofs < len(tree_data):
@@ -314,11 +331,11 @@ def tree_iter(tree_data):
         mode_end = tree_data.find(b' ', ofs)
         name = tree_data[mode_end+1:z]
         mode = tree_data[ofs:mode_end]
-        ofs = z + 21
-        yield int(mode, 8), name, tree_data[z+1:z+1+20]
+        ofs = z + hashsize + 1
+        yield int(mode, 8), name, tree_data[z+1:z+1+hashsize]
 
 
-def tree_entries(tree_data):
+def tree_entries(tree_data, hashsize):
     """Return a (mode, name, hash) list for the entries in the git
     tree_data.
 
@@ -331,13 +348,13 @@ def tree_entries(tree_data):
         mode_end = tree_data.find(b' ', ofs)
         name = tree_data[mode_end+1:z]
         mode = tree_data[ofs:mode_end]
-        ent = int(mode, 8), name, tree_data[z+1:z+1+20]
+        ent = int(mode, 8), name, tree_data[z+1:z+1+hashsize]
         result.append(ent)
-        ofs = z + 21
+        ofs = z + hashsize + 1
     return result
 
 
-def find_tree_entry(named, tree_data):
+def find_tree_entry(named, tree_data, hashsize):
     """Return mode, named, hash for the named entry in the git
     tree_data if it exists, or None.
 
@@ -355,16 +372,16 @@ def find_tree_entry(named, tree_data):
         # pylint: disable-next=consider-using-in
         if name == named or name == dirname:
             mode = tree_data[ofs:mode_end]
-            ent = int(mode, 8), name, tree_data[z+1:z+1+20]
+            ent = int(mode, 8), name, tree_data[z+1:z+1+hashsize]
             return ent
         if name > dirname:
             break
-        ofs = z + 21
+        ofs = z + hashsize + 1
     return None
 
 
-def last_tree_entry(tree_data):
-    oid_start = len(tree_data) - 20
+def last_tree_entry(tree_data, hashsize):
+    oid_start = len(tree_data) - hashsize
     oid = tree_data[oid_start:]
     last_ent = 0
     z = 0
@@ -372,7 +389,7 @@ def last_tree_entry(tree_data):
         z = tree_data.find(b'\0', z)
         if z == -1:
             break
-        z += 21
+        z += hashsize + 1
         if z < len(tree_data):
             last_ent = z
     mode_end = tree_data.find(b' ', last_ent)
@@ -460,7 +477,7 @@ class PackIdx:
     def _idx_from_hash(self, hash):
         global _total_searches, _total_steps
         _total_searches += 1
-        assert(len(hash) == 20)
+        assert len(hash) == self.hashsize
         b1 = hash[0]
         start = self.fanout[b1-1] # range -1..254
         end = self.fanout[b1] # range 0..255
@@ -544,7 +561,7 @@ class PackIdxV1(PackIdx):
 
 class PackIdxV2(PackIdx):
     """Object representation of a Git pack index (version 2) file."""
-    def __init__(self, filename, f):
+    def __init__(self, filename, f, hashsize):
         super().__init__()
         self.closed = False
         self.name = filename
@@ -555,14 +572,16 @@ class PackIdxV2(PackIdx):
         self.fanout = array('L', struct.unpack_from('!256I', self.map, offset=8))
         self.fanout.append(0)
         self.nsha = self.fanout[255]
+        assert hashsize in (20, 32)
+        self.hashsize = hashsize
         self.sha_ofs = 8 + 256*4
-        self.crctable_ofs = self.sha_ofs + self.nsha * 20
+        self.crctable_ofs = self.sha_ofs + self.nsha * self.hashsize
         self.ofstable_ofs = self.crctable_ofs + self.nsha * 4
         self.ofs64table_ofs = self.ofstable_ofs + self.nsha * 4
         # Avoid slicing this for individual hashes (very high overhead)
         assert self.nsha
         self.shatable = \
-            memoryview(self.map)[self.sha_ofs:self.sha_ofs + self.nsha * 20]
+            memoryview(self.map)[self.sha_ofs:self.sha_ofs + self.nsha * self.hashsize]
 
 
     def __enter__(self): return self
@@ -594,13 +613,14 @@ class PackIdxV2(PackIdx):
     def _idx_to_hash(self, idx):
         if idx >= self.nsha or idx < 0:
             raise IndexError('invalid pack index index %d' % idx)
-        ofs = self.sha_ofs + idx * 20
-        return self.map[ofs : ofs + 20]
+        ofs = self.sha_ofs + idx * self.hashsize
+        val = self.map[ofs : ofs + self.hashsize]
+        return val
 
     def __iter__(self):
         start = self.sha_ofs
-        for ofs in range(start, start + 20 * self.nsha, 20):
-            yield self.map[ofs : ofs + 20]
+        for ofs in range(start, start + self.hashsize * self.nsha, self.hashsize):
+            yield self.map[ofs : ofs + self.hashsize]
 
     def close(self):
         self.closed = True
@@ -620,14 +640,16 @@ class PackIdxV2(PackIdx):
 
 _mpi_count = 0
 class PackIdxList:
-    def __init__(self, dir, ignore_midx=False):
+    def __init__(self, dir, hashsize, ignore_midx=False):
         global _mpi_count
         self.open = False # for __del__
         # Q: was this also intended to prevent opening multiple repos?
         assert(_mpi_count == 0) # these things suck tons of VM; don't waste it
         _mpi_count += 1
         self.open = True
+        assert hashsize in (20, 32)
         self.dir = dir
+        self.hashsize = hashsize
         self.packs = []
         self.do_bloom = False
         self.bloom = None
@@ -694,7 +716,8 @@ class PackIdxList:
                 self.packs = [p] + self.packs[:i] + self.packs[i+1:]
                 if (want_offset and ret.offset is None) or \
                    (want_crc and ret.crc is None):
-                    with open_idx(os.path.join(self.dir, ret.pack)) as np:
+                    with open_idx(os.path.join(self.dir, ret.pack),
+                                  self.hashsize) as np:
                         ret = np.exists(hash, want_source=want_source,
                                         want_offset=want_offset,
                                         want_crc=want_crc)
@@ -794,7 +817,7 @@ class PackIdxList:
             for full in glob.glob(os.path.join(self.dir, b'*.idx')):
                 if not d.get(full):
                     try:
-                        ix = open_idx(full)
+                        ix = open_idx(full, self.hashsize)
                     except GitError as e:
                         add_error(e)
                         continue
@@ -830,9 +853,15 @@ class PackIdxList:
             % (len(self.packs), len(self.packs)!=1 and 'es' or ''))
 
 
-def open_idx(filename):
+_pack_idx_name_rx = re.compile(br'pack-([0-9a-f]+)\.idx$')
+
+
+def open_idx(filename, hashsize):
     if not filename.endswith(b'.idx'): # why is this enforced *here*?
         raise GitError('pack idx filenames must end with .idx')
+    m = _pack_idx_name_rx.search(os.path.basename(filename))
+    if m and len(m.group(1)) != 2 * hashsize:
+        raise GitError(f"pack filename {path_msg(filename)} doesn't match hashsize {hashsize}")
     f = open(filename, 'rb') # pylint: disable=consider-using-with
     with ExitStack() as contexts:
         contexts.enter_context(f)
@@ -841,21 +870,27 @@ def open_idx(filename):
             version = struct.unpack('!I', header[4:8])[0]
             if version == 2:
                 contexts.pop_all()
-                return PackIdxV2(filename, f)
+                return PackIdxV2(filename, f, hashsize)
             raise GitError('%s: expected idx file version 2, got %d'
                            % (path_msg(filename), version))
         if len(header) == 8 and header[0:4] < b'\377tOc':
+            if hashsize != 20:
+                raise GitError(f'{path_msg(filename)}: idx v1 cannot be sha256')
             contexts.pop_all()
             return PackIdxV1(filename, f)
         raise GitError('%s: unrecognized idx file header'
                        % path_msg(filename))
 
 
-def open_object_idx(filename):
+def open_object_idx(filename, hashsize):
     if filename.endswith(b'.idx'):
-        return open_idx(filename)
+        return open_idx(filename, hashsize)
     if filename.endswith(b'.midx'):
-        return open_midx(filename)
+        ix = open_midx(filename)
+        if ix and ix.hashsize != hashsize:
+            ix.close()
+            raise GitError(f'{path_msg(filename)} hashsize mismatch: {ix.hashsize} != {hashsize}')
+        return ix
     raise GitError('pack index filenames must end with .idx or .midx')
 
 
@@ -876,7 +911,7 @@ def idxmerge(idxlist, final_progress=True):
 class LocalPackStore():
 
     def __init__(self, *, repo_dir, allow_duplicates=False,
-                 on_pack_finish=None, run_midx=True):
+                 on_pack_finish=None, run_midx=True, hashsize):
         """When allow_duplicates is false, (at some cost) avoid
         writing duplicates of objects that already in the repository.
 
@@ -892,6 +927,8 @@ class LocalPackStore():
         self._repo_dir = repo_dir
         self._run_midx=run_midx
         self._tmpdir = None
+        assert hashsize in (20, 32)
+        self.hashsize = hashsize
 
     def __del__(self): assert self._closed
 
@@ -903,7 +940,8 @@ class LocalPackStore():
         """
         if self._objcache is None:
             self._objcache = \
-                PackIdxList(repo(b'objects/pack', repo_dir=self._repo_dir))
+                PackIdxList(repo(b'objects/pack', repo_dir=self._repo_dir),
+                            self.hashsize)
         return self._objcache.exists(oid, want_source=want_source)
 
     def _open(self):
@@ -915,7 +953,7 @@ class LocalPackStore():
                 self._parentfd = err_stack.enter_context(finalized(os.open(objdir, os.O_RDONLY),
                                                                    os.close))
                 self._file.write(b'PACK\0\0\0\2\0\0\0\0')
-                self._idx = PackIdxV2Writer()
+                self._idx = PackIdxV2Writer(hashsize=self.hashsize)
                 err_stack.pop_all()
 
     def _update_idx(self, sha, crc, size):
@@ -963,7 +1001,10 @@ class LocalPackStore():
 
                 # calculate the pack sha1sum
                 f.seek(0)
-                sum = Sha1()
+                if self.hashsize == 32:
+                    sum = Sha256()
+                else:
+                    sum = Sha1()
                 for b in chunkyreader(f):
                     sum.update(b)
                 packbin = sum.digest()
@@ -981,7 +1022,8 @@ class LocalPackStore():
                 if self._on_pack_finish:
                     self._on_pack_finish(nameprefix)
                 if self._run_midx:
-                    auto_midx(os.path.join(self._repo_dir, b'objects/pack'))
+                    auto_midx(os.path.join(self._repo_dir, b'objects/pack'),
+                              self.hashsize)
                 return nameprefix
         finally:
             self._obj_count = 0
@@ -1010,6 +1052,7 @@ class PackWriter:
         self._byte_count = 0
         self._obj_count = 0
         self._store = store
+        self._hashsize = store.hashsize
         self._pending_oids = set()
         if compression_level is None:
             compression_level = 1
@@ -1052,7 +1095,7 @@ class PackWriter:
 
     def maybe_write(self, type, content):
         """Write an object to the pack file if not present and return its id."""
-        sha = calc_hash(type, content)
+        sha = calc_hash(type, content, self._hashsize)
         if not self.exists(sha):
             self._write(sha, type, content)
             self._pending_oids.add(sha)
@@ -1098,12 +1141,15 @@ class PackWriter:
 
 
 class PackIdxV2Writer:
-    def __init__(self):
+    def __init__(self, hashsize):
         self.idx = [[] for i in range(256)]
         self.count = 0
+        assert hashsize in (20, 32)
+        self._hashsize = hashsize
 
     def add(self, sha, crc, offs):
         assert(sha)
+        assert len(sha) == self._hashsize
         self.count += 1
         self.idx[sha[0]].append((sha, crc, offs))
 
@@ -1115,15 +1161,20 @@ class PackIdxV2Writer:
                     ofs64_count += 1
 
         # Length: header + fan-out + shas-and-crcs + overflow-offsets
-        index_len = 8 + (4 * 256) + (28 * self.count) + (8 * ofs64_count)
+        entrysize = self._hashsize + 8
+        index_len = 8 + (4 * 256) + (entrysize * self.count) + (8 * ofs64_count)
         idx_map = None
         with open(filename, 'w+b') as idx_f:
             idx_f.truncate(index_len)
             fsync(idx_f.fileno())
             idx_map = mmap_readwrite(idx_f, close=False)
             try:
-                count = _helpers.write_idx(filename, idx_map, self.idx,
-                                           self.count)
+                if self._hashsize == 32:
+                    count = _helpers.write_idx_sha256(filename, idx_map,
+                                                      self.idx, self.count)
+                else:
+                    count = _helpers.write_idx(filename, idx_map, self.idx,
+                                               self.count)
                 assert(count == self.count)
                 idx_map.flush()
             finally:
@@ -1132,11 +1183,14 @@ class PackIdxV2Writer:
         with open(filename, 'a+b') as idx_f:
             idx_f.write(packbin)
             idx_f.seek(0)
-            idx_sum = Sha1()
+            if self._hashsize == 32:
+                idx_sum = Sha256()
+            else:
+                idx_sum = Sha1()
             b = idx_f.read(8 + 4*256)
             idx_sum.update(b)
 
-            for b in chunkyreader(idx_f, 20 * self.count):
+            for b in chunkyreader(idx_f, self._hashsize * self.count):
                 idx_sum.update(b)
 
             for b in chunkyreader(idx_f):
@@ -1221,7 +1275,8 @@ def rev_list(ref_or_refs, parse=None, format=None, repo_dir=None):
                 if not s.startswith(b'commit '):
                     raise Exception('unexpected line ' + repr(s))
                 s = s[7:]
-                assert len(s) == 40
+                # accept both, we don't know what the repo is
+                assert len(s) in (40, 64)
                 yield s, parse(p.stdout)
                 line = p.stdout.readline()
 
@@ -1243,13 +1298,14 @@ def rev_parse(committish, repo_dir=None):
         debug2(f'resolved from ref: commit = {head.hex()}\n')
         return head
 
-    if len(committish) == 40:
+    if len(committish) in (40, 64):
         try:
             hash = unhexlify(committish)
         except TypeError:
             return None
 
-        with PackIdxList(repo(b'objects/pack', repo_dir=repo_dir)) as pl:
+        with PackIdxList(repo(b'objects/pack', repo_dir=repo_dir),
+                         len(hash)) as pl:
             if pl.exists(hash):
                 return hash
 
@@ -1297,7 +1353,7 @@ def guess_repo():
     return bup.path.defaultrepo()
 
 
-def init_repo(path=None):
+def init_repo(path=None, objectformat='sha1'):
     """Create the Git bare repository for bup in a given path."""
     repodir = path or guess_repo()
     d = repo(repo_dir=repodir)  # appends a / to the path
@@ -1312,6 +1368,10 @@ def init_repo(path=None):
     cmd = (b'git', b'--bare',
            # arbitrary default branch name to suppress git msg.
            b'-c', b'init.defaultBranch=main', b'init')
+    if objectformat != 'sha1':
+        if not git_sha256_supported():
+            raise GitError('must have at least git 2.29 for sha256')
+        cmd += (b'--object-format', objectformat.encode())
     cp = subprocess.run(cmd, stdout=sys.stderr, env=_gitenv(repodir))
     if cp.returncode != 0:
         _raise_git_cmd_error(cmd, cp.returncode)
@@ -1425,6 +1485,18 @@ def require_suitable_git(ver_str=None):
     assert False
 
 
+def git_sha256_supported(ver_str=None):
+    if ver_str is None:
+        cp = run((b'git', b'--version'), stdout=PIPE)
+        if cp.returncode != 0:
+            raise GitError(f'"git --version" failed (status {cp.returncode})')
+        ver_str = cp.stdout
+    m = re.match(br'git version (\d+)\.(\d+)', ver_str)
+    if not m:
+        raise GitError('Unexpected git --version output: %r' % ver_str)
+    return (int(m.group(1)), int(m.group(2))) >= (2, 29)
+
+
 class _CatPipe:
     """Link to 'git cat-file' that is used to retrieve blob data."""
     def __init__(self, repo_dir):
@@ -1524,7 +1596,8 @@ class _CatPipe:
             self.inprogress = None
             return None, None, None, None
         info = hdr.split(b' ')
-        if len(info) != 3 or len(info[0]) != 40:
+        # we don't know the repo (git does), accept both
+        if len(info) != 3 or len(info[0]) not in (40, 64):
             raise GitError('expected object (id, type, size), got %r' % info)
         oidx, typ, size = info
         size = int(size)
@@ -1671,6 +1744,6 @@ def walk_object(get_ref, oidx, *, stop_at=None, include_data=None,
         elif typ == b'tree':
             pending.append((True, res))
             tree_path = [*parents, replace(item, data=None)]
-            for mode, name, ent_id in tree_iter(data):
+            for mode, name, ent_id in tree_iter(data, len(oid)):
                 pending.append((False, hexlify(ent_id), tree_path, name, mode,
                                 b'tree' if stat.S_ISDIR(mode) else b'blob'))

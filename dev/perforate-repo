@@ -75,11 +75,11 @@ with TemporaryDirectory(prefix='perforate-', dir=repo) as tmpdir:
         sys.exit(2)
 
     # For now assumes only one subdir level, and that locale decoding is fine
-    oid_rx = re.compile(b'[0-9A-Za-z]{40}')
+    oid_rx = re.compile(b'(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})')
     for oidx in stdin.buffer:
         oidx = oidx.rstrip()
         if not oid_rx.fullmatch(oidx):
-            logn(f'error: oid {oidx} is not a 40-char hash')
+            logn(f'error: oid {oidx} is not a 40/64-char hash')
         unlink(b'%s/objects/%s/%s' % (fsencode(tmprepo), oidx[:2], oidx[2:]))
 
     for pack in packs:

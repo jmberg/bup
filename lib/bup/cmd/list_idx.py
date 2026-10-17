@@ -8,8 +8,9 @@ from bup.helpers import add_error, handle_ctrl_c, qprogress
 from bup.io import byte_stream
 
 optspec = """
-bup list-idx [--find=<prefix>] <idxfilenames...>
+bup list-idx [--sha256] [--find=<prefix>] <idxfilenames...>
 --
+sha256  the idx files are sha256 format
 find=   display only objects that start with <prefix>
 """
 
@@ -24,8 +25,8 @@ def main(argv):
     if not extra:
         o.fatal('you must provide at least one filename')
 
-    if len(opt.find) > 40:
-        o.fatal('--find parameter must be <= 40 chars long')
+    if len(opt.find) > 64:
+        o.fatal('--find parameter must be <= 64 chars long')
     else:
         if len(opt.find) % 2:
             s = opt.find + b'0'
@@ -41,16 +42,17 @@ def main(argv):
     find = opt.find.lower()
     count = 0
     idxfiles = [argv_bytes(x) for x in extra]
+    hashsize = 32 if opt.sha256 else 20
     for name in idxfiles:
         ix = None
         try:
-            ix = git.open_object_idx(name)
+            ix = git.open_object_idx(name, hashsize)
         except git.GitError as e:
             add_error('%r: %s' % (name, e))
         if not ix:
             continue
         with ix:
-            if len(opt.find) == 40:
+            if len(opt.find) == 2 * ix.hashsize:
                 if ix.exists(bin):
                     out.write(b'%s %s\n' % (name, find))
             else:

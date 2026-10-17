@@ -9,6 +9,7 @@ from bup.io import path_msg
 
 MIDX_HEADER = b'MIDX'
 MIDX_VERSION = 4
+MIDX_VERSION_256 = 4 | 256
 
 extract_bits = _helpers.extract_bits
 _total_searches = 0
@@ -31,7 +32,7 @@ class PackMidx:
     constitute a wrapper around index (.idx) files and make it
     possible for bup to expand Git's indexing capabilities to vast
     amounts of files.  This class only supports the current
-    MIDX_VERSION.
+    MIDX_VERSION/_256.
 
     """
     def __init__(self, filename, mmap, *, _internal=False):
@@ -41,7 +42,9 @@ class PackMidx:
             self.map = mmap
             assert _internal, 'call open_midx()'
             assert _midx_header(mmap) == MIDX_HEADER
-            assert _midx_version(mmap) == MIDX_VERSION
+            version = _midx_version(mmap)
+            assert version in (MIDX_VERSION, MIDX_VERSION_256)
+            self.hashsize = 32 if version == MIDX_VERSION_256 else 20
             self.name = filename
             self.bits = _helpers.firstword(self.map[8:12])
             self.entries = 2**self.bits
@@ -49,8 +52,8 @@ class PackMidx:
             # fanout len is self.entries * 4
             self.sha_ofs = self.fanout_ofs + self.entries * 4
             self.nsha = self._fanget(self.entries - 1)
-            # sha table len is self.nsha * 20
-            self.which_ofs = self.sha_ofs + 20 * self.nsha
+            # sha table len is self.nsha * self.hashsize
+            self.which_ofs = self.sha_ofs + self.hashsize * self.nsha
             # which len is self.nsha * 4
             self.idxnames = self.map[self.which_ofs + 4 * self.nsha:].split(b'\0')
             idxdir = os.path.dirname(filename)
@@ -86,8 +89,8 @@ class PackMidx:
     def _get(self, i):
         if i >= self.nsha or i < 0:
             raise IndexError('invalid midx index %d' % i)
-        ofs = self.sha_ofs + i * 20
-        return self.map[ofs : ofs + 20]
+        ofs = self.sha_ofs + i * self.hashsize
+        return self.map[ofs : ofs + self.hashsize]
 
     def _get_idx_i(self, i):
         if i >= self.nsha or i < 0:
@@ -142,8 +145,8 @@ class PackMidx:
 
     def __iter__(self):
         start = self.sha_ofs
-        for ofs in range(start, start + self.nsha * 20, 20):
-            yield self.map[ofs : ofs + 20]
+        for ofs in range(start, start + self.nsha * self.hashsize, self.hashsize):
+            yield self.map[ofs : ofs + self.hashsize]
 
     def __len__(self):
         return int(self.nsha)
@@ -166,7 +169,7 @@ def open_midx(path, *, ignore_missing=True):
             log(f'Warning: skipping: invalid MIDX header in {pathm}\n')
             return None
         ver = _midx_version(mmap)
-        if ver == MIDX_VERSION:
+        if ver in (MIDX_VERSION, MIDX_VERSION_256):
             if not ignore_missing:
                 contexts.pop_all()
                 return PackMidx(path, mmap, _internal=True)
