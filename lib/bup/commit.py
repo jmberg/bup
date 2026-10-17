@@ -43,19 +43,21 @@ _safe_str_rx = br'(?:%s{1,2}|(?:%s%s*%s))' \
     % (_start_end_char,
        _start_end_char, _content_char, _start_end_char)
 _tz_rx = br'[-+]\d\d[0-5]\d'
-_parent_rx = br'(?:parent [abcdefABCDEF0123456789]{40}\n)'
+# hard to know the expected size so allow both
+_hex_oid_rx = br'(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})(?![a-fA-F0-9])'
+_parent_rx = br'(?:parent %s\n)' % _hex_oid_rx
 # Assumes every following line starting with a space is part of the
 # mergetag.  Is there a formal commit blob spec?
-_mergetag_rx = br'(?:\nmergetag object [abcdefABCDEF0123456789]{40}(?:\n [^\0\n]*)*)'
-_commit_rx = re.compile(br'''tree (?P<tree>[abcdefABCDEF0123456789]{40})
+_mergetag_rx = br'(?:\nmergetag object %s(?:\n [^\0\n]*)*)' % _hex_oid_rx
+_commit_rx = re.compile(br'''tree (?P<tree>%s)
 (?P<parents>%s*)author (?P<author_name>%s) <(?P<author_mail>%s)> (?P<asec>\d+) (?P<atz>%s)
 committer (?P<committer_name>%s) <(?P<committer_mail>%s)> (?P<csec>\d+) (?P<ctz>%s)(?P<mergetag>%s?)
 (?P<gpgsig>gpgsig .*\n(?: .*\n)*)?
-(?P<message>(?:.|\n)*)''' % (_parent_rx,
+(?P<message>(?:.|\n)*)''' % (_hex_oid_rx, _parent_rx,
                              _safe_str_rx, _safe_str_rx, _tz_rx,
                              _safe_str_rx, _safe_str_rx, _tz_rx,
                              _mergetag_rx))
-_parent_hash_rx = re.compile(br'\s*parent ([abcdefABCDEF0123456789]{40})\s*')
+_parent_hash_rx = re.compile(br'\s*parent (%s)\s*' % _hex_oid_rx)
 
 # Note that the author_sec and committer_sec values are (UTC) epoch
 # seconds, and for now the mergetag is not included.
