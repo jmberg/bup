@@ -135,7 +135,7 @@ def find_live_objects(repo, existing_count, cat_pipe, refs=None, *,
                     if verbosity and not live_blobs.exists(item.oid):
                         approx_live_count += 1
                         qprogress(progress_msg(ref_name, ref_i) + '\r')
-                    live_blobs.add(item.oid)
+                    live_blobs.add(item.oid, len(item.oid))
         if verbosity and scan_refs:
             log(final_msg() + '\n')
         maybe_close_bloom.pop_all()
