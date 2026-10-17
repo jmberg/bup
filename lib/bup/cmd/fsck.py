@@ -216,7 +216,8 @@ def trailing_and_actual_checksum(path):
 
 def git_verify(stem, *, quick=False):
     if not quick:
-        rc = run([b'git', b'verify-pack', b'--', stem]).returncode
+        # assumes / isn't a git repo
+        rc = run([b'git', b'verify-pack', b'--', stem], cwd=b'/').returncode
         if rc == 0:
             return True
         log(f'error: git verify-pack failed ({rc}) {path_msg(stem)}\n')
@@ -256,7 +257,8 @@ def attempt_repair(stem, base, par2_exists, out, *, verbose=False):
         idx_ok = False
     if not idx_ok:
         cmd = (b'git', b'index-pack', stem + b'.pack')
-        idx_rc = run(cmd).returncode
+        # assumes / isn't a git repo
+        idx_rc = run(cmd, cwd=b'/').returncode
         if idx_rc:
             log(f'{path_msg(base)} index-pack failed\n')
             if verbose: out.write(base + b' failed\n')
