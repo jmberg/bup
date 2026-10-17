@@ -7,7 +7,9 @@
 
 # Variable length integers are encoded as vints -- see lucene.
 
+from base64 import b64decode, b64encode
 from io import BytesIO
+import json
 
 from bup import _helpers
 
@@ -132,6 +134,7 @@ def read_bvec(port):
         raise EOFError('EOF while reading bvec bytes')
     return val
 
+
 def encode_bvec(x):
     return _helpers.vuint_encode(len(x)) + x
 
@@ -145,6 +148,139 @@ def skip_bvec(port):
         raise EOFError('encountered EOF while skipping bvec')
 
 
+def _needs_tree_pre_post_processing(x):
+    # Given the encoding, we can use the same function for both sides.
+    # Are there any leaves that are bytes, or strings that start with
+    # PU1 or PU2?  We also insist on string keys here.
+    if isinstance(x, bytes):
+        return True
+    if isinstance(x, (str, int, bool, float)):
+        return False
+    if isinstance(x, (list, tuple)):
+        if not x:
+            return False
+        if isinstance(x[0], str) and x[0] and x[0][0] in (')', '!'):
+            return True
+        for item in x:
+            if _needs_tree_pre_post_processing(item):
+                return True
+        return False
+    if isinstance(x, dict):
+        for k, v in x.items():
+            assert isinstance(k, str), f'dict key {k} is not a string in {x}'
+            if _needs_tree_pre_post_processing(v):
+                return True
+        return False
+    raise ValueError(f'Cannot currently encode/decode {x}')
+
+
+# The "tree" encoding transports heterogeneous trees of (currently)
+# bool, int, float, string, bytes, list, tuple, dict via encoding as
+# JSON.  This is arranged by reserving a JSON [TAG, DATA...] where the
+# TAG is a string that starts with ")" for type extensions.  The only
+# valid TAG right now is ")", which is used to encode bytes values as
+# [")", base-64-encoded-string].  In addition a TAG starting with "!"
+# indicates that the original data happended to have a vector
+# containing an initial string that started with "!" or ")".  This
+# makes it possible to avoid interpreting that value as a tag, and to
+# just recover the original data.  The chars "!)" were chosen as
+# hopefully unlikely leading characters.
+#
+# For example:
+#   encode:
+#     b'foo' -> [")","zcMv"]
+#     [")...1", ...2] -> ["!)...1", ...2]
+#     ["!...1", ...2] -> ["!!...1", ...2]
+#   decode:
+#     [")", "zcMv"] -> b'foo'
+#     [")"]  [")"] -> b''
+#     [")" ""] -> b''
+#     [")type", ...] -> unknown_type or instance decoded via ...
+#     ["!)foo"] -> [")foo"]
+#     ["!!foo"] -> ["!foo"]
+
+
+def _json_for_tree(x):
+    if isinstance(x, bytes):
+        if not x:
+            return [')']
+        return [')', b64encode(x).decode('ascii')]
+    if isinstance(x, (str, int, bool, float)):
+        return x
+    if isinstance(x, (list, tuple)):
+        if not x:
+            return x
+        if isinstance(x[0], str) and x[0] and x[0][0] in (')', '!'):
+            result = ['!' + x[0]]
+            result.extend(_json_for_tree(item) for item in x[1:])
+            return result
+        return [_json_for_tree(item) for item in x]
+    if isinstance(x, dict):
+        return {k: _json_for_tree(v) for k, v in x.items()}
+    raise ValueError(f'Cannot currently encode {x} as JSON')
+
+
+unrecognized_type = object()
+
+def _tree_from_json(x):
+    if isinstance(x, (str, int, bool, float)):
+        return x
+    if isinstance(x, (list, tuple)): # tuple should not be possible
+        if not x:
+            return []
+        if not isinstance(x[0], str):
+            return [_tree_from_json(item) for item in x]
+        if x[0].startswith('!'): # (aliasing) drop ! from first item
+            # REVIEW: should we insist len(x[0]) > 1 and that the ! is
+            # always followed by ) or !  i.e. should we be strict or
+            # not?
+            return [x[0][1:], *[_tree_from_json(item) for item in x[1:]]]
+        if not x[0].startswith(')'):
+            return x
+        tag = x[0]
+        if len(tag) > 1:
+            return unrecognized_type
+        if len(x) == 1:
+            return b''
+        if len(x) != 2:
+            raise ValueError(f'Improper bytes encoding: {x!r}')
+        return b64decode(x[1])
+    if isinstance(x, dict):
+        # We ignore keys for now; python will reject bytes
+        return {k: _tree_from_json(v) for k, v in x.items()}
+    raise ValueError(f'Cannot currently decode {x} from JSON')
+
+
+def encode_tree(x):
+    """Encode a tree of dict, list, tuple, bool, int, float, bytes
+    (with JSON as the underlying transport)."""
+    # Currently does not support generators because we traverse the
+    # data more than once.  Wish python had clj style sequences.
+    needs_preenc = _needs_tree_pre_post_processing(x)
+    preenc = _json_for_tree(x) if needs_preenc else x
+    return encode_bvec(json.dumps(preenc,  ensure_ascii=False).encode('utf-8'))
+
+
+def write_tree(port, x):
+    port.write(encode_tree(x))
+
+
+def read_tree(port):
+    """Dencode a tree of dict, list, tuple, bool, int, float, bytes,
+    etc. (with JSON as the underlying transport).  The result will
+    have the unrecognized_type value where the incoming type isn't
+    recognized (i.e. from newer sender).
+
+    """
+    bv = read_bvec(port)
+    if not bv:
+        raise EOFError('encountered EOF while reading tree')
+    val = json.loads(bv.decode('utf-8'))
+    if not _needs_tree_pre_post_processing(val):
+        return val
+    return _tree_from_json(val)
+
+
 def send(port, types, *args):
     if len(types) != len(args):
         raise ValueError('number of arguments does not match format string')
@@ -155,6 +291,8 @@ def send(port, types, *args):
             write_vint(port, value)
         elif type == 's':
             write_bvec(port, value)
+        elif type == 't':
+            write_tree(port, value)
         else:
             raise ValueError(f'unknown format string item {type!r}')
 
@@ -165,6 +303,7 @@ def recv(port, types):
         if type == 'V': decode = read_vuint
         elif type == 'v': decode = read_vint
         elif type == 's': decode = read_bvec
+        elif type == 't': decode = read_tree
         else: raise ValueError(f'unknown format string item {type!r}')
         x = decode(port)
         if x is None:
@@ -174,10 +313,11 @@ def recv(port, types):
 
 
 def pack(types, *args):
-    try:
-        return _helpers.limited_vint_pack(types, args)
-    except OverflowError:
-        pass
+    if 't' not in types:
+        try:
+            return _helpers.limited_vint_pack(types, args)
+        except OverflowError:
+            pass
     assert len(types) == len(args)
     ret = []
     for typ, value in zip(types, args):
@@ -187,6 +327,8 @@ def pack(types, *args):
             ret.append(encode_vint(value))
         elif typ == 's':
             ret.append(encode_bvec(value))
+        elif typ == 't':
+            ret.append(encode_tree(value))
         else:
             raise ValueError(f'unknown format string item {typ!r}')
     return b''.join(ret)
