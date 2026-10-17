@@ -13,7 +13,8 @@ def exc(*cmd): return buptest.exc(cmd)
 def exo(*cmd): return buptest.exo(cmd).out
 
 
-def test_commit_parsing(tmpdir):
+@pytest.mark.parametrize('format', ('sha1', 'sha256'))
+def test_commit_parsing(tmpdir, format):
     def restore_env_var(name, val):
         if val is None:
             del environ[name]
@@ -37,7 +38,10 @@ def test_commit_parsing(tmpdir):
     environ[b'GIT_COMMITTER_EMAIL'] = environ[b'GIT_AUTHOR_EMAIL']
     try:
         environ[b'GIT_DIR'] = environ[b'BUP_DIR'] = repodir
-        exc(b'git', b'init', workdir)
+        if format == 'sha256':
+            exc(b'git', b'init', '--object-format', 'sha256', workdir)
+        else:
+            exc(b'git', b'init', workdir)
         exc(b'git', b'symbolic-ref', b'HEAD', b'refs/heads/main')
         git.check_repo_or_die(repodir)
         os.chdir(workdir)
@@ -48,6 +52,7 @@ def test_commit_parsing(tmpdir):
             b'--author', b'Someone <someone@somewhere>',
             b'--date', b'Sat Oct 3 19:48:49 2009 -0400')
         commit = exo(b'git', b'show-ref', b'-s', b'main').strip()
+        assert len(commit) == (64 if format == 'sha256' else 40)
         parents = showval(commit, b'%P')
         tree = showval(commit, b'%T')
         cname = showval(commit, b'%cn')
