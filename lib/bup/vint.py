@@ -8,6 +8,7 @@
 # Variable length integers are encoded as vints -- see lucene.
 
 from io import BytesIO
+import json, base64
 
 from bup import _helpers
 
@@ -132,6 +133,40 @@ def read_bvec(port):
         raise EOFError('EOF while reading bvec bytes')
     return val
 
+
+def write_json(port, val):
+    if isinstance(val, dict):
+        encoded = {}
+        for k, v in val.items():
+            assert isinstance(v, (int, str, bytes))
+            assert isinstance(k, str)
+            assert not k.startswith("__bytes__")
+            if isinstance(v, bytes):
+                encoded[f'__bytes__{k}'] = base64.b64encode(v).decode('ascii')
+            else:
+                encoded[k] = v
+        val = encoded
+    elif isinstance(val, (int, str)):
+        pass
+    else:
+        assert False, "Only dict, int, str supported"
+    write_bvec(port, json.dumps(val).encode('utf-8'))
+
+
+def read_json(port):
+    val = json.loads(read_bvec(port).decode('utf-8'))
+    assert isinstance(val, (int, str, dict))
+    if isinstance(val, dict):
+        decoded = {}
+        for k, v in val.items():
+            if k.startswith('__bytes__'):
+                decoded[k[9:]] = base64.b64decode(v.encode('ascii'))
+            else:
+                decoded[k] = v
+        return decoded
+    return val
+
+
 def encode_bvec(x):
     return _helpers.vuint_encode(len(x)) + x
 
@@ -155,6 +190,8 @@ def send(port, types, *args):
             write_vint(port, value)
         elif type == 's':
             write_bvec(port, value)
+        elif type == 'j':
+            write_json(port, value)
         else:
             raise ValueError(f'unknown format string item {type!r}')
 
@@ -165,6 +202,7 @@ def recv(port, types):
         if type == 'V': decode = read_vuint
         elif type == 'v': decode = read_vint
         elif type == 's': decode = read_bvec
+        elif type == 'j': decode = read_json
         else: raise ValueError(f'unknown format string item {type!r}')
         x = decode(port)
         if x is None:
