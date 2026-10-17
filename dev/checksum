@@ -57,6 +57,6 @@ elif command -v "$kind" > /dev/null; then
         "$kind" -q
     fi
 else
-    echo "Can't find sha1sum or sha1" 1>&2
+    echo "Can't find ${kind}sum or ${kind}" 1>&2
     exit 2
 fi
