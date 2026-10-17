@@ -10,7 +10,7 @@ from bup import options, git
 from bup.compat import argv_bytes
 from bup.helpers \
     import (EXIT_FAILURE, EXIT_FALSE, EXIT_TRUE, EXIT_SUCCESS,
-            Sha1, chunkyreader, istty2, log, progress, temp_dir)
+            Sha1, Sha256, chunkyreader, istty2, log, progress, temp_dir)
 from bup.io import byte_stream, path_msg
 
 
@@ -21,8 +21,8 @@ def debug(s):
         log(s)
 
 def report_stray_pack_related_files(repo, pack_paths):
-    # For now only look for stray files we might have created (SHA1-related)
-    pack_rx = re.compile(br'(?:^|/)pack-([a-f0-9]{40})\.pack$')
+    # For now only look for stray files we might have created (SHA1/256-related)
+    pack_rx = re.compile(br'(?:^|/)pack-([a-f0-9]{40,64})\.pack$')
     pack_oidxs = set()
     for path in pack_paths:
         m = pack_rx.search(path)
@@ -30,8 +30,8 @@ def report_stray_pack_related_files(repo, pack_paths):
             continue
         pack_oidxs.add(m.group(1))
 
-    # Pack-related is currently pack-40HEX or pack-40HEX.*
-    pack_related_rx = re.compile(br'(?:^|/)pack-([a-f0-9]{40})(?:\..*)?$')
+    # Pack-related is currently pack-(40HEX|64HEX) or pack-(40HEX|64HEX).*
+    pack_related_rx = re.compile(br'(?:^|/)pack-([a-f0-9]{40,64})(?:\..*)?$')
     for path in glob.glob(repo + b'/objects/pack/pack-*'):
         m = pack_related_rx.search(path)
         if not m or m.group(1) in pack_oidxs:
@@ -198,25 +198,35 @@ def par2_repair(base):
 
 
 def trailing_and_actual_checksum(path):
+    sha256 = len(path.split(b'/')[-1]) in (5 + 64 + 4, 5 + 64 + 5)
+    hashsz = 32 if sha256 else 20
     try:
         f = open(path, 'rb')
     except FileNotFoundError:
         return None, None
     with f:
-        f.seek(-20, SEEK_END)
-        trailing = f.read(20)
-        assert len(trailing) == 20
+        f.seek(-hashsz, SEEK_END)
+        trailing = f.read(hashsz)
+        assert len(trailing) == hashsz
         f.seek(0)
-        actual = Sha1()
-        for b in chunkyreader(f, os.fstat(f.fileno()).st_size - 20):
+        if sha256:
+            actual = Sha256()
+        else:
+            actual = Sha1()
+        for b in chunkyreader(f, os.fstat(f.fileno()).st_size - hashsz):
             actual.update(b)
         return trailing, actual.digest()
 
 
 def git_verify(stem, *, quick=False):
+    sha256 = len(stem.split(b'/')[-1]) == 5 + 64
     if not quick:
+        cmd = [b'git', b'verify-pack']
+        if sha256:
+            cmd += ['--object-format', 'sha256']
+        cmd += [b'--', stem]
         # assume /dev/ isn't a git repo
-        rc = run([b'git', b'verify-pack', b'--', stem], cwd=b'/dev/').returncode
+        rc = run(cmd, cwd=b'/dev/').returncode
         if rc == 0:
             return True
         log(f'error: git verify-pack failed ({rc}) {path_msg(stem)}\n')
