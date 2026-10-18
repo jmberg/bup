@@ -24,7 +24,7 @@ WVPASS cd "$tmpdir"
 
 WVSTART 'command without init fails'
 WVPASS mkdir foo
-WVEXPRC 2 bup -d nope save -t foo
+WVEXPRC 15 bup -d nope save -t foo
 WVPASS rmdir foo
 
 WVSTART 'only one positional argument allowed'

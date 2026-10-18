@@ -2,7 +2,7 @@
 from binascii import hexlify
 import sys
 
-from bup import options, protocol, git
+from bup import options, protocol
 from bup.git import parse_commit
 from bup.io import byte_stream
 from bup.io import path_msg as pm
@@ -56,7 +56,6 @@ def main(argv):
 
     class ServerRepo(LocalRepo):
         def __init__(self, repo_dir, server):
-            git.check_repo_or_die(repo_dir)
             LocalRepo.__init__(self, repo_dir, server=server)
 
     with Conn(byte_stream(sys.stdin), byte_stream(sys.stdout)) as conn, \
