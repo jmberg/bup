@@ -196,45 +196,6 @@ def main(argv):
             repo_checked = True
 
     with ExitStack() as ctx:
-        if opt.git_ids:
-            # the input is actually a series of git object ids that we should retrieve
-            # and split.
-            #
-            # This is a bit messy, but basically it converts from a series of
-            # CatPipe.get() iterators into a series of file-type objects.
-            # It would be less ugly if either CatPipe.get() returned a file-like object
-            # (not very efficient), or split_to_shalist() expected an iterator instead
-            # of a file.
-            ensure_repo_checked()
-            cp = git.CatPipe()
-            class IterToFile:
-                def __init__(self, it):
-                    self.it = iter(it)
-                def read(self, size_):
-                    return next(self.it, b'')
-            def read_ids():
-                while 1:
-                    line = stdin.readline()
-                    if not line:
-                        break
-                    if line:
-                        line = line.strip()
-                    try:
-                        it = cp.get(line.strip())[3] # skip the file info
-                    except KeyError as e:
-                        add_error('error: %s' % e)
-                        continue
-                    yield IterToFile(it)
-            files = read_ids()
-        else:
-            # the input either comes from a series of files or from stdin.
-            if opt.sources:
-                # pylint: disable-next=consider-using-with
-                files = (ctx.enter_context(open(argv_bytes(fn), 'rb'))
-                         for fn in opt.sources)
-            else:
-                files = [stdin]
-
         write_opts = {'compression_level': opt.compress,
                       'max_pack_size': opt.max_pack_size,
                       'max_pack_objects': opt.max_pack_objects}
@@ -257,6 +218,42 @@ def main(argv):
 
         # repo creation must be last nontrivial command in each if clause above
         with nullcontext_if_not(dest):
+            if opt.git_ids:
+                # the input is actually a series of git object ids that we should retrieve
+                # and split.
+                # This is a bit messy, but basically it converts from a series of
+                # repo.cat() iterators into a series of file-type objects.
+                # It would be less ugly if either repo.cat() returned a file-like object
+                # (not very efficient), or split_to_shalist() expected an iterator instead
+                # of a file.
+                class IterToFile:
+                    def __init__(self, it):
+                        self.it = iter(it)
+                    def read(self, size_):
+                        return next(self.it, b'')
+                def read_ids():
+                    while 1:
+                        line = stdin.readline()
+                        if not line:
+                            break
+                        if line:
+                            line = line.strip()
+                        try:
+                            it = dest.cat(line.strip())[3] # skip the file info
+                        except KeyError as e:
+                            add_error('error: %s' % e)
+                            continue
+                        yield IterToFile(it)
+                files = read_ids()
+            else:
+                # the input either comes from a series of files or from stdin.
+                if opt.sources:
+                    # pylint: disable-next=consider-using-with
+                    files = (ctx.enter_context(open(argv_bytes(fn), 'rb'))
+                             for fn in opt.sources)
+                else:
+                    files = [stdin]
+
             try:
                 if dest:
                     split_cfg = hashsplit.configuration(dest.config_get)
