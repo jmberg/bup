@@ -8,7 +8,7 @@ bup-fuse - mount a bup repository as a filesystem
 
 # SYNOPSIS
 
-bup fuse [-d] [-f] [-o] \<mountpoint\>
+bup fuse [-r *host*:[*path*]] [-d] [-f] [-o] \<mountpoint\>
 
 # DESCRIPTION
 
@@ -26,6 +26,10 @@ When you're done accessing the mounted fuse filesystem, you
 should unmount it with `umount`(8).
 
 # OPTIONS
+
+-r, \--remote=[*user*@]*host*:[*path*], \--remote=URL
+:   mount the specified remote repository, by default via SSH.  See
+    `bup`(1) REMOTE OPTIONS for further information.
 
 -d, \--debug
 :   run in the foreground and print FUSE debug information
