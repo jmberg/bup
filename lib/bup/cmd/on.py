@@ -84,6 +84,8 @@ def save_or_split_server_config(argv, opt_parser):
         cd = CommandDenied
         if ref != b'refs/heads/' + opt.name:
             raise cd(f'unexpected {cmd} ref update: {pm(ref)}')
+        if new_oid is None:
+            raise cd(f'attempt to delete {pm(ref)}')
         _, prev_kind, _, it = repo.cat(hexlify(prev_oid))
         if it:
             for _ in it: pass
