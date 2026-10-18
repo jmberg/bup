@@ -854,8 +854,8 @@ def idxmerge(idxlist, final_progress=True):
 
 class LocalPackStore():
 
-    def __init__(self, *, allow_duplicates=False, on_pack_finish=None,
-                 repo_dir=None, run_midx=True):
+    def __init__(self, *, repo_dir, allow_duplicates=False,
+                 on_pack_finish=None, run_midx=True):
         """When allow_duplicates is false, (at some cost) avoid
         writing duplicates of objects that already in the repository.
 
@@ -868,7 +868,7 @@ class LocalPackStore():
         self._objcache = None
         self._on_pack_finish = on_pack_finish
         self._parentfd = None
-        self._repo_dir = repo_dir or repo()
+        self._repo_dir = repo_dir
         self._run_midx=run_midx
         self._tmpdir = None
 

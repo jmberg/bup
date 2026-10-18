@@ -23,8 +23,8 @@ def exc(*cmd): return buptest.exc(cmd)
 def exo(*cmd): return buptest.exo(cmd).out
 
 
-def local_writer():
-    return git.PackWriter(store=git.LocalPackStore())
+def local_writer(repo_dir):
+    return git.PackWriter(store=git.LocalPackStore(repo_dir=repo_dir))
 
 
 def test_git_version_detection():
@@ -119,12 +119,12 @@ def test_packs(tmpdir):
     git.init_repo(bupdir)
     git.verbose = 1
 
-    with local_writer() as w:
+    with local_writer(bupdir) as w:
         w.new_blob(os.urandom(100))
         w.new_blob(os.urandom(100))
         w.abort()
 
-    with local_writer() as w:
+    with local_writer(bupdir) as w:
         hashes = []
         nobj = 1000
         for i in range(nobj):
@@ -165,7 +165,7 @@ def test_pack_name_lookup(tmpdir):
     hashes = []
 
     for start in range(0,28,2):
-        with local_writer() as w:
+        with local_writer(bupdir) as w:
             for i in range(start, start+2):
                 hashes.append(w.new_blob(b'%d' % i))
             log('\n')
@@ -279,7 +279,7 @@ def test_new_commit(tmpdir):
     git.init_repo(bupdir)
     git.verbose = 1
 
-    with local_writer() as w:
+    with local_writer(bupdir) as w:
         tree = os.urandom(20)
         parent = os.urandom(20)
         author_name = b'Author'
