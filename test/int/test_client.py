@@ -24,8 +24,8 @@ s3 = randbytes(10000)
 IDX_PAT = b'/*.idx'
 
 
-def local_writer():
-    return git.PackWriter(store=git.LocalPackStore())
+def local_writer(repo_dir):
+    return git.PackWriter(store=git.LocalPackStore(repo_dir=repo_dir))
 
 def subproc_client(path, **kwargs):
     return client.Client(URL(scheme=b'ssh', path=path), **kwargs)
@@ -34,7 +34,7 @@ def subproc_client(path, **kwargs):
 def test_server_split_with_indexes(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
     git.init_repo(bupdir)
-    with local_writer() as lw:
+    with local_writer(bupdir) as lw:
         lw.new_blob(s1)
     with subproc_client(bupdir, create=True) as c, \
          c.new_packwriter() as rw:
@@ -47,9 +47,9 @@ def test_multiple_suggestions(tmpdir):
     environ[b'BUP_DIR'] = bupdir = tmpdir
     git.init_repo(bupdir)
 
-    with local_writer() as lw:
+    with local_writer(bupdir) as lw:
         lw.new_blob(s1)
-    with local_writer() as lw:
+    with local_writer(bupdir) as lw:
         lw.new_blob(s2)
     assert len(glob.glob(git.repo(b'objects/pack'+IDX_PAT))) == 2
 
@@ -127,7 +127,7 @@ def test_server_deduplicate_writes(deduplicate_mode, tmpdir):
     else:
         assert False
 
-    with local_writer() as lw:
+    with local_writer(bupdir) as lw:
         lw.new_blob(s1)
 
     with subproc_client(bupdir, create=True) as c, \
