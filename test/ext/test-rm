@@ -252,5 +252,21 @@ WVPASSEQ "$(rm-safe-cinfo 2 bup src)" "$(rm-safe-cinfo 3 bup-baseline src)"
 
 # FIXME: test that committer changes when rewriting, when appropriate
 
+
+WVSTART 'rm -r'
+WVPASS mkdir -p remote-src
+WVPASS echo remote-one > remote-src/file
+WVPASS bup index remote-src
+WVPASS bup save -n remote-rm remote-src
+WVPASS bup tick
+WVPASS echo remote-two > remote-src/file
+WVPASS bup index remote-src
+WVPASS bup save -n remote-rm remote-src
+WVPASS git show-ref --verify -q refs/heads/remote-rm
+WVPASSEQ $(git rev-list remote-rm | wc -l) 2
+WVPASS bup rm -r -:"$BUP_DIR" --unsafe /remote-rm/"$(bup ls /remote-rm | head -n 1)"
+WVPASSEQ $(git rev-list remote-rm | wc -l) 1
+WVPASS bup rm -r -:"$BUP_DIR" --unsafe /remote-rm
+WVFAIL git show-ref --verify -q refs/heads/remote-rm
 WVPASS cd "$top"
 WVPASS rm -rf "$tmpdir"
