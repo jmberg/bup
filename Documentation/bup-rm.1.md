@@ -8,7 +8,7 @@ bup-rm - remove references to archive content
 
 # SYNOPSIS
 
-bup rm [-#|\--verbose] <*branch*|*save*...>
+bup rm [-#|\--verbose] [-r *remote*] <*branch*|*save*...>
 
 # DESCRIPTION
 
@@ -41,6 +41,10 @@ archive in intentionally destructive ways.
 :   set the compression level to # (a value from 0-9, where
     9 is the highest and 0 is no compression).  The default
     is 6.  This applies to the rewritten branches (commits).
+
+-r, \--remote=[*user*@]*host*:[*path*], \--remote=URL
+:   operate on the specified remote repository, by default via SSH.
+    See `bup`(1) REMOTE OPTIONS for further information.
 
 # EXAMPLES
 
