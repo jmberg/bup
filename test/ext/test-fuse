@@ -29,7 +29,7 @@ if ! test -w /dev/fuse; then
 fi
 
 
-clean_up() { fusermount -uz mnt || true; }
+clean_up() { fusermount -uz mnt || true; fusermount -uz mnt-remote || true; }
 trap clean_up EXIT
 
 
@@ -100,6 +100,22 @@ WVPASSEQ "$result" "$savename1
 latest"
 
 WVPASS fusermount -uz mnt
+WVPASS wait "$fuse_pid"
+fuse_pid=''
+
+WVSTART "remote"
+WVPASS mkdir mnt-remote
+
+bup fuse -f -r -:"$BUP_DIR" mnt-remote &
+fuse_pid=$!
+while ! test -d mnt-remote/src; do
+    sleep 0.1
+done
+
+result=$(WVPASS cat mnt-remote/src/latest/foo) || exit $?
+WVPASSEQ "$result" "content"
+
+WVPASS fusermount -uz mnt-remote
 WVPASS wait "$fuse_pid"
 fuse_pid=''
 
