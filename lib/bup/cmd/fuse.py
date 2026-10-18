@@ -32,10 +32,10 @@ if len(fuse_ver) < 3 or fuse_ver_maj < 1:
     sys.exit(2)
 
 # pylint: disable=wrong-import-position
-from bup import options, git, vfs, xstat
+from bup import options, vfs, xstat
 from bup.compat import argv_bytes
 from bup.helpers import log
-from bup.repo import LocalRepo
+from bup.repo import main_repo_location, repo_for_location
 # pylint: enable=wrong-import-position
 
 
@@ -131,8 +131,9 @@ class BupFs(fuse.Fuse):
 
 
 optspec = """
-bup fuse [-d] [-f] <mountpoint>
+bup fuse [-r host:path] [-d] [-f] <mountpoint>
 --
+r,remote=     remote repository path
 f,foreground  run in foreground
 d,debug       run in the foreground and display FUSE debug information
 o,allow-other allow other users to access the filesystem
@@ -155,8 +156,9 @@ def main(argv):
     if len(extra) != 1:
         o.fatal('only one mount point argument expected')
 
-    git.check_repo_or_die()
-    with LocalRepo() as repo:
+    loc = main_repo_location(argv_bytes(opt.remote) if opt.remote else None,
+                             o.fatal)
+    with repo_for_location(loc) as repo:
         f = BupFs(repo=repo, verbose=opt.verbose, fake_metadata=(not opt.meta))
 
         # This is likely wrong, but the fuse module doesn't currently accept bytes
