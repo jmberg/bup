@@ -68,6 +68,13 @@ class RepoProtocol:
         """
 
     @notimplemented
+    def delete_ref(self, refname, oldval=None):
+        """
+        Delete the ref called 'refname'. If oldval is not None, atomically
+        check and delete it only if it currently matches that value.
+        """
+
+    @notimplemented
     def cat(self, ref):
         """Return (oidx, type, size, data_iterator).  When the ref is
         missing, all elements will be None.  For some repositories

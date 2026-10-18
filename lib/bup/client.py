@@ -529,6 +529,14 @@ class Client:
             self.conn.write(b'%s\n' % hexlify(newval))
             self.conn.write(b'%s\n' % (hexlify(oldval) if oldval else b''))
 
+    def delete_ref(self, refname, oldval):
+        with self._call('delete-ref', refname):
+            self.conn.write(b'%s\n' % (hexlify(oldval) if oldval else b''))
+            if self.conn.read(1) == b'\0':
+                msg = read_bvec(self.conn)
+                # XXX: this is aligned with LocalRepo(), but should we?
+                raise git.GitError(msg.decode('utf-8', errors='ignore'))
+
     def join(self, id):
         # Send 'cat' so we'll work fine with older versions
         with self._call('cat', re.sub(br'[\n\r]', b'_', id),

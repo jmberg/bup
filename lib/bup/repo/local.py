@@ -1,4 +1,5 @@
 
+from binascii import hexlify
 import os
 from os.path import realpath
 from functools import partial
@@ -108,6 +109,11 @@ class LocalRepo(RepoProtocol):
     def update_ref(self, refname, newval, oldval):
         self.finish_writing()
         return git.update_ref(refname, newval, oldval, repo_dir=self.repo_dir)
+
+    def delete_ref(self, refname, oldval=None):
+        self.finish_writing()
+        return git.delete_ref(refname, hexlify(oldval) if oldval else None,
+                              repo_dir=self.repo_dir)
 
     def cat(self, ref):
         return self._cp.get(ref)
