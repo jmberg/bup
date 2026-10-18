@@ -359,6 +359,21 @@ class Server:
         self.conn.ok()
 
     @_command
+    def delete_ref(self, refname):
+        oldval = unhexlify(self.conn.readline().strip()) or None
+        if self._vet_update_ref:
+            self._vet_update_ref(self.repo, refname, None, oldval)
+        self.init_session()
+        try:
+            self.repo.delete_ref(refname, oldval)
+        except git.GitError as e:
+            self.conn.write(b'\0')
+            write_bvec(self.conn, str(e).encode('utf-8', errors='ignore'))
+        else:
+            self.conn.write(b'\1')
+        self.conn.ok()
+
+    @_command
     def join(self, id):
         self.init_session()
         try:

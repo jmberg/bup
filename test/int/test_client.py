@@ -253,3 +253,32 @@ def test_refs_with_patterns(tmpdir):
         assert filtered == [b'refs/tags/v1']
         everything = sorted(n for n, _ in c.refs(limit_to_tags=True))
         assert everything == [b'refs/tags/v1', b'refs/tags/v2']
+
+
+def test_delete_ref(tmpdir):
+    environ[b'BUP_DIR'] = bupdir = tmpdir
+    environ[b'GIT_DIR'] = bupdir = tmpdir
+    git.init_repo(bupdir)
+    bup_exe = bup.path.exe()
+    src = os.path.join(tmpdir, b'src')
+    os.mkdir(src)
+    refname = b'refs/heads/delete-me'
+    def save(content):
+        with open(os.path.join(src, b'data'), 'wb') as f:
+            f.write(content)
+        ex((bup_exe, b'index', src))
+        ex((bup_exe, b'save', b'-n', b'delete-me', b'--strip', src))
+        return git.read_ref(refname)
+    oid1 = save(b'one\n')
+    oid2 = save(b'two\n')
+    assert oid1 != oid2
+    with subproc_client(bupdir, create=True) as c:
+        # A rejected delete is reported without ending the session.
+        with raises(git.GitError):
+            c.delete_ref(refname, oid1)
+        assert c.read_ref(refname) == oid2
+        c.delete_ref(refname, oid2)
+        assert c.read_ref(refname) is None
+        c.update_ref(refname, oid1, None)
+        c.delete_ref(refname, None)
+        assert c.read_ref(refname) is None
