@@ -29,6 +29,27 @@ jobs:
             make -j "$(($(nproc) + 1))" lint
             BUP_TEST_OTHER_BUP="$other_bup" make -j "$(($(nproc) + 1))" long-check
           EOF
+  ubuntu26:
+    name: ubuntu 26
+    runs-on: ubuntu-26.04
+    steps:
+      - run: |
+          # We have to run our tests outside the runner-owned
+          # /home/runner tree; otherwise test-help fails because man,
+          # via "bup help save", gets EACCES for Documentation/.  So
+          # we'll just clone into an independent /home/bup.
+          sudo -i gh_repo="$GITHUB_REPOSITORY" gh_ref="$GITHUB_REF_NAME" -- bash <<'EOF'
+            set -uexo pipefail
+            git clone --depth 10 -b "$gh_ref" "https://github.com/$gh_repo.git" /home/bup
+            cd /home/bup
+            dev/prep-for-debianish-build
+            apt-get -y install bup
+            other_bup="$(command -v bup)"
+            "$other_bup" version
+            dev/system-info
+            make -j "$(($(nproc) + 1))" lint
+            BUP_TEST_OTHER_BUP="$other_bup" make -j "$(($(nproc) + 1))" check
+          EOF
   ubuntu-ssh:
     name: ubuntu 22 check (ssh)
     runs-on: ubuntu-22.04

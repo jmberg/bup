@@ -35,15 +35,19 @@ debs=(acl
       pylint
       python3-"$xattr"
       python3-dev
-      python3-fuse
       python3-pytest
       python3-pytest-xdist
       python3-tornado
       rdiff-backup
       rsync)
 
+optional=(python3-fuse)
+
 set -x
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y "${debs[@]}"
+for opt in $optional ; do
+    apt-get install -y $opt || true
+done
