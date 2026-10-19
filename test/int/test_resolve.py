@@ -69,7 +69,7 @@ def _test_resolve(repo, tmpdir):
                                              oid=tip_tree_oid,
                                              coid=tip_oid)
     expected_latest_link = vfs.FakeLink(meta=vfs.default_symlink_mode,
-                                        target=save_time_str)
+                                        target=b'.commit-' + tip_oidx)
     expected_test_tag_item = expected_latest_item
 
     vfs.clear_cache()
@@ -128,7 +128,7 @@ def _test_resolve(repo, tmpdir):
                                              coid=tip_oid)
     expected = ((b'', vfs._root),
                 (b'test', test_revlist_w_meta),
-                (save_time_str, expected_latest_item_w_meta))
+                (b'.commit-' + tip_oidx, expected_latest_item_w_meta))
     wvpasseq(expected, res)
     _, latest_item = res[2]
     latest_content = frozenset(vfs.contents(repo, latest_item))
@@ -149,7 +149,7 @@ def _test_resolve(repo, tmpdir):
                                          oid=tip_tree[b'file'].oid)
     expected = ((b'', vfs._root),
                 (b'test', test_revlist_w_meta),
-                (save_time_str, expected_latest_item_w_meta),
+                (b'.commit-' + tip_oidx, expected_latest_item_w_meta),
                 (b'file', expected_file_item_w_meta))
     wvpasseq(expected, res)
 
@@ -158,7 +158,7 @@ def _test_resolve(repo, tmpdir):
     wvpasseq(4, len(res))
     expected = ((b'', vfs._root),
                 (b'test', test_revlist_w_meta),
-                (save_time_str, expected_latest_item_w_meta),
+                (b'.commit-' + tip_oidx, expected_latest_item_w_meta),
                 (b'not-there', None))
     wvpasseq(expected, res)
 
@@ -170,7 +170,7 @@ def _test_resolve(repo, tmpdir):
                                                 oid=bad_symlink_value.oid)
     expected = ((b'', vfs._root),
                 (b'test', test_revlist_w_meta),
-                (save_time_str, expected_latest_item_w_meta),
+                (b'.commit-' + tip_oidx, expected_latest_item_w_meta),
                 (b'bad-symlink', expected_bad_symlink_item_w_meta))
     wvpasseq(expected, res)
 
@@ -179,7 +179,7 @@ def _test_resolve(repo, tmpdir):
     wvpasseq(4, len(res))
     expected = ((b'', vfs._root),
                 (b'test', test_revlist_w_meta),
-                (save_time_str, expected_latest_item_w_meta),
+                (b'.commit-' + tip_oidx, expected_latest_item_w_meta),
                 (b'file', expected_file_item_w_meta))
     wvpasseq(expected, res)
 
@@ -191,7 +191,7 @@ def _test_resolve(repo, tmpdir):
                                                  oid=file_symlink_value.oid)
     expected = ((b'', vfs._root),
                 (b'test', test_revlist_w_meta),
-                (save_time_str, expected_latest_item_w_meta),
+                (b'.commit-' + tip_oidx, expected_latest_item_w_meta),
                 (b'file-symlink', expected_file_symlink_item_w_meta))
     wvpasseq(expected, res)
 
@@ -214,7 +214,7 @@ def _test_resolve(repo, tmpdir):
             resolve(path)
         except vfs.IOError as res_ex:
             wvpasseq(ENOTDIR, res_ex.errno)
-            wvpasseq([b'', b'test', save_time_str, b'file'],
+            wvpasseq([b'', b'test', b'.commit-' + tip_oidx, b'file'],
                      [name for name, item in res_ex.terminus])
 
     for path in (b'/test/latest/file-symlink/',
@@ -228,7 +228,7 @@ def _test_resolve(repo, tmpdir):
             resolve(path, follow=False)
         except vfs.IOError as res_ex:
             wvpasseq(ENOTDIR, res_ex.errno)
-            wvpasseq([b'', b'test', save_time_str, b'file'],
+            wvpasseq([b'', b'test', b'.commit-' + tip_oidx, b'file'],
                      [name for name, item in res_ex.terminus])
 
     vfs.clear_cache()
@@ -247,7 +247,7 @@ def _test_resolve(repo, tmpdir):
                                                  oid=dir_symlink_value.oid)
     expected = ((b'', vfs._root),
                 (b'test', test_revlist_w_meta),
-                (save_time_str, expected_latest_item_w_meta),
+                (b'.commit-' + tip_oidx, expected_latest_item_w_meta),
                 (b'dir-symlink', expected_dir_symlink_item_w_meta))
     wvpasseq(expected, res)
 
@@ -256,7 +256,7 @@ def _test_resolve(repo, tmpdir):
                                  meta=tree_dict(repo, dir_value.oid)[b'.'].meta)
     expected = ((b'', vfs._root),
                 (b'test', test_revlist_w_meta),
-                (save_time_str, expected_latest_item_w_meta),
+                (b'.commit-' + tip_oidx, expected_latest_item_w_meta),
                 (b'dir', expected_dir_item))
     def lresolve(*args, **keys):
         return resolve(*args, **dict(keys, follow=False))

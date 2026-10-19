@@ -3,7 +3,7 @@ from binascii import unhexlify
 from os import symlink
 from random import Random, randint
 from stat import S_IFDIR, S_IFLNK, S_IFREG, S_ISDIR, S_ISREG
-from time import localtime, strftime, tzset
+from time import tzset
 import os, sys
 
 import pytest
@@ -182,7 +182,7 @@ def test_misc(tmpdir):
         wvpasseq(42, vfs.item_size(repo, fake_item))
 
         _, fakelink_item = vfs.resolve(repo, b'/test/latest', follow=False)[-1]
-        wvpasseq(17, vfs.item_size(repo, fakelink_item))
+        wvpasseq(len(b'.commit-') + 40, vfs.item_size(repo, fakelink_item))
 
         run_augment_item_meta_tests(repo,
                                     b'/test/latest/file', 7,
@@ -304,7 +304,6 @@ def test_contents_with_mismatched_bupm_git_ordering(tmpdir):
     ex((bup_path, b'init'))
     ex((bup_path, b'index', b'-v', data_path))
     save_utc = 100000
-    save_name = strftime('%Y-%m-%d-%H%M%S', localtime(save_utc)).encode('ascii')
     ex((bup_path, b'save', b'-tvvn', b'test', b'-d', b'%d' % save_utc,
         b'--strip', data_path))
     with LocalRepo() as repo:
@@ -316,7 +315,7 @@ def test_contents_with_mismatched_bupm_git_ordering(tmpdir):
         tip_tree = tree_dict(repo, tip_tree_oid)
 
         name, item = vfs.resolve(repo, b'/test/latest')[2]
-        wvpasseq(save_name, name)
+        wvpasseq(b'.commit-' + tip_oidx, name)
         expected = frozenset((x.name, vfs.Item(oid=x.oid, meta=x.meta))
                              for x in (tip_tree[name]
                                        for name in (b'.', b'foo', b'foo.')))
