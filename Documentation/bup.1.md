@@ -35,6 +35,11 @@ Subcommands are described in separate man pages.  For example
     environment variable or using the default `~/.bup`
     location.
 
+# FURTHER INFORMATION
+
+`bup-config`(5)
+:   Explains the configuration settings used by bup.
+
 # PRIMARY COMMANDS
 
 `bup-init`(1)
