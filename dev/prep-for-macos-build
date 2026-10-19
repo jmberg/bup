@@ -20,4 +20,4 @@ brew link --force readline
 # "brew unlink readline" will undo this hack
 
 brew install python
-python3 -m pip install --break-system-packages --user pytest pytest-xdist
+python3 -m pip install --break-system-packages --user pytest pytest-xdist libnacl boto3
