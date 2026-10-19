@@ -863,6 +863,23 @@ def tree_items(repo, oid, tree_data, names, *, want_meta=True, repair=False):
         yield from _split_subtree_items(repo, depth, oid, entries, names, False)
 
 _save_name_rx = re.compile(br'^\d\d\d\d-\d\d-\d\d-\d{6}(-\d+)?$')
+_commit_name_rx = re.compile(br'^\.commit-([0-9a-f]{40})$')
+
+def _oid_from_commit_name(name):
+    m = _commit_name_rx.match(name)
+    return unhexlify(m.group(1)) if m else None
+
+def _is_special_revlist_item(name):
+    return (name in (b'.', b'latest')
+            or _save_name_rx.match(name) or _commit_name_rx.match(name))
+
+def _entry_for_name(entries, name):
+    coid = _oid_from_commit_name(name)
+    if coid is None:
+        return entries.get(name)
+    return next((item for key, item in entries.items()
+                 if _save_name_rx.match(key)
+                 and getattr(item, 'coid', None) == coid), None)
 
 def _reverse_suffix_duplicates(strs):
     """Yields the elements of strs, with any duplicate values
@@ -889,9 +906,11 @@ def _reverse_suffix_duplicates(strs):
         seen[name][0] -= 1
     del seen
 
+def _save_base_name(utc):
+    return strftime('%Y-%m-%d-%H%M%S', localtime(utc)).encode('ascii')
+
 def save_names_for_commit_utcs(utcs):
-    names = (strftime('%Y-%m-%d-%H%M%S', localtime(utc)).encode('ascii')
-             for utc in utcs)
+    names = (_save_base_name(utc) for utc in utcs)
     return _reverse_suffix_duplicates(names)
 
 def parse_rev(f):
@@ -932,11 +951,50 @@ def cache_commit(repo, oid, require_meta=True):
         tip = tip or (name, item)
         assert not name in entries
         entries[name] = item
-    entries[b'latest'] = FakeLink(meta=default_symlink_mode, target=tip[0])
+    entries[b'latest'] = FakeLink(meta=default_symlink_mode,
+                                  target=b'.commit-' + hexlify(tip[1].coid))
     revlist_key = b'rvl:' + tip[1].coid
     entries[_HAS_META_ENTRY] = require_meta
     cache_notice(revlist_key, entries, overwrite=True)
     return entries
+
+def _tip_entries(repo, oid, require_meta, names):
+    """Return only the entries needed for the 'latest' link.
+    Doesn't use rev_list().
+    The -N suffix isn't added to the item name, but the name
+    is pretty much invisible anyway.
+    """
+    oidx = hexlify(oid)
+    _, typ, _, data = repo.cat(oidx)
+    if typ != b'commit':
+        raise git.GitError(f'{oidx.decode("ascii")} is not a commit')
+    tip = git.parse_commit(b''.join(data))
+    name = _save_base_name(tip.author_sec)
+    entries = {
+        b'latest': FakeLink(meta=default_symlink_mode,
+                            target=b'.commit-' + oidx),
+        name: _item_for_rev((oidx, (unhexlify(tip.tree), tip.author_sec))),
+    }
+    if b'.' in names:
+        entries[b'.'] = _revlist_item_from_oid(repo, oid, require_meta)
+    return entries
+
+def _tip_entries_if_sufficient(repo, oid, require_meta, names):
+    """Return _tip_entries() if every name in names refers to the tip
+    (or is '.'/'latest'), otherwise None, meaning the full history is
+    needed.
+
+    """
+    if not names:
+        return None
+    wanted = frozenset(name for name in names if _is_special_revlist_item(name))
+    if not wanted:
+        return None
+    tip_name = b'.commit-' + hexlify(oid)
+    tip = _tip_entries(repo, oid, require_meta, wanted)
+    if all(name in tip or name == tip_name for name in wanted):
+        return tip
+    return None
 
 def revlist_items(repo, oid, names, require_meta=True):
     assert len(oid) == 20
@@ -954,22 +1012,23 @@ def revlist_items(repo, oid, names, require_meta=True):
     if entries and require_meta and not entries[_HAS_META_ENTRY]:
         entries = None
     if not entries:
-        entries = cache_commit(repo, oid, require_meta)
+        entries = _tip_entries_if_sufficient(repo, oid, require_meta, names)
+        if not entries:
+            entries = cache_commit(repo, oid, require_meta)
 
     if not names:
         for name in sorted((n for n in entries.keys() if n != _HAS_META_ENTRY)):
             yield name, entries[name]
         return
 
-    names = frozenset(name for name in names
-                      if _save_name_rx.match(name) or name in (b'.', b'latest'))
+    names = frozenset(name for name in names if _is_special_revlist_item(name))
 
     if b'.' in names:
         yield b'.', entries[b'.']
     for name in (n for n in names if n != b'.'):
         if name == _HAS_META_ENTRY:
             continue
-        commit = entries.get(name)
+        commit = _entry_for_name(entries, name)
         if commit:
             yield name, commit
 

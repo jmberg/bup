@@ -59,6 +59,7 @@ def test_ftp(tmpdir):
     save_utc = int(exo((b'git', b'show',
                         b'-s', b'--format=%at', b'src')).out.strip())
     save_name = strftime('%Y-%m-%d-%H%M%S', localtime(save_utc)).encode('ascii')
+    save_oidx = exo((b'git', b'rev-parse', b'src')).out.strip()
 
     wvstart('help')
     wvpasseq(b'Commands: ls cd pwd cat get mget help quit\n',
@@ -73,16 +74,16 @@ def test_ftp(tmpdir):
     wvpasseq(b'/src\n/\n', bup(b'ftp', input=jl(b'cd src', b'pwd',
                                                 b'cd ..', b'cd ..',
                                                 b'pwd')).out)
-    wvpasseq(b'/src/%s/dir\n' % save_name,
+    wvpasseq(b'/src/.commit-%s/dir\n' % save_oidx,
              bup(b'ftp', input=jl(b'cd src/latest/dir-symlink', b'pwd')).out)
-    wvpasseq(b'/src/%s/dir\n' % save_name,
+    wvpasseq(b'/src/.commit-%s/dir\n' % save_oidx,
              bup(b'ftp', input=jl(b'cd src latest dir-symlink', b'pwd')).out)
 
-    match_rx_grp(br'(error: path does not exist: /src/)[0-9-]+(/not-there\n/\n)',
+    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{40}(/not-there\n/\n)',
                  (b'error: path does not exist: /src/', b'/not-there\n/\n'),
                  bup(b'ftp', input=jl(b'cd src/latest/bad-symlink', b'pwd')).out)
 
-    match_rx_grp(br'(error: path does not exist: /src/)[0-9-]+(/not-there\n/\n)',
+    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{40}(/not-there\n/\n)',
                  (b'error: path does not exist: /src/', b'/not-there\n/\n'),
                  bup(b'ftp', input=jl(b'cd src/latest/not-there', b'pwd')).out)
 
@@ -109,11 +110,11 @@ def test_ftp(tmpdir):
         wvpasseq(b'excitement!\n', f.read())
     unlink(b'dest')
 
-    match_rx_grp(br'(error: path does not exist: /src/)[0-9-]+(/not-there\n)',
+    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{40}(/not-there\n)',
                  (b'error: path does not exist: /src/', b'/not-there\n'),
                  bup(b'ftp', input=jl(b'get src/latest/bad-symlink dest')).out)
 
-    match_rx_grp(br'(error: path does not exist: /src/)[0-9-]+(/not-there\n)',
+    match_rx_grp(br'(error: path does not exist: /src/)\.commit-[0-9a-f]{40}(/not-there\n)',
                  (b'error: path does not exist: /src/', b'/not-there\n'),
                  bup(b'ftp', input=jl(b'get src/latest/not-there dest')).out)
 
