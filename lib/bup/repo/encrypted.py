@@ -278,7 +278,7 @@ class EncryptedContainer:
             self.filetype = 3
             header_alg = 2
         elif kind == Kind.REFS:
-            self.filetype = 4
+            self.filetype = 3 if repo.old else 4
             header_alg = 2
         else:
             assert False, 'Invalid kind %d' % kind
@@ -477,6 +477,8 @@ class EncryptedRepo(ConfigRepo):
 
         if libnacl is None:
             raise Exception("Encrypted repositories require libnacl")
+
+        self.old = self.access_config_get(b'bup.storage') == b'AWS'
 
         repo_id = self.access_config_get(b'bup.repo.id')
         if repo_id is None:
