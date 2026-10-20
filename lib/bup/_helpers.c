@@ -641,6 +641,9 @@ struct idx {
     struct sha *cur;
     struct sha *end;
     uint32_t *cur_name;
+    uint32_t *cur_ofs;
+    unsigned char *cur_crc8;
+    int crc8_step;
     Py_ssize_t bytes;
     int name_base;
 };
@@ -650,9 +653,29 @@ struct idx256 {
     struct sha256 *cur;
     struct sha256 *end;
     uint32_t *cur_name;
+    uint32_t *cur_ofs;
+    unsigned char *cur_crc8;
+    int crc8_step;
     Py_ssize_t bytes;
     int name_base;
 };
+
+static uint32_t _ofs32_or_zero(const uint32_t *cur_ofs)
+{
+    uint32_t ofs;
+    if (cur_ofs == NULL)
+	return 0;
+    ofs = ntohl(*cur_ofs);
+    /* ignore git's 64-bit table, we never need it */
+    return (ofs & 0x80000000) ? 0 : ofs;
+}
+
+static unsigned char _crc8_or_zero(const unsigned char *cur_crc8)
+{
+    if (cur_crc8 == NULL)
+	return 0;
+    return *cur_crc8;
+}
 
 static void _fix_idx_order(struct idx **idxs, Py_ssize_t *last_i)
 {
@@ -706,7 +729,8 @@ static uint32_t _get_idx_i(struct idx *idx)
 static PyObject *merge_into(PyObject *self, PyObject *args)
 {
     struct sha *sha_ptr, *sha_start = NULL;
-    uint32_t *table_ptr, *name_ptr, *name_start;
+    uint32_t *table_ptr, *name_ptr, *name_start, *ofs_ptr = NULL;
+    unsigned char *crc8_ptr = NULL;
     int i;
     unsigned int total;
     uint32_t count, prefix;
@@ -714,9 +738,10 @@ static PyObject *merge_into(PyObject *self, PyObject *args)
 
     Py_buffer fmap;
     int bits;;
+    int write_offsets;
     PyObject *py_total, *ilist = NULL;
-    if (!PyArg_ParseTuple(args, wbuf_argf "iOO",
-                          &fmap, &bits, &py_total, &ilist))
+    if (!PyArg_ParseTuple(args, wbuf_argf "iOOp",
+                          &fmap, &bits, &py_total, &ilist, &write_offsets))
 	return NULL;
 
     PyObject *result = NULL;
@@ -739,13 +764,14 @@ static PyObject *merge_into(PyObject *self, PyObject *args)
 
     for (i = 0; i < num_i; i++)
     {
-	long len, sha_ofs, name_map_ofs;
+	long len, sha_ofs, name_map_ofs, ofs_map_ofs, crc8_map_ofs;
 	if (!(idxs[i] = checked_malloc(1, sizeof(struct idx))))
             goto clean_and_return;
 	PyObject *itup = PyList_GetItem(ilist, i);
-	if (!PyArg_ParseTuple(itup, wbuf_argf "llli",
+	if (!PyArg_ParseTuple(itup, wbuf_argf "lllilli",
                               &(idx_buf[i]), &len, &sha_ofs, &name_map_ofs,
-                              &idxs[i]->name_base))
+                              &idxs[i]->name_base, &ofs_map_ofs,
+                              &crc8_map_ofs, &idxs[i]->crc8_step))
 	    return NULL;
         idx_buf_init[i] = 1;
         idxs[i]->map = idx_buf[i].buf;
@@ -756,10 +782,23 @@ static PyObject *merge_into(PyObject *self, PyObject *args)
 	    idxs[i]->cur_name = (uint32_t *)&idxs[i]->map[name_map_ofs];
 	else
 	    idxs[i]->cur_name = NULL;
+	if (ofs_map_ofs)
+	    idxs[i]->cur_ofs = (uint32_t *)&idxs[i]->map[ofs_map_ofs];
+	else
+	    idxs[i]->cur_ofs = NULL;
+	if (crc8_map_ofs)
+	    idxs[i]->cur_crc8 = &idxs[i]->map[crc8_map_ofs];
+	else
+	    idxs[i]->cur_crc8 = NULL;
     }
     table_ptr = (uint32_t *) &((unsigned char *) fmap.buf)[MIDX4_HEADERLEN];
     sha_start = sha_ptr = (struct sha *)&table_ptr[1<<bits];
     name_start = name_ptr = (uint32_t *)&sha_ptr[total];
+    if (write_offsets)
+    {
+	ofs_ptr = (uint32_t *)&name_start[total];
+	crc8_ptr = (unsigned char *)&ofs_ptr[total];
+    }
 
     Py_ssize_t last_i = num_i - 1;
     count = 0;
@@ -777,9 +816,17 @@ static PyObject *merge_into(PyObject *self, PyObject *args)
 	    table_ptr[prefix++] = htonl(count);
 	memcpy(sha_ptr++, idx->cur, sizeof(struct sha));
 	*name_ptr++ = htonl(_get_idx_i(idx));
+	if (ofs_ptr)
+	    *ofs_ptr++ = htonl(_ofs32_or_zero(idx->cur_ofs));
+	if (crc8_ptr)
+	    *crc8_ptr++ = _crc8_or_zero(idx->cur_crc8);
 	++idx->cur;
 	if (idx->cur_name != NULL)
 	    ++idx->cur_name;
+	if (idx->cur_ofs != NULL)
+	    ++idx->cur_ofs;
+	if (idx->cur_crc8 != NULL)
+	    idx->cur_crc8 += idx->crc8_step;
 	_fix_idx_order(idxs, &last_i);
 	++count;
     }
@@ -861,16 +908,18 @@ static uint32_t _get_idx_i_256(struct idx256 *idx)
 static PyObject *merge_into_sha256(PyObject *self, PyObject *args)
 {
     struct sha256 *sha_ptr, *sha_start = NULL;
-    uint32_t *table_ptr, *name_ptr, *name_start;
+    uint32_t *table_ptr, *name_ptr, *name_start, *ofs_ptr = NULL;
+    unsigned char *crc8_ptr = NULL;
     int i;
     unsigned int total;
     uint32_t count, prefix;
 
     Py_buffer fmap;
     int bits;
+    int write_offsets;
     PyObject *py_total, *ilist = NULL;
-    if (!PyArg_ParseTuple(args, wbuf_argf "iOO",
-                          &fmap, &bits, &py_total, &ilist))
+    if (!PyArg_ParseTuple(args, wbuf_argf "iOOp",
+                          &fmap, &bits, &py_total, &ilist, &write_offsets))
 	return NULL;
 
     PyObject *result = NULL;
@@ -893,13 +942,14 @@ static PyObject *merge_into_sha256(PyObject *self, PyObject *args)
 
     for (i = 0; i < num_i; i++)
     {
-	long len, sha_ofs, name_map_ofs;
+	long len, sha_ofs, name_map_ofs, ofs_map_ofs, crc8_map_ofs;
 	if (!(idxs[i] = checked_malloc(1, sizeof(struct idx256))))
             goto clean_and_return;
 	PyObject *itup = PyList_GetItem(ilist, i);
-	if (!PyArg_ParseTuple(itup, wbuf_argf "llli",
+	if (!PyArg_ParseTuple(itup, wbuf_argf "lllilli",
                               &(idx_buf[i]), &len, &sha_ofs, &name_map_ofs,
-                              &idxs[i]->name_base))
+                              &idxs[i]->name_base, &ofs_map_ofs,
+                              &crc8_map_ofs, &idxs[i]->crc8_step))
 	    return NULL;
         idx_buf_init[i] = 1;
         idxs[i]->map = idx_buf[i].buf;
@@ -910,10 +960,23 @@ static PyObject *merge_into_sha256(PyObject *self, PyObject *args)
 	    idxs[i]->cur_name = (uint32_t *)&idxs[i]->map[name_map_ofs];
 	else
 	    idxs[i]->cur_name = NULL;
+	if (ofs_map_ofs)
+	    idxs[i]->cur_ofs = (uint32_t *)&idxs[i]->map[ofs_map_ofs];
+	else
+	    idxs[i]->cur_ofs = NULL;
+	if (crc8_map_ofs)
+	    idxs[i]->cur_crc8 = &idxs[i]->map[crc8_map_ofs];
+	else
+	    idxs[i]->cur_crc8 = NULL;
     }
     table_ptr = (uint32_t *) &((unsigned char *) fmap.buf)[MIDX4_HEADERLEN];
     sha_start = sha_ptr = (struct sha256 *)&table_ptr[1<<bits];
     name_start = name_ptr = (uint32_t *)&sha_ptr[total];
+    if (write_offsets)
+    {
+	ofs_ptr = (uint32_t *)&name_start[total];
+	crc8_ptr = (unsigned char *)&ofs_ptr[total];
+    }
 
     Py_ssize_t last_i = num_i - 1;
     count = 0;
@@ -931,9 +994,17 @@ static PyObject *merge_into_sha256(PyObject *self, PyObject *args)
 	    table_ptr[prefix++] = htonl(count);
 	memcpy(sha_ptr++, idx->cur, sizeof(struct sha256));
 	*name_ptr++ = htonl(_get_idx_i_256(idx));
+	if (ofs_ptr)
+	    *ofs_ptr++ = htonl(_ofs32_or_zero(idx->cur_ofs));
+	if (crc8_ptr)
+	    *crc8_ptr++ = _crc8_or_zero(idx->cur_crc8);
 	++idx->cur;
 	if (idx->cur_name != NULL)
 	    ++idx->cur_name;
+	if (idx->cur_ofs != NULL)
+	    ++idx->cur_ofs;
+	if (idx->cur_crc8 != NULL)
+	    idx->cur_crc8 += idx->crc8_step;
 	_fix_idx_order_256(idxs, &last_i);
 	++count;
     }
