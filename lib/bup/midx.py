@@ -10,6 +10,10 @@ from bup.io import path_msg
 MIDX_HEADER = b'MIDX'
 MIDX_VERSION = 4
 MIDX_VERSION_256 = 4 | 256
+MIDX_VERSION_OFFSETS = 5
+MIDX_VERSION_OFFSETS_256 = 5 | 256
+ACCEPTED_VERSIONS = (MIDX_VERSION, MIDX_VERSION_256,
+                     MIDX_VERSION_OFFSETS, MIDX_VERSION_OFFSETS_256)
 
 extract_bits = _helpers.extract_bits
 _total_searches = 0
@@ -31,8 +35,8 @@ class PackMidx:
     via open_midx(), not PackMidx().  Multiple index (.midx) files
     constitute a wrapper around index (.idx) files and make it
     possible for bup to expand Git's indexing capabilities to vast
-    amounts of files.  This class only supports the current
-    MIDX_VERSION/_256.
+    amounts of files.  Supports the ACCEPTED_VERSIONS.  Version 5
+    (including 5 | 256) has offset/CRC tables for encrypted repos.
 
     """
     def __init__(self, filename, mmap, *, _internal=False):
@@ -43,8 +47,9 @@ class PackMidx:
             assert _internal, 'call open_midx()'
             assert _midx_header(mmap) == MIDX_HEADER
             version = _midx_version(mmap)
-            assert version in (MIDX_VERSION, MIDX_VERSION_256)
-            self.hashsize = 32 if version == MIDX_VERSION_256 else 20
+            assert version in ACCEPTED_VERSIONS
+            self.hashsize = 32 if version & 256 else 20
+            self.has_offsets = (version & ~256) == MIDX_VERSION_OFFSETS
             self.name = filename
             self.bits = _helpers.firstword(self.map[8:12])
             self.entries = 2**self.bits
@@ -55,7 +60,17 @@ class PackMidx:
             # sha table len is self.nsha * self.hashsize
             self.which_ofs = self.sha_ofs + self.hashsize * self.nsha
             # which len is self.nsha * 4
-            self.idxnames = self.map[self.which_ofs + 4 * self.nsha:].split(b'\0')
+            self.offsets_ofs = None
+            self.crc8_ofs = None
+            names_ofs = self.which_ofs + 4 * self.nsha
+            if self.has_offsets:
+                # offsets len is self.nsha * 4
+                self.offsets_ofs = names_ofs
+                names_ofs += 4 * self.nsha
+                # crc8s len is self.nsha
+                self.crc8_ofs = names_ofs
+                names_ofs += self.nsha
+            self.idxnames = self.map[names_ofs:].split(b'\0')
             idxdir = os.path.dirname(filename)
             missing = []
             for name in self.idxnames:
@@ -101,14 +116,36 @@ class PackMidx:
     def _get_idxname(self, i):
         return self.idxnames[self._get_idx_i(i)]
 
+    def _get_ofs(self, i):
+        """Return the pack offset of entry i, or None if unknown."""
+        if i >= self.nsha or i < 0:
+            raise IndexError('invalid midx index %d' % i)
+        if self.offsets_ofs is None:
+            return None
+        ofs = struct.unpack_from('!I', self.map,
+                                 offset=self.offsets_ofs + i * 4)[0]
+        return ofs or None
+
+    def _get_crc8(self, i):
+        """Return the low byte of entry i's CRC field (the object type
+        in encrypted repos), or None if unknown.
+        """
+        if i >= self.nsha or i < 0:
+            raise IndexError('invalid midx index %d' % i)
+        if self.crc8_ofs is None:
+            return None
+        return self.map[self.crc8_ofs + i] or None
+
     def __del__(self):
         assert self.closed
 
     def exists(self, hash, want_source=False, want_offset=False,
                want_crc=False):
-        """Return nonempty if the object exists in the index files."""
-        assert not want_offset, 'returning offset is not supported in midx'
-        assert not want_crc, 'returning CRC is not supported in midx'
+        """Return nonempty if the object exists in the index files.
+
+        An midx CRC is only the low byte of the index CRC field (the
+        object type in encrypted repos), and is None when unknown.
+        """
         global _total_searches, _total_steps
         _total_searches += 1
         want = hash
@@ -138,8 +175,11 @@ class PackMidx:
                 end = mid
                 endv = _helpers.firstword(v)
             else: # got it!
-                if want_source:
-                    return ObjectLocation(self._get_idxname(mid), None, None)
+                if want_source or want_offset or want_crc:
+                    pack = self._get_idxname(mid) if want_source else None
+                    ofs = self._get_ofs(mid) if want_offset else None
+                    crc = self._get_crc8(mid) if want_crc else None
+                    return ObjectLocation(pack, ofs, crc)
                 return OBJECT_EXISTS
         return None
 
@@ -169,7 +209,7 @@ def open_midx(path, *, ignore_missing=True):
             log(f'Warning: skipping: invalid MIDX header in {pathm}\n')
             return None
         ver = _midx_version(mmap)
-        if ver in (MIDX_VERSION, MIDX_VERSION_256):
+        if ver in ACCEPTED_VERSIONS:
             if not ignore_missing:
                 contexts.pop_all()
                 return PackMidx(path, mmap, _internal=True)

@@ -8,7 +8,7 @@ bup-midx - create a multi-index (`.midx`) file from several `.idx` files
 
 # SYNOPSIS
 
-bup midx [-o *outfile*] \<-a|-f|*idxnames*...\>
+bup midx [--offsets] [-o *outfile*] \<-a|-f|*idxnames*...\>
 
 # DESCRIPTION
 
@@ -52,6 +52,13 @@ commands.
     its contained `.idx` files exist inside the `.midx`.  May
     be useful for debugging.
 
+\--offsets
+:   include each object's offset/lower crc byte within its
+    `.pack` file in the `.midx`.  This creates midx version 5,
+    which only new bup versions can read.  Normal repositories
+    don't need this since git handles read access, but it's
+    used for encrypted repositories.
+
 
 # EXAMPLES
     $ bup midx -a
@@ -85,6 +92,10 @@ given object id would be in (if it exists) with a single
 lookup.  Thus, typical searches will only need to swap in
 two pages: one for the fanout table, and one for the object
 id.
+
+Version 5 midx files (see `--offsets`) also store the offset
+in the pack and lower byte of the CRC for each object, for
+faster access inside the pack files for encrypted repositories.
 
 midx files are most useful when creating new backups, since
 searching for a nonexistent object in the repository

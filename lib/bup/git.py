@@ -703,11 +703,12 @@ class PackIdxList:
             get_ofs = want_offset
             get_crc = want_crc
             if isinstance(p, midx.PackMidx) and (want_offset or want_crc):
-                # midx can't return offset or CRC, get the source pack
-                # and look them up in its idx instead
+                # midx reports unknown offsets and CRC bytes as
+                # None, so get the source pack and look them up in
+                # its idx instead when needed
                 get_src = True
-                get_ofs = False
-                get_crc = False
+                get_ofs = want_offset
+                get_crc = want_crc
             _total_searches -= 1  # will be incremented by sub-pack
             ret = p.exists(hash, want_source=get_src, want_offset=get_ofs,
                            want_crc=get_crc)

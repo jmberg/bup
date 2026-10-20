@@ -33,6 +33,7 @@ check      validate contents of the given midx files (with -a, all midx files)
 max-files= maximum number of idx files to open at once [-1]
 d,dir=     directory containing idx/midx files
 sha256     the idx files are sha256 format (only with --dir)
+offsets    include object offsets in the midx
 """
 
 
@@ -104,6 +105,24 @@ def check_midx(name, hashsize):
                                   % (path_msg(nicename),
                                      git.shorten_hash(subname).decode('ascii'),
                                      e.hex()))
+                    if isinstance(ix, midx.PackMidx) and ix.has_offsets:
+                        mloc = ix.exists(e, want_offset=True, want_crc=True)
+                        sloc = sub.exists(e, want_offset=True, want_crc=True)
+                        if mloc is not None and sloc is not None \
+                           and mloc.offset is not None \
+                           and mloc.offset != sloc.offset:
+                            add_error("%s: %s: %s offset %s in midx, %s in idx"
+                                      % (path_msg(nicename),
+                                         git.shorten_hash(subname).decode('ascii'),
+                                         e.hex(), mloc.offset, sloc.offset))
+                        if mloc is not None and sloc is not None \
+                           and mloc.crc is not None \
+                           and sloc.crc is not None \
+                           and mloc.crc != sloc.crc & 0xff:
+                            add_error("%s: %s: %s crc byte %s in midx, %s in idx"
+                                      % (path_msg(nicename),
+                                         git.shorten_hash(subname).decode('ascii'),
+                                         e.hex(), mloc.crc, sloc.crc & 0xff))
         prev = None
         for ecount,e in enumerate(ix):
             if not (ecount % 1234):
@@ -114,9 +133,52 @@ def check_midx(name, hashsize):
             prev = e
 
 
+def _open_inputs(name, hashsize, *, expand, rm_broken):
+    """Return the open idx objects to merge.  With 'expand',
+    an midx without offsets (v4) is ignored and the idx files
+    are returned instead, to get offsets/CRCs.
+    """
+    if name.endswith(b'.idx'):
+        yield git.open_idx(name, hashsize)
+        return
+    ix = _maybe_open_midx(name, hashsize, rm_broken=rm_broken)
+    if not ix or not expand or ix.has_offsets:
+        if ix:
+            yield ix
+        return
+    idxnames = ix.idxnames
+    ix.close()
+    dirname = os.path.dirname(name)
+    for n in idxnames:
+        yield git.open_idx(os.path.join(dirname, n), hashsize)
+
+
+def _offsets_ofs(ix):
+    """Return the position of ix's offset table in its map, or 0 if
+    there is none (idx v1 doesn't have one)
+    """
+    if isinstance(ix, midx.PackMidx):
+        return ix.offsets_ofs or 0
+    if isinstance(ix, git.PackIdxV2):
+        return ix.ofstable_ofs
+    return 0
+
+
+def _crc8_src(ix):
+    """Return (ofs, step) locating the low byte of each entry's CRC
+    field in ix's map, or (0, 0) if there is none (idx v1).
+    """
+    if isinstance(ix, midx.PackMidx):
+        return (ix.crc8_ofs or 0, 1)
+    if isinstance(ix, git.PackIdxV2):
+        # big endian storage, so + 3
+        return (ix.crctable_ofs + 3, 4)
+    return (0, 0)
+
+
 _first = None
 def _do_midx(outdir, outfilename, infilenames, prefixstr,
-             hashsize, auto=False, force=False):
+             hashsize, auto=False, force=False, offsets=False):
     global _first
     assert hashsize in (20, 32)
     if not outfilename:
@@ -138,26 +200,25 @@ def _do_midx(outdir, outfilename, infilenames, prefixstr,
     allfilenames = []
     with ExitStack() as contexts:
         for name in infilenames:
-            if name.endswith(b'.idx'):
-                ix = git.open_idx(name, hashsize)
-            else:
-                ix = _maybe_open_midx(name, hashsize,
-                                      rm_broken=auto or force)
-            if not ix:
-                continue
-            contexts.enter_context(ix)
-            inp.append((
-                ix.map,
-                len(ix),
-                ix.sha_ofs,
-                isinstance(ix, midx.PackMidx) and ix.which_ofs or 0,
-                len(allfilenames),
-                ix.name,
-            ))
-            for n in ix.idxnames:
-                # FIXME: double-check wrt outfilename above
-                allfilenames.append(os.path.basename(n))
-            total += len(ix)
+            for ix in _open_inputs(name, hashsize, expand=offsets,
+                                   rm_broken=auto or force):
+                contexts.enter_context(ix)
+                crc8_ofs, crc8_step = _crc8_src(ix)
+                inp.append((
+                    ix.map,
+                    len(ix),
+                    ix.sha_ofs,
+                    isinstance(ix, midx.PackMidx) and ix.which_ofs or 0,
+                    len(allfilenames),
+                    _offsets_ofs(ix),
+                    crc8_ofs,
+                    crc8_step,
+                    ix.name,
+                ))
+                for n in ix.idxnames:
+                    # FIXME: double-check wrt outfilename above
+                    allfilenames.append(os.path.basename(n))
+                total += len(ix)
         inp.sort(reverse=True, key=lambda x: x[0][x[2] : x[2] + hashsize])
 
         if not _first: _first = outdir
@@ -179,16 +240,23 @@ def _do_midx(outdir, outfilename, infilenames, prefixstr,
         unlink(outfilename)
         with atomically_replaced_file(outfilename, 'w+b') as f:
             f.write(b'MIDX')
-            ver = midx.MIDX_VERSION_256 if hashsize == 32 else midx.MIDX_VERSION
+            if offsets:
+                if hashsize == 32:
+                    ver = midx.MIDX_VERSION_OFFSETS_256
+                else:
+                    ver = midx.MIDX_VERSION_OFFSETS
+            else:
+                ver = midx.MIDX_VERSION_256 if hashsize == 32 else midx.MIDX_VERSION
             f.write(struct.pack('!II', ver, bits))
             assert(f.tell() == 12)
 
-            f.truncate(12 + 4 * entries + hashsize * total + 4 * total)
+            extra_size = 5 * total if offsets else 0
+            f.truncate(12 + 4 * entries + hashsize * total + 4 * total + extra_size)
             f.flush()
             fsync(f.fileno())
 
             with mmap_readwrite(f, close=False) as fmap:
-                merge_into(fmap, bits, total, inp)
+                merge_into(fmap, bits, total, inp, bool(offsets))
             f.seek(0, os.SEEK_END)
             f.write(b'\0'.join(allfilenames))
             f.flush()
@@ -209,15 +277,15 @@ def _do_midx(outdir, outfilename, infilenames, prefixstr,
 
 
 def do_midx(outdir, outfilename, infilenames, prefixstr, prout, hashsize,
-            auto=False, force=False, print_names=False):
+            auto=False, force=False, print_names=False, offsets=False):
     rv = _do_midx(outdir, outfilename, infilenames, prefixstr,
-                  hashsize, auto=auto, force=force)
+                  hashsize, auto=auto, force=force, offsets=offsets)
     if rv and print_names:
         prout.write(rv[1] + b'\n')
 
 
 def do_midx_dir(path, outfilename, prout, hashsize, auto=False, force=False,
-                max_files=-1, print_names=False):
+                max_files=-1, print_names=False, offsets=False):
     already = {}
     sizes = {}
     if force and not auto:
@@ -273,7 +341,8 @@ def do_midx_dir(path, outfilename, prout, hashsize, auto=False, force=False,
         part1 = [name for sz,name in all_idxes[:len(all_idxes)-desired_lwm+1]]
         part2 = all_idxes[len(all_idxes)-desired_lwm+1:]
         all_idxes = list(do_midx_group(path, outfilename, part1, hashsize,
-                                       auto=auto, force=force, max_files=max_files)) \
+                                       auto=auto, force=force, max_files=max_files,
+                                       offsets=offsets)) \
                                  + part2
         if len(all_idxes) > desired_hwm:
             debug1('\nStill too many indexes (%d > %d).  Merging again.\n'
@@ -286,14 +355,14 @@ def do_midx_dir(path, outfilename, prout, hashsize, auto=False, force=False,
 
 
 def do_midx_group(outdir, outfilename, infiles, hashsize,
-                  auto=False, force=False, max_files=-1):
+                  auto=False, force=False, max_files=-1, offsets=False):
     groups = list(_group(infiles, max_files))
     gprefix = ''
     for n,sublist in enumerate(groups):
         if len(groups) != 1:
             gprefix = 'Group %d: ' % (n+1)
         rv = _do_midx(outdir, outfilename, sublist, gprefix,
-                      hashsize, auto=auto, force=force)
+                      hashsize, auto=auto, force=force, offsets=offsets)
         if rv:
             yield rv
 
@@ -346,12 +415,12 @@ def main(argv):
             do_midx(path, opt.output, extra, b'',
                     byte_stream(sys.stdout), hashsize,
                     auto=opt.auto, force=opt.force,
-                    print_names=opt.print)
+                    print_names=opt.print, offsets=opt.offsets)
         elif opt.auto or opt.force:
             sys.stdout.flush()
             debug1('midx: scanning %s\n' % path_msg(path))
             do_midx_dir(path, opt.output, byte_stream(sys.stdout), hashsize,
                         auto=opt.auto, force=opt.force,
-                        max_files=opt.max_files)
+                        max_files=opt.max_files, offsets=opt.offsets)
         else:
             o.fatal("you must use -f or -a or provide input filenames")
