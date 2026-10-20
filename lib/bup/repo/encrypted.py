@@ -484,7 +484,7 @@ class EncryptedRepo(ConfigRepo):
         if repo_id is None:
             raise Exception("encrypted repositories need 'bup.repo.id' in the access config")
         self.cachedir = os.path.join(index_cache(), b'encrypted--' + repo_id)
-        mkdirp(self.cachedir)
+        mkdirp(os.path.join(self.cachedir, b'objs'))
         self.cfgfile = os.path.join(self.cachedir, b'repo.conf')
         self._config_loaded = False
 
@@ -856,12 +856,38 @@ class EncryptedRepo(ConfigRepo):
         # return False so we don't have to implement resolve()
         return False
 
+    def _write_object_cache(self, oidx, data):
+        obj_cache_dir = os.path.join(self.cachedir, b'objs', oidx[:2])
+        mkdirp(obj_cache_dir)
+        with open(os.path.join(obj_cache_dir, oidx[2:]), 'wb') as f:
+            f.write(data)
+
+    def _cache_object(self, oidx, tp=None, data=None, recurse=False):
+        if data is None:
+            _, tp, _, next_data = self.cat(oidx)
+            data = b''.join(next_data)
+
+        self._write_object_cache(oidx, data)
+
+        if tp == b'commit':
+            ci = git.parse_commit(data)
+            self._cache_object(ci.tree)
+        elif tp == b'tree':
+            for _, entry_name, entry_oid in git.tree_entries(data, self.hashsize):
+                if entry_name == b'.bupm' or recurse:
+                    self._cache_object(hexlify(entry_oid), recurse=True)
+                    if not recurse:
+                        break
+
     def cat(self, ref):
         """Return (oidx, type, size, data_iterator), or all Nones if the ref
         does not exist.
 
         """
         self._synchronize_idxes()
+
+        def _data_iter(d):
+            yield d
 
         if len(ref) == 2 * self.hashsize and all(x in b'0123456789abcdefABCDEF' for x in ref):
             oid = unhexlify(ref)
@@ -879,6 +905,15 @@ class EncryptedRepo(ConfigRepo):
         where = res.pack
         offs = res.offset
         objtype = git._typermap[res.crc]
+
+        # try cache
+        obj_cache_dir = os.path.join(self.cachedir, b'objs', oidx[:2])
+        cachefile = os.path.join(obj_cache_dir, oidx[2:])
+        if os.path.exists(cachefile):
+            with open(cachefile, 'rb') as f:
+                data = f.read()
+            return oidx, objtype, len(data), _data_iter(data)
+
         assert where.startswith(b'pack-') and where.endswith(b'.idx')
         where = where.replace(b'.idx', b'.encpack')
         # Kind.DATA / Kind.METADATA are equivalent here
@@ -886,8 +921,14 @@ class EncryptedRepo(ConfigRepo):
         enc_type, data = ec.read(offs)
         assert enc_type == res.crc, f"corrupt idx/pack for {oidx}"
 
-        def _data_iter(d):
-            yield d
+        if objtype == b'commit':
+            try:
+                self._cache_object(oidx, b'commit', data)
+            # pylint: disable-next=bare-except
+            except:
+                # caching failed, oh well
+                pass
+
         return oidx, objtype, len(data), _data_iter(data)
 
     def join(self, ref):
