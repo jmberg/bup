@@ -211,10 +211,13 @@ def repo_rel(path):
     return shorten_hash(path)
 
 
-def auto_midx(objdir, hashsize):
+def auto_midx(objdir, hashsize, *, offsets=False):
     with suspend_progress():
         sha256_args = [b'--sha256'] if hashsize == 32 else []
-        args = [bup.path.exe(), b'midx', b'--auto', b'--dir', objdir] + sha256_args
+        args = [bup.path.exe(), b'midx', b'--auto', b'--dir', objdir]
+        if offsets:
+            args += [b'--offsets']
+        args += sha256_args
         try:
             rv = subprocess.call(args, stdout=DEVNULL)
         except OSError as e:

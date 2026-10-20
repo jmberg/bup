@@ -586,7 +586,7 @@ class EncryptedRepo(ConfigRepo):
             os.unlink(os.path.join(self.cachedir, local_idx))
 
         if changes:
-            git.auto_midx(self.cachedir, self.hashsize)
+            git.auto_midx(self.cachedir, self.hashsize, offsets=True)
 
         self.idxlist = git.PackIdxList(self.cachedir, self.hashsize)
 
@@ -992,7 +992,7 @@ class EncryptedRepo(ConfigRepo):
 
         # recreate bloom/midx if needed
         self.idxlist.close_temps()
-        git.auto_midx(self.cachedir, self.hashsize)
+        git.auto_midx(self.cachedir, self.hashsize, offsets=True)
         self.idxlist.refresh()
 
         # and clear all the object lists in memory,
@@ -1019,7 +1019,7 @@ class EncryptedRepo(ConfigRepo):
             self.data_writer = None
             have_written = True
         if run_midx and have_written:
-            git.auto_midx(self.cachedir, self.hashsize)
+            git.auto_midx(self.cachedir, self.hashsize, offsets=True)
 
     def abort_writing(self):
         if self.meta_writer != self.data_writer and self.meta_writer is not None:
