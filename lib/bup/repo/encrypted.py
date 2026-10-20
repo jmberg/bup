@@ -710,7 +710,19 @@ class EncryptedRepo(ConfigRepo):
             reader = self._load_config()
             if reader:
                 reader.close()
-        return git.git_config_get(self.cfgfile, name, opttype=opttype)
+        val = git.git_config_get(self.cfgfile, name, opttype=opttype)
+        if val is None:
+            keymap = {
+                b'bup.repo.id': b'bup.repo-id',
+                b'bup.split.trees': b'bup.treesplit',
+                b'bup.split.files': b'bup.blobbits',
+            }
+            if name := keymap.get(name, None):
+                val = git.git_config_get(self.cfgfile, name, opttype=opttype)
+                if name == b'bup.blobbits' and val:
+                    return b'legacy:' + val
+                return val
+        return val
 
     def config_list(self, *, values=False):
         if not self._config_loaded:
