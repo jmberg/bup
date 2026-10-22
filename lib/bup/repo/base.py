@@ -71,14 +71,16 @@ class RepoProtocol:
             b'pack.compression': 'int',
             b'pack.packsizelimit': 'int',
             b'core.compression': 'int',
-            b'bup.split.trees': 'bool',
         }
 
         if value is None:
-            # allowed to unset all of the above and bup.split.files
+            # allowed to unset all of the above, bup.split.files and bup.split.trees
             valid = True
         elif name.lower() == b'bup.split.files':
             valid = re.fullmatch(hashsplit._method_rx, value) is not None
+        elif name.lower() == b'bup.split.trees':
+            valid = (re.fullmatch(hashsplit._method_rx, value) is not None
+                     or git.git_config_check(name, value, 'bool'))
         else:
             valid = git.git_config_check(name, value,
                                          _config_opt_types.get(name.lower()))

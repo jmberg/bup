@@ -78,6 +78,7 @@ def test_config_rejects_invalid_value(tmpdir, access):
 
     for name, value in ((b'pack.compression', b'asdf'),
                         (b'bup.split.trees', b'maybe'),
+                        (b'bup.split.trees', b'bogus:14'),
                         (b'bup.split.files', b'bogus')):
         cp = config(repo, access, name, value, check=False)
         assert cp.rc
@@ -91,6 +92,19 @@ def test_config_rejects_invalid_value(tmpdir, access):
     config(repo, access, b'bup.split.files', b'legacy:13')
     assert config(repo, access, b'bup.split.files').out \
         == b'bup.split.files=legacy:13\n'
+
+
+@pytest.mark.parametrize('access', ['local', 'remote'])
+def test_config_split_trees_method(tmpdir, access):
+    repo = make_repo(tmpdir)
+
+    config(repo, access, b'bup.split.trees', b'legacy:14')
+    assert config(repo, access, b'bup.split.trees').out \
+        == b'bup.split.trees=legacy:14\n'
+
+    config(repo, access, b'bup.split.trees', b'true')
+    assert config(repo, access, b'--type=bool', b'bup.split.trees').out \
+        == b'bup.split.trees=true\n'
 
 
 @pytest.mark.parametrize('access', ['local', 'remote'])

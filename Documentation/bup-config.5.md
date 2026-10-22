@@ -102,13 +102,18 @@ bup.split.files (default `legacy:13`)
     been modified, which is expensive.
 
 bup.split.trees
-:   When this boolean option is set to true, `bup` will attempt to
-    split trees (directories) when writing to the repository during,
-    for example `bup save ...`, `bup gc ..`, etc.  This can notably
-    decrease the size of the new data added to the repository when
-    large directories have changed (e.g. large active Maildirs).  See
-    "Handling large directories" in the DESIGN in the `bup` source for
-    additional information.
+:   When this option is set to true, `bup` will attempt to split trees
+    (directories) when writing to the repository during, for example
+    `bup save ...`, `bup gc ..`, etc.  This can notably decrease the
+    size of the new data added to the repository when large
+    directories have changed (e.g. large active Maildirs).  See "Handling
+    large directories" in the DESIGN in the `bup` source for additional
+    information.
+
+    Instead of a boolean, the value may also be a `MODE:N` string in
+    the same form as `bup.split.files`, which selects the split method
+    and size used for tree splitting.  `true` is equivalent to
+    `legacy:13`.
 
     *NOTE:* Using the same index to save to repositories that have
     differing values for this option can decrease performance because
