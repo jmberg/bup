@@ -16,6 +16,11 @@
 #include <string.h>
 #include <fcntl.h>
 
+#if defined(__GNUC__) && (defined(__x86_64__) || defined(__i386__))
+#define BUP_AE_X86 1
+#include <immintrin.h>
+#endif
+
 #ifdef HAVE_SYS_MMAN_H
 #include <sys/mman.h>
 #endif
@@ -58,6 +63,11 @@ static size_t max_bits;
 
 // FIXME: make sure the object has a good repr, including the fobj, etc.
 
+enum bup_splitter_mode {
+    SPLIT_MODE_LEGACY,
+    SPLIT_MODE_AE,
+};
+
 /*
  * A HashSplitter is fed a file-like object and will determine
  * how the accumulated record stream should be split.
@@ -69,6 +79,7 @@ typedef struct {
     long filenum;
     size_t max_blob;
     int fd;
+    enum bup_splitter_mode mode;
     PyObject *buf, *progress;
     size_t bufsz; // invariant: value must fit in a Py_ssize_t
     int eof;
@@ -314,13 +325,15 @@ static int HashSplitter_init(HashSplitter *self, PyObject *args, PyObject *kwds)
         "progress",
         "keep_boundaries",
         "fanbits",
+        "mode",
         NULL
-     };
+    };
+    char *mode = NULL;
     PyObject *files = NULL, *py_bits = NULL, *py_fanbits = NULL;
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO|OpO", argnames,
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO|OpOz", argnames,
                                      &files, &py_bits,
                                      &self->progress, &self->boundaries,
-                                     &py_fanbits))
+                                     &py_fanbits, &mode))
         goto error;
 
     self->files = PyObject_GetIter(files);
@@ -341,6 +354,15 @@ static int HashSplitter_init(HashSplitter *self, PyObject *args, PyObject *kwds)
         goto error;
     if (!self->fanbits) {
         PyErr_Format(PyExc_ValueError, "fanbits must be non-zero");
+        goto error;
+    }
+
+    if (!mode || !strcmp(mode, "legacy")) {
+        self->mode = SPLIT_MODE_LEGACY;
+    } else if (!strcmp(mode, "ae")) {
+        self->mode = SPLIT_MODE_AE;
+    } else {
+        PyErr_Format(PyExc_ValueError, "invalid mode %s", mode);
         goto error;
     }
 
@@ -631,9 +653,11 @@ static inline int split_found(uint32_t v, unsigned int nbits,
     return 0;
 }
 
-static size_t HashSplitter_find_offs(unsigned int nbits,
-                                     const unsigned char *buf, const size_t len,
-                                     unsigned int *extrabits)
+static size_t
+HashSplitter_find_offs_legacy(unsigned int nbits,
+                              const unsigned char *buf,
+                              const size_t len,
+                              unsigned int *extrabits)
 {
     struct {
         uint32_t s1, s2;
@@ -674,6 +698,233 @@ static size_t HashSplitter_find_offs(unsigned int nbits,
     return 0;
 }
 
+static inline int
+HashSplitter_ae_scan(const unsigned char *buf, size_t start, size_t end,
+                     size_t w, unsigned char *max_val, size_t *max_pos,
+                     size_t *cut)
+{
+    for (size_t i = start; i < end; i++) {
+        if (buf[i] > *max_val) {
+            *max_val = buf[i];
+            *max_pos = i;
+        } else if (i == *max_pos + w) {
+            *cut = i + 1;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
+ * Check whether the split point 'max_pos' + 'w' falls inside a block of
+ * 'width' bytes starting at block.  The caller guarantees the block has
+ * no byte above 'max_val', so the byte there is already <= max_val.
+ */
+static inline int
+HashSplitter_ae_skip_hit(size_t block, size_t width, size_t max_pos,
+                         size_t w, size_t *cut)
+{
+    size_t cut_pos = max_pos + w;
+
+    /* this intentionally wraps */
+    if (cut_pos - block < width) {
+        *cut = cut_pos + 1;
+        return 1;
+    }
+
+    return 0;
+}
+
+#if BUP_AE_X86
+__attribute__((target("sse2")))
+static size_t
+HashSplitter_find_offs_ae_sse2(unsigned int nbits,
+                               const unsigned char *buf,
+                               const size_t len)
+{
+    size_t w = (1 << nbits) - 256;
+    unsigned char max_val;
+    size_t max_pos = 0;
+    size_t i = 1;
+    size_t cut;
+
+    if (!len)
+        return 0;
+    max_val = buf[0];
+
+    while (i + 16 <= len) {
+        const __m128i v = _mm_loadu_si128((const __m128i *)(buf + i));
+        const __m128i m = _mm_set1_epi8((char)max_val);
+        /* max(v, m) == m  <=>  v <= m, per unsigned byte */
+        const __m128i le = _mm_cmpeq_epi8(_mm_max_epu8(v, m), m);
+        const uint64_t gt = ~(uint32_t)_mm_movemask_epi8(le) & 0xffff;
+
+        if (gt) {
+            if (HashSplitter_ae_scan(buf, i, i + 16, w,
+                                     &max_val, &max_pos, &cut))
+                return cut;
+        } else if (HashSplitter_ae_skip_hit(i, 16, max_pos, w, &cut)) {
+            return cut;
+        }
+        i += 16;
+    }
+
+    if (HashSplitter_ae_scan(buf, i, len, w, &max_val, &max_pos, &cut))
+        return cut;
+    return 0;
+}
+
+__attribute__((target("avx2")))
+static size_t
+HashSplitter_find_offs_ae_avx2(unsigned int nbits,
+                               const unsigned char *buf,
+                               const size_t len)
+{
+    size_t w = (1 << nbits) - 256;
+    unsigned char max_val;
+    size_t max_pos = 0;
+    size_t i = 1;
+    size_t cut;
+
+    if (!len)
+        return 0;
+    max_val = buf[0];
+
+    while (i + 32 <= len) {
+        const __m256i v = _mm256_loadu_si256((const __m256i *)(buf + i));
+        const __m256i m = _mm256_set1_epi8((char)max_val);
+        const __m256i le = _mm256_cmpeq_epi8(_mm256_max_epu8(v, m), m);
+        const uint64_t gt = ~(uint32_t)_mm256_movemask_epi8(le);
+
+        if (gt) {
+            if (HashSplitter_ae_scan(buf, i, i + 32, w,
+                                     &max_val, &max_pos, &cut))
+                return cut;
+        } else if (HashSplitter_ae_skip_hit(i, 32, max_pos, w, &cut)) {
+            return cut;
+        }
+        i += 32;
+    }
+
+    if (HashSplitter_ae_scan(buf, i, len, w, &max_val, &max_pos, &cut))
+        return cut;
+    return 0;
+}
+
+__attribute__((target("avx512bw")))
+static size_t
+HashSplitter_find_offs_ae_avx512bw(unsigned int nbits,
+                                   const unsigned char *buf,
+                                   const size_t len)
+{
+    const size_t w = (1 << nbits) - 256;
+    unsigned char max_val;
+    size_t max_pos = 0;
+    size_t i = 1;
+    size_t cut;
+
+    if (!len)
+        return 0;
+    max_val = buf[0];
+
+    while (i + 64 <= len) {
+        const __m512i v = _mm512_loadu_si512((const void *)(buf + i));
+        const __m512i m = _mm512_set1_epi8((char)max_val);
+        const uint64_t gt = _mm512_cmpgt_epu8_mask(v, m);
+
+        if (gt) {
+            if (HashSplitter_ae_scan(buf, i, i + 64, w,
+                                     &max_val, &max_pos, &cut))
+                return cut;
+        } else if (HashSplitter_ae_skip_hit(i, 64, max_pos, w, &cut)) {
+            return cut;
+        }
+        i += 64;
+    }
+
+    if (HashSplitter_ae_scan(buf, i, len, w, &max_val, &max_pos, &cut))
+        return cut;
+    return 0;
+}
+#endif
+
+static inline size_t
+HashSplitter_find_offs_ae_scalar(unsigned int nbits,
+                                 const unsigned char *buf,
+                                 const size_t len)
+{
+    const size_t w = (1 << nbits) - 256;
+    unsigned char max_val;
+    size_t max_pos = 0;
+    size_t cut;
+
+    if (!len)
+        return 0;
+    max_val = buf[0];
+    if (HashSplitter_ae_scan(buf, 1, len, w, &max_val, &max_pos, &cut))
+        return cut;
+    return 0;
+}
+
+/*
+ * Asymmetric Extremum (INFOCOM 2015). A chunk ends after the first byte
+ * that is a strict maximum so far and is followed by w bytes smaller or
+ * equal. According to another paper (arXiv 2610.13704) the original
+ * results in too small chunk sizes and corrects it, the corrected one
+ * is used here.
+ *
+ * The skip of blocks without new maximums may be implemented in SIMD
+ * instructions chosen dynamically at runtime according to CPU support.
+ *
+ * AE doesn't really say how to derive anything beyond chunk sizes, but
+ * it seems taking the lower bits of the resulting chunk size results in
+ * a good result and is super cheap here. This is also stable when the
+ * chunk didn't change, so it results in stable trees too.
+ */
+static size_t ae_extrabits(unsigned long long offs)
+{
+    return __builtin_ctzll(~offs);
+}
+
+static size_t
+HashSplitter_find_offs_ae(unsigned int nbits,
+                          const unsigned char *buf,
+                          const size_t len,
+                          unsigned int *extrabits)
+{
+    size_t offs;
+#if BUP_AE_X86
+    if (__builtin_cpu_supports("avx512bw"))
+        offs = HashSplitter_find_offs_ae_avx512bw(nbits, buf, len);
+    else if (__builtin_cpu_supports("avx2"))
+        offs = HashSplitter_find_offs_ae_avx2(nbits, buf, len);
+    else if (__builtin_cpu_supports("sse2"))
+        offs = HashSplitter_find_offs_ae_sse2(nbits, buf, len);
+    else
+#endif
+    offs = HashSplitter_find_offs_ae_scalar(nbits, buf, len);
+    *extrabits = ae_extrabits(offs);
+    return offs;
+}
+
+
+static size_t HashSplitter_find_offs(enum bup_splitter_mode mode,
+                                     unsigned int nbits,
+                                     const unsigned char *buf,
+                                     const size_t len,
+                                     unsigned int *extrabits)
+{
+    switch (mode) {
+    case SPLIT_MODE_LEGACY:
+        return HashSplitter_find_offs_legacy(nbits, buf, len, extrabits);
+    case SPLIT_MODE_AE:
+        return HashSplitter_find_offs_ae(nbits, buf, len, extrabits);
+    default:
+        assert(0);
+    }
+    return 0;
+}
+
 static PyObject *HashSplitter_iternext(HashSplitter *self)
 {
     unsigned int nbits = self->bits;
@@ -706,8 +957,8 @@ static PyObject *HashSplitter_iternext(HashSplitter *self)
         const size_t maxlen = min(self->end - self->start, self->max_blob);
 
         unsigned int extrabits;
-        size_t ofs = HashSplitter_find_offs(nbits, buf + self->start, maxlen,
-                                            &extrabits);
+        size_t ofs = HashSplitter_find_offs(self->mode, nbits, buf + self->start,
+                                            maxlen, &extrabits);
 
         unsigned int level;
         if (ofs) {
@@ -764,6 +1015,38 @@ PyTypeObject HashSplitterType = {
     .tp_dealloc = (destructor)HashSplitter_dealloc,
 };
 
+/* keep state to avoid rescanning chunks */
+struct ae_state {
+    /* bytes scanned */
+    size_t n;
+    /* max value and its position so far */
+    size_t max_pos;
+    unsigned char max_val;
+};
+
+/* AE scan for records (keeps state) */
+static size_t ae_record_scan(struct ae_state *st, unsigned int nbits,
+                             const unsigned char *buf, size_t len)
+{
+    const size_t w = (1 << nbits) - 256;
+
+    for (size_t j = 0; j < len; j++) {
+        size_t i = st->n + j;
+
+        if (!i) {
+            st->max_val = buf[j];
+            st->max_pos = 0;
+        } else if (buf[j] > st->max_val) {
+            st->max_val = buf[j];
+            st->max_pos = i;
+        } else if (i == st->max_pos + w) {
+            return j + 1;
+        }
+    }
+    st->n += len;
+    return 0;
+}
+
 /*
  * A RecordHashSplitter is fed records one-by-one, and will determine
  * if the accumulated record stream should now be split. Once it does
@@ -775,20 +1058,33 @@ typedef struct {
     unsigned int bits;
     size_t split_size;  // bytes
     size_t max_split_size;
+    enum bup_splitter_mode mode;
+    struct ae_state ae;
 } RecordHashSplitter;
 
 static int RecordHashSplitter_init(RecordHashSplitter *self, PyObject *args, PyObject *kwds)
 {
-    static char *argnames[] = { "bits", NULL };
+    static char *argnames[] = { "bits", "mode", NULL };
+    char *mode = NULL;
     self->split_size = 0;
+    memset(&self->ae, 0, sizeof(self->ae));
     rollsum_init(&self->r);
 
     PyObject *py_bits = NULL;
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|$O", argnames, &py_bits))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|$Oz", argnames, &py_bits, &mode))
         return -1;
 
     if (!bits_from_py_kw(&self->bits, py_bits, "RecordHashSplitter(bits)"))
         return -1;
+
+    if (!mode || !strcmp(mode, "legacy")) {
+        self->mode = SPLIT_MODE_LEGACY;
+    } else if (!strcmp(mode, "ae")) {
+        self->mode = SPLIT_MODE_AE;
+    } else {
+        PyErr_Format(PyExc_ValueError, "invalid mode %s", mode);
+        return -1;
+    }
 
     // Same as the file splitter's max_blob
     if (self->bits >= sizeof(self->max_split_size) * 8 - 2) {
@@ -804,6 +1100,34 @@ static void reset_recordsplitter(RecordHashSplitter *splitter)
 {
     rollsum_init(&splitter->r);
     splitter->split_size = 0;
+    memset(&splitter->ae, 0, sizeof(splitter->ae));
+}
+
+static PyObject *RecordHashSplitter_feed_ae(RecordHashSplitter *self,
+                                            Py_buffer *buf)
+{
+    size_t new_size;
+    if (!INT_ADD_OK(self->split_size, buf->len, &new_size)) {
+        PyBuffer_Release(buf);
+        PyErr_Format(PyExc_OverflowError, "feed() data overflows split size");
+        return NULL;
+    }
+
+    if (new_size > self->max_split_size) {
+        PyBuffer_Release(buf);
+        reset_recordsplitter(self);
+        return Py_BuildValue("OO", Py_True, Py_None);
+    }
+
+    size_t ofs = ae_record_scan(&self->ae, self->bits, buf->buf, buf->len);
+    PyBuffer_Release(buf);
+    self->split_size = new_size;
+    if (!ofs)
+        return Py_BuildValue("OO", Py_False, Py_None);
+
+    unsigned long bits = self->bits + ae_extrabits(new_size);
+    reset_recordsplitter(self);
+    return Py_BuildValue("OO", Py_True, BUP_LONGISH_TO_PY(bits));
 }
 
 static PyObject *RecordHashSplitter_feed(RecordHashSplitter *self, PyObject *args)
@@ -811,6 +1135,9 @@ static PyObject *RecordHashSplitter_feed(RecordHashSplitter *self, PyObject *arg
     Py_buffer buf = { .buf = NULL, .len = 0 };
     if (!PyArg_ParseTuple(args, "y*", &buf))
         return NULL;
+
+    if (self->mode == SPLIT_MODE_AE)
+        return RecordHashSplitter_feed_ae(self, &buf);
 
     unsigned int extrabits = 0;
     const size_t out = HashSplitter_roll(&self->r, self->bits, buf.buf, buf.len,

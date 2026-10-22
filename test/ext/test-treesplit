@@ -41,7 +41,7 @@ cat > "$tmpdir/mod/record_hashsplitter_override.py" << EOF
 from bup import _helpers
 
 class RecordHashSplitter:
-    def __init__(self, bits=None):
+    def __init__(self, bits=None, mode=None):
         self.idx = 0
     def feed(self, name):
         self.idx += 1
