@@ -44,8 +44,18 @@ def configuration(config_get):
     that affects the way data will be split. (See also, rewriting via
     get --rewrite.)
 
+    bup.split.trees is either a boolean, or a bup.split.files style
+    MODE:N string that also selects the tree split size.
+
     """
-    cfg = {'trees': config_get(b'bup.split.trees', opttype='bool')}
+    cfg = {'trees': None, 'treebits': BUP_TREE_BLOBBITS}
+    trees = config_get(b'bup.split.trees')
+    m = re.fullmatch(_method_rx, trees) if trees is not None else None
+    if m:
+        cfg['trees'] = True
+        cfg['treebits'] = int(m.group(1))
+    else:
+        cfg['trees'] = config_get(b'bup.split.trees', opttype='bool')
     method = config_get(b'bup.split.files')
     if method is None:
         return cfg

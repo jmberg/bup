@@ -5,8 +5,7 @@ from stat import S_ISDIR
 from bup import hashsplit
 from bup._helpers import RecordHashSplitter
 from bup.hashsplit import \
-    (BUP_TREE_BLOBBITS,
-     GIT_MODE_TREE,
+    (GIT_MODE_TREE,
      split_to_blob_or_tree)
 from bup.git import shalist_item_sort_key, mangle_name
 from bup.helpers import add_error
@@ -257,7 +256,7 @@ class Stack:
         splits = []  # replacement trees for this level
         last_item = items[-1]
         pending_split = []
-        h = RecordHashSplitter(bits=BUP_TREE_BLOBBITS)
+        h = RecordHashSplitter(bits=self._split_config['treebits'])
         for item in items:
             pending_split.append(item)
             split = h.feed(item.name)[0] # [1] is bits
