@@ -256,7 +256,8 @@ class Stack:
         splits = []  # replacement trees for this level
         last_item = items[-1]
         pending_split = []
-        h = RecordHashSplitter(bits=self._split_config['treebits'])
+        h = RecordHashSplitter(bits=self._split_config['treebits'],
+                               mode=self._split_config['treemode'])
         for item in items:
             pending_split.append(item)
             split = h.feed(item.name)[0] # [1] is bits

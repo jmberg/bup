@@ -23,19 +23,20 @@ def _fanbits(fanout=DEFAULT_FANOUT):
 
 fanbits = _fanbits
 
-_splitter_args = ('progress', 'keep_boundaries', 'blobbits', 'fanbits')
+_splitter_args = ('progress', 'keep_boundaries', 'blobbits', 'fanbits', 'mode')
 
 def splitter(files, *, progress=None, keep_boundaries=False, blobbits=None,
              # pylint: disable-next=redefined-outer-name
-             fanbits=None):
+             fanbits=None, mode=None):
     return HashSplitter(files,
                         keep_boundaries=keep_boundaries,
                         progress=progress,
                         bits=blobbits or BUP_BLOBBITS,
-                        fanbits=fanbits or _fanbits())
+                        fanbits=fanbits or _fanbits(),
+                        mode=mode)
 
 
-_method_rx = br'legacy:(13|14|15|16|17|18|19|20|21)'
+_method_rx = br'(?P<mode>legacy|ae):(?P<bits>13|14|15|16|17|18|19|20|21)'
 
 def configuration(config_get):
     """Return a splitting configuration map based on information
@@ -48,12 +49,19 @@ def configuration(config_get):
     MODE:N string that also selects the tree split size.
 
     """
-    cfg = {'trees': None, 'treebits': BUP_TREE_BLOBBITS}
+    cfg = {
+        'trees': None,
+        'treebits': BUP_TREE_BLOBBITS,
+        'treemode': 'legacy',
+        'mode': 'legacy',
+        'blobbits': BUP_BLOBBITS,
+    }
     trees = config_get(b'bup.split.trees')
     m = re.fullmatch(_method_rx, trees) if trees is not None else None
     if m:
         cfg['trees'] = True
-        cfg['treebits'] = int(m.group(1))
+        cfg['treemode'] = m.group('mode').decode('ascii')
+        cfg['treebits'] = int(m.group('bits'))
     else:
         cfg['trees'] = config_get(b'bup.split.trees', opttype='bool')
     method = config_get(b'bup.split.files')
@@ -62,7 +70,9 @@ def configuration(config_get):
     m = re.fullmatch(_method_rx, method)
     if not m:
         raise ConfigError(f'invalid bup.split.files setting {method}')
-    cfg['blobbits'] = int(m.group(1))
+    mode = m.group('mode').decode('ascii')
+    cfg['blobbits'] = int(m.group('bits'))
+    cfg['mode'] = mode
     return cfg
 
 def from_config(files, split_config):

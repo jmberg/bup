@@ -52,6 +52,8 @@ fanout=    average number of blobs in a single tree
 bwlimit=   maximum bytes/sec to transmit to server
 #,compress=  set compression level to # (0-9, 9 is highest)
 sha256     use sha256 for --noop
+mode=      hashsplit mode (overrides repo)
+bits=      hashsplit bits (overrides repo)
 """
 
 
@@ -154,9 +156,10 @@ def split(opt, files, parent, out, split_cfg, *,
         if opt.tree: out.write(hexlify(tree) + b'\n')
     else:
         last = 0
+        copy = opt.copy
         for blob, level_ in hashsplit.from_config(files, split_cfg):
             hashsplit.total_split += len(blob)
-            if opt.copy:
+            if copy:
                 out.write(blob)
             megs = hashsplit.total_split // 1024 // 1024
             if not opt.quiet and last != megs:
@@ -265,6 +268,18 @@ def main(argv):
                     split_cfg = hashsplit.configuration(null_config_get)
             except ConfigError as ex:
                 opt_parser.fatal(ex)
+            if opt.mode:
+                if opt.mode not in ('legacy', 'ae'):
+                    opt_parser.fatal('invalid --mode')
+                split_cfg['mode'] = opt.mode
+            if opt.bits:
+                try:
+                    bits = int(opt.bits)
+                except ValueError:
+                    opt_parser.fatal('invalid --bits value')
+                if not 13 <= bits <= 21:
+                    opt_parser.fatal('invalid --bits value')
+                split_cfg['blobbits'] = bits
             split_cfg['keep_boundaries'] = opt.keep_boundaries
             if opt.name and writing:
                 refname = opt.name and b'refs/heads/%s' % opt.name

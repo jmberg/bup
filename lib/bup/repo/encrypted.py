@@ -541,7 +541,7 @@ class EncryptedRepo(ConfigRepo):
             m = re.fullmatch(hashsplit._method_rx, split_files)
             if not m:
                 raise ConfigError(f'invalid bup.split.files setting {split_files!r}')
-            bb = int(m.group(1))
+            bb = int(m.group('bits'))
         self._blobsize = 1 << (bb or hashsplit.BUP_BLOBBITS)
 
         if create and create.get('objectformat', 'sha1') != 'sha1':
