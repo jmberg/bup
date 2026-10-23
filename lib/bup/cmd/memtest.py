@@ -1,7 +1,7 @@
 
-import re, resource, sys, time
+import re, resource, sys, time, os
 
-from bup import git, bloom, midx, options, _helpers
+from bup import git, bloom, midx, options
 from bup.io import byte_stream
 from bup.helpers import log
 
@@ -82,7 +82,7 @@ def main(argv):
     out = byte_stream(sys.stdout)
 
     report(-1, out)
-    _helpers.random_sha()
+    os.urandom(20)
     report(0, out)
 
     with git.PackIdxList(git.repo(b'objects/pack'),
@@ -100,7 +100,7 @@ def main(argv):
                     bin = next(objit)
                     assert(m.exists(bin))
                 else:
-                    bin = _helpers.random_sha()
+                    bin = os.urandom(20)
 
                     # technically, a randomly generated object id might exist.
                     # but the likelihood of that is the likelihood of finding

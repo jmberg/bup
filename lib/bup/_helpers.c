@@ -937,29 +937,6 @@ static PyObject *write_random(PyObject *self, PyObject *args)
 }
 
 
-static PyObject *random_sha(PyObject *self, PyObject *args)
-{
-    static int seeded = 0;
-    uint32_t shabuf[20/4];
-    int i;
-    
-    if (!seeded)
-    {
-	assert(sizeof(shabuf) == 20);
-	srandom((unsigned int) time(NULL));
-	seeded = 1;
-    }
-    
-    if (!PyArg_ParseTuple(args, ""))
-	return NULL;
-    
-    memset(shabuf, 0, sizeof(shabuf));
-    for (i=0; i < 20/4; i++)
-	shabuf[i] = (uint32_t) random();
-    return Py_BuildValue(rbuf_argf, shabuf, 20);
-}
-
-
 static int _open_noatime(const char *path, int flags)
 {
 #ifdef O_LARGEFILE
@@ -2036,8 +2013,6 @@ static PyMethodDef helper_methods[] = {
 	"Write a PackIdxV2 file from an idx list of lists of tuples" },
     { "write_random", write_random, METH_VARARGS,
 	"Write random bytes to the given file descriptor" },
-    { "random_sha", random_sha, METH_VARARGS,
-        "Return a random 20-byte string" },
     { "open_noatime", open_noatime, METH_VARARGS,
 	"open() the given filename for read with O_NOATIME if possible" },
     { "openat_noatime", openat_noatime, METH_VARARGS,
