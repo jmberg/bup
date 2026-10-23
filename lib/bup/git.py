@@ -123,6 +123,24 @@ def git_config_get(path, option, *, opttype=None):
     raise GitError(f'unexpected exit {rc} for {cmd_msg(cmd)}')
 
 
+def git_config_get_all(path, option):
+    """Return a list of all the values for option in the git config
+    file at path, in file order.  Return an empty list if the option
+    or the file does not exist.
+
+    Currently only strings are supported.
+    """
+    cmd = [b'git', b'config', b'--file', path, b'--null',
+           b'--get-all', option]
+    cp = subprocess.run(cmd, stdout=PIPE)
+    rc = cp.returncode
+    if rc == 0:
+        return cp.stdout.split(b'\0')[:-1]
+    if rc == 1:
+        return []
+    raise GitError(f'unexpected exit {rc} for {cmd_msg(cmd)}')
+
+
 def git_config_write(path, option, value):
     """Set option to value in the git config file at path,
     unset the option if value is None.

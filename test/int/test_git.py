@@ -528,6 +528,18 @@ def test_idx_exists_crc(tmpdir):
     assert 43008 == parse(b'42k')
 
 
+def test_config_get_all(tmpdir):
+    cfg_file = os.path.join(tmpdir, b'multi.conf')
+    with open(cfg_file, 'wb') as f:
+        f.write(b'[bup]\n\ttest = a\n\ttest = b\n\tempty =\n\tone = x\n')
+    WVPASSEQ(git.git_config_get_all(cfg_file, b'bup.test'), [b'a', b'b'])
+    WVPASSEQ(git.git_config_get_all(cfg_file, b'bup.empty'), [b''])
+    WVPASSEQ(git.git_config_get_all(cfg_file, b'bup.one'), [b'x'])
+    WVPASSEQ(git.git_config_get_all(cfg_file, b'bup.nosuchkey'), [])
+    WVPASSEQ(git.git_config_get_all(os.path.join(tmpdir, b'nosuch.conf'),
+                                    b'bup.test'), [])
+
+
 def test_config(tmpdir):
     cfg_file = os.path.join(os.path.dirname(__file__), 'sample.conf')
     no_such_file = os.path.join(os.path.dirname(__file__), 'nosuch.conf')
