@@ -626,6 +626,7 @@ struct idx {
     uint32_t *cur_name;
     Py_ssize_t bytes;
     int name_base;
+    const char *name;
 };
 
 static void _fix_idx_order(struct idx **idxs, Py_ssize_t *last_i)
@@ -714,16 +715,18 @@ static PyObject *merge_into(PyObject *self, PyObject *args)
     for (i = 0; i < num_i; i++)
     {
 	long len, sha_ofs, name_map_ofs;
+	const char *name;
 	if (!(idxs[i] = checked_malloc(1, sizeof(struct idx))))
             goto clean_and_return;
 	PyObject *itup = PyList_GetItem(ilist, i);
-	if (!PyArg_ParseTuple(itup, wbuf_argf "llli",
+	if (!PyArg_ParseTuple(itup, wbuf_argf "llliy",
                               &(idx_buf[i]), &len, &sha_ofs, &name_map_ofs,
-                              &idxs[i]->name_base))
+                              &idxs[i]->name_base, &name))
 	    return NULL;
         idx_buf_init[i] = 1;
         idxs[i]->map = idx_buf[i].buf;
         idxs[i]->bytes = idx_buf[i].len;
+	idxs[i]->name = name;
 	idxs[i]->cur = (struct sha *)&idxs[i]->map[sha_ofs];
 	idxs[i]->end = &idxs[i]->cur[len];
 	if (name_map_ofs)
@@ -754,6 +757,12 @@ static PyObject *merge_into(PyObject *self, PyObject *args)
 	++idx->cur;
 	if (idx->cur_name != NULL)
 	    ++idx->cur_name;
+	if (idx->cur < idx->end && _cmp_sha(idx->cur - 1, idx->cur) > 0)
+	{
+	    PyErr_Format(PyExc_ValueError,
+			 "midx: %s is not sorted by hash", idx->name);
+	    goto clean_and_return;
+	}
 	_fix_idx_order(idxs, &last_i);
 	++count;
     }

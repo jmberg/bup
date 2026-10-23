@@ -131,6 +131,7 @@ def _do_midx(outdir, outfilename, infilenames, prefixstr,
                 ix.sha_ofs,
                 isinstance(ix, midx.PackMidx) and ix.which_ofs or 0,
                 len(allfilenames),
+                ix.name,
             ))
             for n in ix.idxnames:
                 # FIXME: double-check wrt outfilename above
