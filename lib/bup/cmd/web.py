@@ -4,11 +4,11 @@ from collections import ChainMap, namedtuple
 from urllib import parse
 from urllib.parse import urlencode
 import mimetypes, os, posixpath, signal, stat, sys, time, traceback, webbrowser
+import asyncio
 
 from bup import options, git, vfs, xstat
 from bup.helpers import \
     (EXIT_FAILURE,
-     EXIT_SUCCESS,
      chunkyreader,
      debug1,
      format_filesize,
@@ -21,7 +21,6 @@ from bup.repo import LocalRepo
 try:
     from tornado import gen
     from tornado.httpserver import HTTPServer
-    from tornado.ioloop import IOLoop
     from tornado.netutil import bind_unix_socket
     import tornado.web
 except ImportError:
@@ -333,14 +332,12 @@ class BupRequestHandler(tornado.web.RequestHandler):
         raise NotImplementedError('bup web does not receive data')
 
 
-io_loop = None
+stop_event = asyncio.Event()
 
-def handle_sigterm(signum, frame_):
-    debug1('\nbup-web: signal %d received\n' % signum)
+def handle_sigterm():
+    debug1('\nbup-web: SIGTERM received\n')
     log('Shutdown requested\n')
-    if not io_loop:
-        sys.exit(EXIT_SUCCESS)
-    io_loop.stop()
+    stop_event.set()
 
 
 optspec = """
@@ -351,10 +348,8 @@ human-readable    display human readable file sizes (i.e. 3.9K, 4.7M)
 browser           show repository in default browser (incompatible with unix://)
 """
 
-def main(argv):
-    global io_loop
-
-    signal.signal(signal.SIGTERM, handle_sigterm)
+async def async_main(argv):
+    asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, handle_sigterm)
 
     UnixAddress = namedtuple('UnixAddress', ['path'])
     InetAddress = namedtuple('InetAddress', ['host', 'port'])
@@ -402,7 +397,6 @@ def main(argv):
         application = tornado.web.Application(handlers, **settings)
 
         http_server = HTTPServer(application)
-        io_loop_pending = IOLoop.instance()
 
         if isinstance(address, InetAddress):
             sockets = tornado.netutil.bind_sockets(address.port, address.host)
@@ -410,7 +404,9 @@ def main(argv):
             urlstr = f'http://{address.host}:{address.port}'
             print('Serving HTTP on', urlstr)
             if opt.browser:
-                io_loop_pending.add_callback(lambda : webbrowser.open(urlstr))
+                async def open_browser():
+                    webbrowser.open(urlstr)
+                asyncio.get_running_loop().create_task(open_browser())
         elif isinstance(address, UnixAddress):
             unix_socket = bind_unix_socket(address.path)
             http_server.add_socket(unix_socket)
@@ -419,5 +415,7 @@ def main(argv):
             log('error: unexpected address %r', address)
             sys.exit(EXIT_FAILURE)
 
-        io_loop = io_loop_pending
-        io_loop.start()
+        await stop_event.wait()
+
+def main(argv):
+    asyncio.run(async_main(argv))
