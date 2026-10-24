@@ -346,6 +346,7 @@ bup web unix://path
 --
 human-readable    display human readable file sizes (i.e. 3.9K, 4.7M)
 browser           show repository in default browser (incompatible with unix://)
+debug             start tornado in debug mode (tracebacks, autoreload, no caches)
 """
 
 async def async_main(argv):
@@ -381,9 +382,18 @@ async def async_main(argv):
 
     git.check_repo_or_die()
 
-    settings = {'debug': 1,
-                'template_path': resource_path(b'web').decode('utf-8'),
-                'static_path': resource_path(b'web/static').decode('utf-8')}
+    settings = {
+        'template_path': resource_path(b'web').decode('utf-8'),
+        'static_path': resource_path(b'web/static').decode('utf-8')
+    }
+
+    if opt.debug:
+        settings['debug'] = True
+        # work around tornado autoreload behaviour,
+        # it execs [sys.executable] + sys.argv
+        # and adds "-m spec" if __spec_ is not None
+        sys.argv = sys.argv[1:]
+        sys.modules["__main__"].__spec__ = None
 
     # Disable buffering on stdout, for debug messages
     try:
