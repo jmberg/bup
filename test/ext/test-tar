@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+. ./wvtest-bup.sh
+
+set -o pipefail
+
+top="$(WVPASS pwd)" || exit $?
+tmpdir="$(WVPASS wvmktempdir)" || exit $?
+export BUP_DIR="$tmpdir/bup"
+export GIT_DIR="$tmpdir/bup"
+
+bup() { "$top/bup" "$@"; }
+
+src="$tmpdir/src"
+
+WVSTART 'setup'
+WVPASS bup init
+WVPASS mkdir -p "$src/sub"
+WVPASS echo hello > "$src/a.txt"
+WVPASS printf '#!/bin/sh\necho hi\n' > "$src/run.sh"
+WVPASS chmod 755 "$src/run.sh"
+WVPASS ln -s a.txt "$src/link"
+WVPASS ln "$src/a.txt" "$src/sub/hardlink"
+WVPASS bup random 500000 > "$src/sub/big.bin"
+WVPASS bup index -u "$src"
+WVPASS bup save -n src --strip-path "$src" "$src"
+
+WVSTART 'export'
+WVPASS bup tar /src/latest > "$tmpdir/src.tar"
+WVPASS tar tvf "$tmpdir/src.tar" > "$tmpdir/src.lst"
+WVPASS grep -qF './link -> a.txt' "$tmpdir/src.lst"
+WVPASS grep -qF './sub/hardlink link to ./a.txt' "$tmpdir/src.lst"
+WVPASSEQ "$(bup tar /src/latest/a.txt | tar -xOf -)" hello
+
+WVSTART 'import'
+WVPASS bup import-tar -n copy < "$tmpdir/src.tar"
+WVPASS bup import-tar -n copy2 "$tmpdir/src.tar"
+WVPASS bup tar /copy/latest > "$tmpdir/copy.tar"
+WVPASS tar tvf "$tmpdir/copy.tar" > "$tmpdir/copy.lst"
+WVPASS diff -u "$tmpdir/src.lst" "$tmpdir/copy.lst"
+WVPASSEQ "$(grep '/run.sh$' "$tmpdir/copy.lst" | cut -c1-10)" -rwxr-xr-x
+
+WVSTART 'tree and commit output'
+tree="$(bup import-tar -t "$tmpdir/src.tar")"
+commit="$(bup import-tar -c -d 1700000000 "$tmpdir/src.tar")"
+WVPASSEQ "$(git cat-file -p "$commit" | sed -n 's/^tree //p')" "$tree"
+WVPASSEQ "$(git cat-file -p "$commit" | sed -n 's/^committer .* \([0-9]*\) [+-][0-9]*$/\1/p')" 1700000000
+
+WVSTART 'skip unsafe paths'
+WVPASS python3 - "$tmpdir/evil.tar" <<EOF
+import io, sys, tarfile
+with tarfile.open(sys.argv[1], 'w') as t:
+    for name in ('../bad', 'ok'):
+        ti = tarfile.TarInfo(name)
+        ti.size = 1
+        t.addfile(ti, io.BytesIO(b'x'))
+EOF
+WVPASS bup import-tar -n evil "$tmpdir/evil.tar"
+WVPASSEQ "$(bup tar /evil/latest | tar tf -)" "$(printf './\n./ok')"
+
+WVSTART 'duplicate names are ignored'
+WVPASS python3 - "$tmpdir/dups.tar" <<'EOF'
+import io, sys, tarfile
+def add_dir(t, name, mode):
+    ti = tarfile.TarInfo(name)
+    ti.type = tarfile.DIRTYPE
+    ti.mode = mode
+    t.addfile(ti)
+def add_file(t, name, data):
+    ti = tarfile.TarInfo(name)
+    ti.size = len(data)
+    t.addfile(ti, io.BytesIO(data))
+with tarfile.open(sys.argv[1], 'w') as t:
+    add_dir(t, 'd', 0o750)
+    add_dir(t, 'd', 0o700)
+    add_file(t, 'd/f', b'first')
+    add_file(t, 'd/f', b'second')
+    add_file(t, 'd/f/x', b'under-file')
+EOF
+WVPASS bup import-tar -n dups "$tmpdir/dups.tar" 2> "$tmpdir/dups.err"
+WVPASSEQ "$(grep -c skipping "$tmpdir/dups.err")" 3
+WVPASSEQ "$(bup tar /dups/latest | tar xOf - ./d/f)" first
+WVPASSEQ "$(bup tar /dups/latest | tar tvf - | awk '$NF == "./d/" {print $1}')" drwxr-x---
+WVPASSEQ "$(bup tar /dups/latest | tar tf - | grep -c 'd/f/x' || true)" 0
+
+WVSTART 'binary xattr values'
+xsrc="$tmpdir/xsrc"
+WVPASS mkdir "$xsrc"
+WVPASS touch "$xsrc/f"
+if python3 -c 'import os, sys; os.setxattr(sys.argv[1], "user.test", b"1")' "$xsrc/f" 2>/dev/null; then
+    WVPASS python3 - "$xsrc/f" <<'EOF'
+import os, sys
+path = sys.argv[1]
+os.setxattr(path, 'user.bin', b'\xff\xfe\x00ab')
+os.setxattr(path, 'user.txt', b'plain')
+os.setxattr(path, b'user.\xff\xfebad', b'v')
+EOF
+    WVPASS bup index -u "$xsrc"
+    WVPASS bup save -n xattrs --strip-path "$xsrc" "$xsrc"
+    WVPASS bup tar /xattrs/latest > "$tmpdir/xattrs.tar"
+    WVPASS grep -qa 'hdrcharset=BINARY' "$tmpdir/xattrs.tar"
+    WVPASS bup import-tar -n xattrs-copy < "$tmpdir/xattrs.tar"
+    WVPASS bup tar /xattrs-copy/latest > "$tmpdir/xattrs2.tar"
+    WVPASS python3 - "$tmpdir/xattrs.tar" "$tmpdir/xattrs2.tar" <<'EOF'
+import sys, tarfile
+for path in sys.argv[1:]:
+    with tarfile.open(path) as tf:
+        pax = tf.getmember('./f').pax_headers
+        assert pax.get('SCHILY.xattr.user.bin') == '\udcff\udcfe\x00ab', path
+        assert pax.get('SCHILY.xattr.user.txt') == 'plain', path
+        assert not any('bad' in k for k in pax), path
+EOF
+    WVPASS mkdir "$tmpdir/xgnu"
+    WVPASS tar --xattrs --warning=no-unknown-keyword -xf "$tmpdir/xattrs.tar" -C "$tmpdir/xgnu"
+    WVPASS python3 -c 'import os, sys; assert os.getxattr(sys.argv[1], "user.bin") == b"\xff\xfe\x00ab"' "$tmpdir/xgnu/f"
+else
+    WVSKIP 'no user xattr support'
+fi
+
+WVPASS cd "$top"
+WVPASS rm -rf "$tmpdir"

@@ -99,6 +99,9 @@ Subcommands are described in separate man pages.  For example
 `bup-import-duplicity`(1)
 :   Import from `duplicity`(1)
 
+`bup-import-tar`(1)
+:   Import a tar archive into a save or tree
+
 `bup-import-rdiff-backup`(1)
 :   Import from `rdiff-backup`(1)
 
@@ -142,6 +145,9 @@ Subcommands are described in separate man pages.  For example
 
 `bup-tag`(1)
 :   Tag a commit in the bup repository
+
+`bup-tar`(1)
+:   Export a save, or a path within one, as a tar archive
 
 `bup-validate-object-links`(1)
 :   Scan the repository for broken object links
